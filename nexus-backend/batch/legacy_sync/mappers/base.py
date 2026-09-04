@@ -22,6 +22,7 @@ class BaseMapper:
     incremental_column: ClassVar[str | None] = None    # coluna 'last_modified' p/ diff
     has_tracking: ClassVar[bool] = True                # False p/ tabelas sem legacy_*
     conflict_columns: ClassVar[list[str]] = []         # cols de conflito p/ sem tracking
+    upsert_conflict_columns: ClassVar[tuple[str, ...]] = ("legacy_table", "legacy_id")
 
     def __init__(self, registry=None) -> None:
         from ..registry import IdRegistry

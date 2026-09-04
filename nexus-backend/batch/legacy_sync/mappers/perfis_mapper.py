@@ -44,6 +44,9 @@ class PerfilMapper(BaseMapper):
     source_table: ClassVar[str] = "role"
     source_columns: ClassVar[list[str]] = ["id", "name", "date_added", "last_modified"]
     target_table: ClassVar[str] = "perfis"
+    # perfis.nome e UNIQUE e varias roles legadas colidem no mesmo nome padrao;
+    # o upsert precisa usar nome como alvo do conflito, nao (legacy_table, legacy_id).
+    upsert_conflict_columns: ClassVar[tuple[str, ...]] = ("nome",)
 
     @staticmethod
     def normalize_name(name):

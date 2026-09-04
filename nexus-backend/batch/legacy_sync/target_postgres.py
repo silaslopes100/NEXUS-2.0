@@ -53,12 +53,16 @@ class PostgresTarget:
         table: str,
         columns: Sequence[str],
         rows: Sequence[Sequence],
+        conflict_columns: Sequence[str] = ("legacy_table", "legacy_id"),
     ) -> list[tuple[str, bool]]:
         """Insere/atualiza em lote.
 
-        Base do upsert: UNIQUE (legacy_table, legacy_id). Retorna, na MESMA
-        ordem das linhas de entrada, (id, inseriu) para o registry registrar
-        os novos ids antes dos mappers filhos resolverem as FKs.
+        Base do upsert (default): UNIQUE (legacy_table, legacy_id). Pode ser
+        trocada via `conflict_columns` quando a tabela tem outra UNIQUE que
+        colide primeiro (ex.: perfis.nome, compartilhada por varias roles
+        legadas). Retorna, na MESMA ordem das linhas de entrada, (id, inseriu)
+        para o registry registrar os novos ids antes dos mappers filhos
+        resolverem as FKs.
         """
         if not rows:
             return []
@@ -66,13 +70,19 @@ class PostgresTarget:
         updates = ", ".join(
             f"{c} = EXCLUDED.{c}" for c in non_tracking if c != "id"
         )
+        # legacy_table/legacy_id tambem sao atualizados quando o conflito e por
+        # outra coluna (ex.: nome), para o registro apontar pro legado certo.
+        tracking_updates = ", ".join(
+            f"{c} = EXCLUDED.{c}" for c in ("legacy_table", "legacy_id") if c in columns
+        )
         if updates:
-            updates += ", atualizado_em = now(), synced_at = EXCLUDED.synced_at"
+            updates += f", {tracking_updates}, atualizado_em = now(), synced_at = EXCLUDED.synced_at"
         cols = ", ".join(columns)
+        conflict = ", ".join(conflict_columns)
         placeholders = "({})".format(", ".join(["%s"] * len(columns)))
         sql = (
             f"INSERT INTO {table} ({cols}) VALUES %s "
-            f"ON CONFLICT (legacy_table, legacy_id) DO UPDATE SET {updates} "
+            f"ON CONFLICT ({conflict}) DO UPDATE SET {updates} "
             f"RETURNING id, (xmax = 0) AS inserted"
         )
         outcome: list[tuple[str, bool]] = []

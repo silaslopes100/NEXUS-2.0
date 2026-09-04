@@ -45,15 +45,29 @@ class MapperRunner:
             if not buffer:
                 return
             if mapper.has_tracking:
-                # dedup defensivo: mesmo (source_table, legacy_id) no lote usa o ultimo
-                uniq: dict[tuple, list] = {}
+                # dedup defensivo: duas linhas do lote nao podem colidir no
+                # mesmo alvo de conflito do upsert (senao o Postgres rejeita
+                # com "ON CONFLICT DO UPDATE command cannot affect row a
+                # second time"). O alvo normalmente e (source_table,
+                # legacy_id), mas mappers como PerfilMapper usam outra coluna
+                # (ex.: nome) quando ela tambem e UNIQUE.
+                conflict_cols = mapper.upsert_conflict_columns
+                key_idx = (
+                    [cols.index(c) for c in conflict_cols]
+                    if cols and all(c in cols for c in conflict_cols)
+                    else None
+                )
+                uniq: dict[tuple, tuple] = {}
                 for legacy_id, vals in buffer:
-                    uniq[(mapper.source_table, legacy_id)] = vals
-                itens = list(uniq.items())
+                    key = tuple(vals[i] for i in key_idx) if key_idx else (mapper.source_table, legacy_id)
+                    uniq[key] = (legacy_id, vals)
+                itens = list(uniq.values())
                 rows = [v for _, v in itens]
-                keys = [k for k, _ in itens]
-                outcomes = self.target.upsert_rows(mapper.target_table, cols, rows)
-                for (_, legacy_id), (row_id, inseriu) in zip(keys, outcomes):
+                legacy_ids = [lid for lid, _ in itens]
+                outcomes = self.target.upsert_rows(
+                    mapper.target_table, cols, rows, mapper.upsert_conflict_columns
+                )
+                for legacy_id, (row_id, inseriu) in zip(legacy_ids, outcomes):
                     if inseriu and mapper.source_table:
                         self.registry.register(
                             mapper.target_table, mapper.source_table, legacy_id, row_id

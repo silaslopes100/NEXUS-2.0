@@ -5,7 +5,7 @@ import logging
 from typing import Iterable, Sequence
 
 import pymysql
-from pymysql.cursors import DictCursor, SSCursor
+from pymysql.cursors import DictCursor, SSDictCursor
 
 from .config import config
 
@@ -82,7 +82,7 @@ class MySQLSource:
             sql += f" WHERE {where}"
         if order:
             sql += f" ORDER BY {order}"
-        cursor = self.conn.cursor(SSCursor)
+        cursor = self.conn.cursor(SSDictCursor)
         try:
             cursor.execute(sql, params)
             while True:
