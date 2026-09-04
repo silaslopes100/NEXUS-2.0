@@ -1,0 +1,7 @@
+# Dependencias opcionais para desenvolvimento/testes (nao usadas em producao).
+# pgserver baixa binarios do PostgreSQL para rodar testes de integracao local.
+# Instale com: pip install -r requirements-dev.txt
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+sqlglot>=25.0.0
+pgserver>=0.1.0

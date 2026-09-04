@@ -1,0 +1,1 @@
+# NEXUS 2.0 - batch de sincronizacao legado MySQL -> NeonDB (PostgreSQL)
