@@ -84,6 +84,7 @@ class MySQLSource:
         params: Sequence = (),
         order: str | None = None,
         batch_size: int | None = None,
+        offset: int = 0,
     ) -> Iterable[dict]:
         """Itera por lotes usando cursor server-side (nao carrega tudo em memoria).
 
@@ -99,6 +100,9 @@ class MySQLSource:
             sql += f" WHERE {where}"
         if order:
             sql += f" ORDER BY {order}"
+        if offset:
+            # MySQL exige LIMIT para usar OFFSET; 2**64-1 = "sem limite" na pratica.
+            sql += f" LIMIT 18446744073709551615 OFFSET {int(offset)}"
 
         attempt = 0
         while True:

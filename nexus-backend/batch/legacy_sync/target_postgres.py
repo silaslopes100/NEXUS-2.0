@@ -40,6 +40,9 @@ class PostgresTarget:
     def commit(self) -> None:
         self.conn.commit()
 
+    def rollback(self) -> None:
+        self.conn.rollback()
+
     def ensure_schema(self) -> None:
         """Cria todas as tabelas do destino (idempotente) na ordem de dependencia."""
         logger.info("Criando/validando schema do destino (%s tabelas)...", len(schema.DDL))

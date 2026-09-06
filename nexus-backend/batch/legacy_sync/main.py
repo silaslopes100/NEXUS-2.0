@@ -99,6 +99,9 @@ def _main() -> None:
                         source, target, registry, run_log, runner, last_run, only=args.only
                     )
             except Exception:
+                # sem rollback, o erro anterior deixa a transacao abortada e
+                # o proprio UPDATE de "falhou" abaixo falharia em cascata.
+                target.rollback()
                 run_log.finish("falhou")
                 logger.exception("Execucao falhou; marcada como falhou em etl_sync_runs.")
                 raise

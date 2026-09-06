@@ -40,6 +40,12 @@ def test_usuario_mapeia_campos_base():
     assert out["status"] == "ativo"
 
 
+def test_usuario_pula_usuarios_ja_carregados_na_carga_inicial():
+    mapper = UsuarioMapper(registry=FakeRegistry())
+
+    assert mapper.initial_offset() == 17903
+
+
 def test_usuario_perfil_heuristica_sem_role():
     reg = FakeRegistry()
     m = UsuarioMapper(registry=reg)

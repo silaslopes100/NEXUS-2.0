@@ -117,9 +117,12 @@ class BaseMapper:
         if last_run is not None and self.incremental_column:
             where = f"{self.incremental_column} > %s"
             params = (last_run,)
+        extra = self.initial_where(last_run)
+        if extra:
+            where = f"({where}) AND ({extra})" if where else extra
         yield from source.stream(
             self.source_table, self.source_columns, where=where,
-            params=params, order=self.order_by,
+            params=params, order=self.order_by, offset=self.initial_offset(last_run),
         )
 
     def current_legacy_id(self, row: dict):
@@ -127,8 +130,13 @@ class BaseMapper:
         return row.get("id")
 
     def initial_where(self, last_run: Any = None) -> str | None:
-        """Clausula WHERE usada no incremental. None = sem filtro."""
+        """Clausula WHERE fixa combinada a incremental (ex.: retomar carga). None = sem filtro."""
         return None
+
+    def initial_offset(self, last_run: Any = None) -> int:
+        """Quantidade de linhas a pular no inicio da leitura (OFFSET). 0 = sem skip."""
+        return 0
+
 
     # --- helpers de estado ---
 
