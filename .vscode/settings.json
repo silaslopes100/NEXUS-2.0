@@ -1,5 +1,14 @@
 {
     "chat.tools.terminal.autoApprove": {
-        "&": true
+        "&": true,
+        "/^cd e:\\\\NEXUS-2\\.0\\\\nexus-backend ; pytest tests/test_polos_escolas\\.py -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^e:/NEXUS-2\\.0/nexus-backend/\\.venv/Scripts/python\\.exe -m pytest tests/test_modules_all\\.py -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "e:/NEXUS-2.0/nexus-backend/.venv/Scripts/python.exe": true
     }
 }

@@ -278,12 +278,31 @@ async def test_modulo_licencas(client: AsyncClient):
     assert e_res.status_code == 200
     assert e_res.json()["quantidade_total"] == 50
 
+    d_res = await client.post(
+        "/licencas/estoque/distribuir",
+        json={"disciplina_id": "disc-1", "escola_id": "escola-1", "quantidade": 10},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert d_res.status_code == 200
+    assert d_res.json()["quantidade_disponivel"] == 10
+
     a_res = await client.post(
         "/licencas/atribuir",
-        json={"disciplina_id": "disc-1", "aluno_id": "aluno-1", "quantidade": 1},
+        json={"disciplina_id": "disc-1", "escola_id": "escola-1", "aluno_id": "aluno-1", "quantidade": 1},
         headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert a_res.status_code == 201
+
+    s_res = await client.get("/licencas/estoque?escola_id=escola-1", headers={"Authorization": f"Bearer {t_admin}"})
+    assert s_res.status_code == 200
+    assert any(item["disciplina_id"] == "disc-1" and item["escola_id"] == "escola-1" for item in s_res.json())
+
+    o_res = await client.post(
+        "/licencas/atribuir",
+        json={"disciplina_id": "disc-1", "escola_id": "escola-1", "aluno_id": "aluno-2", "quantidade": 20},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert o_res.status_code == 400
 
 
 # 14. Financeiro

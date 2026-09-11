@@ -75,6 +75,24 @@ async def get_current_active_user(
     return current_user
 
 
+async def get_scoped_user(
+    current_user: UserResponse = Depends(get_current_user),
+) -> dict:
+    """Aplica o escopo de visibilidade com base no perfil do usuário."""
+    perfil = (current_user.perfil.nome if current_user.perfil else "").lower()
+    if perfil == "admin":
+        return {"user": current_user, "polo_id": None, "escola_id": None}
+    if perfil == "polo":
+        if not current_user.polo_id:
+            raise HTTPException(status_code=403, detail="Usuário Polo sem vínculo.")
+        return {"user": current_user, "polo_id": current_user.polo_id, "escola_id": None}
+    if perfil == "escola":
+        if not current_user.escola_id:
+            raise HTTPException(status_code=403, detail="Usuário Escola sem vínculo.")
+        return {"user": current_user, "polo_id": current_user.polo_id, "escola_id": current_user.escola_id}
+    raise HTTPException(status_code=403, detail="Perfil não autorizado.")
+
+
 def require_role(allowed_roles: List[str]) -> Callable:
     """Gera dependência FastAPI para controle de acesso baseado em papéis (RBAC).
 
