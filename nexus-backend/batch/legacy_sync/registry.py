@@ -67,21 +67,39 @@ class IdRegistry:
         """polo_id (uuid) de um usuario legado, via usuarios.polo_id."""
         if user_legacy_id in (None, "", 0):
             return None
+        try:
+            lid = int(user_legacy_id)
+        except (TypeError, ValueError):
+            return None
+        if not hasattr(self, "_usuario_polo_cache"):
+            self._usuario_polo_cache: dict[int, str | None] = {}
+        if lid in self._usuario_polo_cache:
+            return self._usuario_polo_cache[lid]
         sql = "SELECT polo_id FROM usuarios WHERE legacy_table = 'users' AND legacy_id = %s"
         with self._target.conn.cursor() as cur:
-            cur.execute(sql, (int(user_legacy_id),))
+            cur.execute(sql, (lid,))
             row = cur.fetchone()
-        return str(row[0]) if row and row[0] else None
+        res = str(row[0]) if row and row[0] else None
+        self._usuario_polo_cache[lid] = res
+        return res
 
     def role_to_perfil_nome(self, role_id: int | str | None) -> str | None:
         """Nome do perfil mapeado para uma role legada (ex.: role 2 -> 'aluno')."""
         if role_id in (None, "", 0):
             return None
-        sql = (
-            "SELECT nome FROM perfis "
-            "WHERE legacy_table = 'role' AND legacy_id = %s"
-        )
-        with self._target.conn.cursor() as cur:
-            cur.execute(sql, (int(role_id),))
-            row = cur.fetchone()
-        return row[0] if row else None
+        try:
+            rid = int(role_id)
+        except (TypeError, ValueError):
+            return None
+        if not hasattr(self, "_role_perfil_cache"):
+            self._role_perfil_cache: dict[int, str] = {}
+            sql = (
+                "SELECT legacy_id, nome FROM perfis "
+                "WHERE legacy_table = 'role' AND legacy_id IS NOT NULL"
+            )
+            with self._target.conn.cursor() as cur:
+                cur.execute(sql)
+                for r in cur.fetchall():
+                    if r[0] is not None:
+                        self._role_perfil_cache[int(r[0])] = r[1]
+        return self._role_perfil_cache.get(rid)

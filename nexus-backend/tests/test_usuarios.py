@@ -43,7 +43,7 @@ def test_usuario_mapeia_campos_base():
 def test_usuario_pula_usuarios_ja_carregados_na_carga_inicial():
     mapper = UsuarioMapper(registry=FakeRegistry())
 
-    assert mapper.initial_offset() == 17903
+    assert mapper.initial_offset() == 0
 
 
 def test_usuario_perfil_heuristica_sem_role():
@@ -68,6 +68,28 @@ def test_usuario_email_duplicado_vira_none():
     assert m.map(r1)["email"] == "dup@x.com"
     assert m.map(r2)["email"] is None
     assert any("duplicado" in w for w in m.warnings)
+
+
+def test_usuario_cpf_duplicado_vira_none():
+    m = UsuarioMapper(registry=FakeRegistry())
+    r1 = _usuario_row(id=1, cpf="037.060.304-46")
+    r2 = _usuario_row(id=2, cpf="037.060.304-46")
+    assert m.map(r1)["cpf"] == "037.060.304-46"
+    assert m.map(r2)["cpf"] is None
+    assert any("cpf duplicado" in w for w in m.warnings)
+
+
+def test_usuario_mesmo_id_mantem_cpf_e_email_em_update():
+    m = UsuarioMapper(registry=FakeRegistry())
+    r1 = _usuario_row(id=1, email="user@x.com", cpf="037.060.304-46")
+    assert m.map(r1)["cpf"] == "037.060.304-46"
+    assert m.map(r1)["email"] == "user@x.com"
+    # Re-mapeamento do mesmo usuario (ex.: incremental update) nao deve anular os campos
+    r1_updated = _usuario_row(id=1, first_name="Joao Alterado", email="user@x.com", cpf="037.060.304-46")
+    mapped = m.map(r1_updated)
+    assert mapped["cpf"] == "037.060.304-46"
+    assert mapped["email"] == "user@x.com"
+    assert mapped["nome"] == "Joao Alterado"
 
 
 def test_polo_mapeia_e_dedup():

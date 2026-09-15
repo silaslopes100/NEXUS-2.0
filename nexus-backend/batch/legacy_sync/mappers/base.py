@@ -28,7 +28,7 @@ class BaseMapper:
         from ..registry import IdRegistry
 
         self.registry: IdRegistry = registry
-        self.seen_emails: set[str] = set()
+        self.seen_emails: dict[str, int | None] = {}
         self.warnings: list[str] = []
 
     # --- utilitarios ---
@@ -140,15 +140,18 @@ class BaseMapper:
 
     # --- helpers de estado ---
 
-    def _dedup_email(self, email: str | None) -> str | None:
+    def _dedup_email(self, email: str | None, current_lid: int | None = None) -> str | None:
         """e-mail unico no destino; duplicados do legado ficam NULL p/ auditoria."""
         if not email:
             return None
         key = email.lower().strip()
         if key in self.seen_emails:
+            existing_lid = self.seen_emails[key]
+            if current_lid is not None and existing_lid is not None and existing_lid == current_lid:
+                return email
             self.warnings.append(f"email duplicado ignorado: {email}")
             return None
-        self.seen_emails.add(key)
+        self.seen_emails[key] = current_lid
         return email
 
     def warn(self, msg: str) -> None:

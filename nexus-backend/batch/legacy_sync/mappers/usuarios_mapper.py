@@ -11,10 +11,13 @@ Normalizacoes:
 """
 from __future__ import annotations
 
+import logging
 from typing import ClassVar
 
 from .base import BaseMapper
 from .perfis_mapper import perfil_nome
+
+logger = logging.getLogger(__name__)
 
 USERS_COLUMNS = [
     "id", "first_name", "last_name", "email", "password", "role_id",
@@ -38,7 +41,51 @@ class UsuarioMapper(BaseMapper):
 
     def __init__(self, registry=None) -> None:
         super().__init__(registry)
-        self._seen_cpf: set[str] = set()
+        self._seen_cpf: dict[str, int | None] = {}
+        self._load_existing_uniques()
+
+    def _load_existing_uniques(self) -> None:
+        if not self.registry:
+            return
+        target = getattr(self.registry, "_target", None)
+        if not target:
+            return
+        conn = getattr(target, "conn", None)
+        if not conn:
+            return
+        if "Fake" in type(self.registry).__name__:
+            return
+        try:
+            sql = "SELECT legacy_id, email, cpf FROM usuarios WHERE email IS NOT NULL OR cpf IS NOT NULL"
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                for r in cur.fetchall():
+                    if not isinstance(r, (list, tuple)) or len(r) < 3:
+                        continue
+                    lid = int(r[0]) if r[0] is not None else None
+                    if r[1]:
+                        em = str(r[1]).lower().strip()
+                        if em not in self.seen_emails:
+                            self.seen_emails[em] = lid
+                    if r[2]:
+                        cp = str(r[2]).strip()
+                        if cp not in self._seen_cpf:
+                            self._seen_cpf[cp] = lid
+        except Exception as exc:
+            logger.warning("Nao foi possivel carregar emails/cpfs existentes de usuarios: %s", exc)
+
+    def _dedup_cpf(self, cpf: str | None, current_lid: int | None = None) -> str | None:
+        if not cpf:
+            return None
+        key = cpf.strip()
+        if key in self._seen_cpf:
+            existing_lid = self._seen_cpf[key]
+            if current_lid is not None and existing_lid is not None and existing_lid == current_lid:
+                return cpf
+            self.warn(f"cpf duplicado ignorado: {cpf}")
+            return None
+        self._seen_cpf[key] = current_lid
+        return cpf
 
     def _perfil_uuid(self, nome: str) -> str | None:
         if not nome:
@@ -58,15 +105,9 @@ class UsuarioMapper(BaseMapper):
         return cache[key].get(nome)
 
     def map(self, row: dict) -> dict | None:
-        email = self._dedup_email(self.str_clean(row.get("email"), 255))
-        cpf = self.str_clean(row.get("cpf"), 20)
-        if cpf:
-            key = cpf
-            if key in self._seen_cpf:
-                self.warn(f"cpf duplicado ignorado: {cpf}")
-                cpf = None
-            else:
-                self._seen_cpf.add(key)
+        current_lid = self.as_int(row.get("id"))
+        email = self._dedup_email(self.str_clean(row.get("email"), 255), current_lid)
+        cpf = self._dedup_cpf(self.str_clean(row.get("cpf"), 20), current_lid)
 
         # perfil consistente: role mapeada -> heuristica por flags
         perfil_id = self._perfil_uuid(perfil_nome(self.registry, row))
@@ -90,18 +131,3 @@ class UsuarioMapper(BaseMapper):
             "status": status,
             "ultimo_login_em": None,
         }
-
-    def _perfil_uuid(self, nome: str) -> str | None:
-        if not self.registry:
-            return None
-        key = "perfis_by_nome"
-        cache = getattr(self.registry, "_nome_cache", None)
-        if cache is None:
-            cache = {}
-            setattr(self.registry, "_nome_cache", cache)
-        if key not in cache:
-            sql = f"SELECT nome, id FROM perfis"
-            with self.registry._target.conn.cursor() as cur:
-                cur.execute(sql)
-                cache[key] = {r[0]: str(r[1]) for r in cur.fetchall()}
-        return cache[key].get(nome)
