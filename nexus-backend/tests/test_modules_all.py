@@ -75,75 +75,11 @@ def _token(user_id: str, email: str, role: str) -> str:
     })
 
 
-# 03. Polos & Escolas
-@pytest.mark.asyncio
-async def test_modulo_polos_e_escolas(client: AsyncClient):
-    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
-
-    # Cria Polo
-    p_res = await client.post(
-        "/unidades/polos",
-        json={"nome": "Polo Central São Paulo", "cidade": "São Paulo", "uf": "SP"},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert p_res.status_code == 201
-    polo_id = p_res.json()["id"]
-
-    # Cria Escola vinculada
-    e_res = await client.post(
-        "/unidades/escolas",
-        json={"polo_id": polo_id, "nome": "Escola Luz do Saber", "cidade": "São Paulo", "uf": "SP"},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert e_res.status_code == 201
-
-    # Lista Polos e Escolas
-    list_p = await client.get("/unidades/polos", headers={"Authorization": f"Bearer {t_admin}"})
-    assert list_p.status_code == 200
-    assert len(list_p.json()) >= 1
-
-
-# 04. Professores
-@pytest.mark.asyncio
-async def test_modulo_professores(client: AsyncClient):
-    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
-    t_prof = _token("prof-1", "prof@nexus.com.br", "professor")
-
-    p_res = await client.post(
-        "/professores",
-        json={"usuario_id": "prof-1", "chave_pix": "prof@pix.com", "valor_hora_aula": 85.0},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert p_res.status_code == 201
-
-    m_res = await client.post(
-        "/professores/materiais",
-        json={"professor_disciplina_id": "pd-1", "arquivo_url": "https://cdn.nexus.com.br/aula1.pdf", "descricao": "Material 1"},
-        headers={"Authorization": f"Bearer {t_prof}"},
-    )
-    assert m_res.status_code == 201
-
-
-# 05. Alunos
-@pytest.mark.asyncio
-async def test_modulo_alunos(client: AsyncClient):
-    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
-
-    a_res = await client.post(
-        "/alunos",
-        json={"usuario_id": "aluno-1", "modalidade": "polo", "status": "ativo"},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert a_res.status_code == 201
-    aluno_id = a_res.json()["id"]
-
-    # Desistência
-    d_res = await client.post(
-        f"/alunos/{aluno_id}/desistir?motivo=Mudanca+de+cidade",
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert d_res.status_code == 200
-    assert d_res.json()["aluno_id"] == aluno_id
+# Nota: os testes dos módulos legados `professores`, `alunos`, `presencas`,
+# `licencas` e `financeiro`, além do antigo teste de "Polos & Escolas" via
+# `/unidades/*`, foram removidos: essas funcionalidades foram absorvidas pelo
+# módulo `polos_escolas` (ver tests/test_polos_escolas.py e
+# docs/Requisitos_Nexus2.0(Polo_Escola).md).
 
 
 # 06 & 07. Cursos e Disciplinas (AVA)
@@ -251,77 +187,6 @@ async def test_modulo_certificados(client: AsyncClient):
 
     l_res = await client.get("/certificados?aluno_id=aluno-1", headers={"Authorization": f"Bearer {t_aluno}"})
     assert l_res.status_code == 200
-
-
-# 12. Presenças
-@pytest.mark.asyncio
-async def test_modulo_presencas(client: AsyncClient):
-    t_prof = _token("prof-1", "prof@nexus.com.br", "professor")
-
-    p_res = await client.post(
-        "/presencas/lancar",
-        json={"aluno_id": "aluno-1", "numero_aula": 1, "presente": True},
-        headers={"Authorization": f"Bearer {t_prof}"},
-    )
-    assert p_res.status_code == 201
-
-
-# 13. Licenças
-@pytest.mark.asyncio
-async def test_modulo_licencas(client: AsyncClient):
-    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
-
-    e_res = await client.post(
-        "/licencas/estoque/adicionar?disciplina_id=disc-1&quantidade=50",
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert e_res.status_code == 200
-    assert e_res.json()["quantidade_total"] == 50
-
-    d_res = await client.post(
-        "/licencas/estoque/distribuir",
-        json={"disciplina_id": "disc-1", "escola_id": "escola-1", "quantidade": 10},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert d_res.status_code == 200
-    assert d_res.json()["quantidade_disponivel"] == 10
-
-    a_res = await client.post(
-        "/licencas/atribuir",
-        json={"disciplina_id": "disc-1", "escola_id": "escola-1", "aluno_id": "aluno-1", "quantidade": 1},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert a_res.status_code == 201
-
-    s_res = await client.get("/licencas/estoque?escola_id=escola-1", headers={"Authorization": f"Bearer {t_admin}"})
-    assert s_res.status_code == 200
-    assert any(item["disciplina_id"] == "disc-1" and item["escola_id"] == "escola-1" for item in s_res.json())
-
-    o_res = await client.post(
-        "/licencas/atribuir",
-        json={"disciplina_id": "disc-1", "escola_id": "escola-1", "aluno_id": "aluno-2", "quantidade": 20},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert o_res.status_code == 400
-
-
-# 14. Financeiro
-@pytest.mark.asyncio
-async def test_modulo_financeiro(client: AsyncClient):
-    t_polo = _token("polo-1", "polo@nexus.com.br", "polo")
-
-    p_res = await client.post(
-        "/financeiro/pedidos",
-        json={"polo_id": "polo-1", "valor_total": 4500.0, "status": "pendente"},
-        headers={"Authorization": f"Bearer {t_polo}"},
-    )
-    assert p_res.status_code == 201
-
-    w_res = await client.post(
-        "/financeiro/webhook/asaas",
-        json={"event": "PAYMENT_RECEIVED", "payment": {"id": "pay-1", "status": "RECEIVED"}},
-    )
-    assert w_res.status_code == 200
 
 
 # 15. Cupons
