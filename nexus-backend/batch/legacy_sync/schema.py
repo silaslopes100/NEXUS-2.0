@@ -94,6 +94,7 @@ DDL: List[str] = [
     status VARCHAR(16) DEFAULT 'ativo',
     ultimo_login_em TIMESTAMPTZ""",
     ),
+    "ALTER TABLE polos ADD COLUMN IF NOT EXISTS coordenador_usuario_id UUID REFERENCES usuarios(id);",
     _tbl(
         "usuario_permissoes",
         """    usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,

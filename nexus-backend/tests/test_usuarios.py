@@ -92,27 +92,30 @@ def test_usuario_mesmo_id_mantem_cpf_e_email_em_update():
     assert mapped["nome"] == "Joao Alterado"
 
 
-def test_polo_mapeia_e_dedup():
+def test_polo_seleciona_apenas_role_de_polo():
     reg = FakeRegistry()
     m = PoloMapper(registry=reg)
 
     class Src:
-        def stream(self, table, cols, where=None, params=(), order=None):
-            yield {"id": 10, "polo": 5, "nome_polo": "Polo Centro",
+         def stream(self, table, cols, where=None, params=(), order=None, offset=0):
+             rows = [
+              {"id": 10, "role_id": 3, "polo": 5, "nome_polo": "Polo Centro",
                    "first_name": "Ana", "last_name": "R", "email": "ana@x",
-                   "cpf": "1", "cep": "01000-000", "uf": "SP", "status": 1}
-            yield {"id": 11, "polo": 5, "nome_polo": "Polo Centro",
+                 "cpf": "1", "cep": "01000-000", "uf": "SP", "status": 1},
+              {"id": 11, "role_id": 3, "polo": 5, "nome_polo": "Polo Centro",
                    "first_name": "Bia", "last_name": "R", "email": "bia@x",
-                   "cpf": "2", "cep": "01000-000", "uf": "SP", "status": 1}
-            yield {"id": 12, "polo": 0, "nome_polo": None,
+                 "cpf": "2", "cep": "01000-000", "uf": "SP", "status": 1},
+              {"id": 12, "role_id": 2, "polo": 0, "nome_polo": None,
                    "first_name": "X", "last_name": "Y", "email": None,
-                   "cpf": None, "cep": None, "uf": None, "status": 1}
+                 "cpf": None, "cep": None, "uf": None, "status": 1},
+             ]
+             yield from (row for row in rows if row["role_id"] == 3)
 
     rows = list(m.iter_source(Src()))
-    assert len(rows) == 1  # dedup por polo; polo 0 ignorado
+    assert len(rows) == 2  # uma linha por usuario com role_id=3
     out = m.map(rows[0])
     assert out["nome"] == "Polo Centro"
-    assert m.current_legacy_id(rows[0]) == 5
+    assert m.current_legacy_id(rows[0]) == 10
 
 
 def test_escola_mapeia_com_polo():

@@ -38,7 +38,7 @@ Agendamento sugerido no Windows: Agendador de Tarefas chamando o passo 4; em ser
 | Destino | Origem (MySQL) | Regra / premissa |
 |---|---|---|
 | `perfis` | `role` + seed | Garante os 5 padrões (admin, polo, escola, professor, aluno); importa linhas da `role` |
-| `polos` | `users` (distinto por `users.polo`) | Polo vive dentro do user; legacy_id = valor de `users.polo`; responsável = user de menor id do polo |
+| `polos` | `users` (`role_id = 3`) | Uma linha por usuário de polo; `legacy_id = users.id`; campos cadastrais vêm de `nome_polo`, endereço e `first_name`/CPF/e-mail; o coordenador é vinculado depois pelo mesmo CPF em um usuário `role_id = 2` |
 | `escolas` | `users` (distinto por `users.escola`) | legacy_id = valor de `users.escola`; `polo_id` vindo de `users.polo` |
 | `usuarios` | `users` | Perfil por `role_id` ou heurística por flags (`is_pedag/is_exec/is_secret`→admin, `is_instructor`→professor, `is_vendedor`→polo, polo→polo, escola→escola, resto→aluno). e-mail/CPF duplicados → `NULL` (unicidade parcial). Senha migrada como `legacy_bcrypt` p/ lazy rehash |
 | `professores` | `users` (is_instructor/vendedor) | chave_pix e valor_hora_aula são campos novos → NULL |

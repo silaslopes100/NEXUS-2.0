@@ -54,3 +54,10 @@ Documento oficial de acompanhamento do plano técnico e status de entrega dos 18
   - `ConfiguracoesPage`: Edição de parâmetros chave/valor JSONB.
   - `ExecucoesBatchPage`: Monitoramento das execuções do ETL com detalhes de erros.
 - [x] **Identidade Visual**: Logomarca oficial NEXUS 2.0 em SVG estilizado e paleta de cores temática.
+
+## 4. Validação Integrada
+
+- [x] **Suíte Backend**: `66 passed, 1 skipped` usando `.venv/Scripts/python.exe -m pytest -q`.
+- [x] **Build Frontend**: `npm run build` concluído com TypeScript e Vite sem erros.
+- [x] **API Local**: Uvicorn respondendo em `http://127.0.0.1:8000` e documentação HTTP `200`.
+- [x] **Dev Server**: Vite disponível em `http://localhost:3000/` com proxy para a API local.

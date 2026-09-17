@@ -83,7 +83,7 @@ def test_pipeline_completo_e_idempotente(pg):
     tabelas = {
         "users": [
             # representante do polo (user distinto; id 10 so serve p/ o polo)
-            {"id": 10, "polo": 5, "nome_polo": "Polo Centro",
+            {"id": 10, "role_id": 3, "polo": 5, "nome_polo": "Polo Centro",
              "first_name": "Ana", "last_name": "R", "email": "ana@x",
              "cpf": "1", "cep": "01000-000", "uf": "SP", "telefone": None,
              "status": 1},

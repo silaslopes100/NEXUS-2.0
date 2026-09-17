@@ -68,6 +68,31 @@ FULL_LOAD_ORDER = [
 POST_STEPS = [("historico_unificado (maior nota)", compute_historico)]
 
 
+def link_polo_coordenadores(target) -> None:
+    """Vincula cada polo ao usuario legado role 2 com o mesmo CPF.
+
+    O passo roda depois de `UsuarioMapper`, quando o id legado do coordenador
+    já foi convertido para UUID no destino. O UPDATE é idempotente.
+    """
+    target.execute(
+        """
+        UPDATE polos AS p
+        SET coordenador_usuario_id = u.id,
+            atualizado_em = now()
+        FROM usuarios AS u
+        JOIN perfis AS perfil ON perfil.id = u.perfil_id
+        WHERE p.responsavel_cpf IS NOT NULL
+          AND u.cpf = p.responsavel_cpf
+          AND perfil.legacy_table = 'role'
+          AND perfil.legacy_id = 2
+        """
+    )
+    target.commit()
+
+
+POST_STEPS.insert(0, ("vinculo polo/coordenador por CPF", link_polo_coordenadores))
+
+
 def run_full_load(source, target, registry, run_log, runner, only: str | None = None) -> None:
     ensure_defaults(target)
 

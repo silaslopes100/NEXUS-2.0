@@ -4,8 +4,9 @@ import {
   EscolaItem,
   PoloCreatePayload,
   EscolaCreatePayload,
-  CoordenadorCreatePayload,
-  ResumoPoloResponse,
+  PaginacaoResponse,
+  DashboardPoloKpis,
+  AlertaItem,
 } from '@/types/polos';
 
 export interface ListPolosParams {
@@ -21,8 +22,8 @@ export interface ListEscolasParams {
 
 export const polosEscolasApi = {
   // Polos
-  async listPolos(params?: ListPolosParams): Promise<PoloItem[]> {
-    const response = await apiClient.get<PoloItem[]>('/polos', { params });
+  async listPolos(params?: ListPolosParams): Promise<PaginacaoResponse<PoloItem>> {
+    const response = await apiClient.get<PaginacaoResponse<PoloItem>>('/polos', { params });
     return response.data;
   },
 
@@ -41,19 +42,30 @@ export const polosEscolasApi = {
     return response.data;
   },
 
-  async createCoordenador(poloId: string, payload: CoordenadorCreatePayload): Promise<any> {
-    const response = await apiClient.post(`/polos/${poloId}/coordenador`, payload);
+  async getResumoPolo(poloId: string): Promise<DashboardPoloKpis> {
+    const response = await apiClient.get<DashboardPoloKpis>(`/polos/${poloId}/dashboard/kpis`);
     return response.data;
   },
 
-  async getResumoPolo(poloId: string): Promise<ResumoPoloResponse> {
-    const response = await apiClient.get<ResumoPoloResponse>(`/polos/${poloId}/resumo`);
+  async getAlertasPolo(poloId: string): Promise<{ total: number; items: AlertaItem[] }> {
+    const response = await apiClient.get(`/polos/${poloId}/dashboard/alertas`);
+    return response.data;
+  },
+
+  async getEscolaKpis(escolaId: string) {
+    const response = await apiClient.get<{
+      licencas_recebidas: number;
+      licencas_vendidas: number;
+      licencas_nao_vendidas: number;
+      taxa_conversao: number;
+      taxa_ociosidade: number;
+    }>(`/escolas/${escolaId}/dashboard/kpis`);
     return response.data;
   },
 
   // Escolas
-  async listEscolas(params?: ListEscolasParams): Promise<EscolaItem[]> {
-    const response = await apiClient.get<EscolaItem[]>('/escolas', { params });
+  async listEscolas(poloId: string, params?: Omit<ListEscolasParams, 'polo_id'>): Promise<PaginacaoResponse<EscolaItem>> {
+    const response = await apiClient.get<PaginacaoResponse<EscolaItem>>(`/polos/${poloId}/escolas`, { params });
     return response.data;
   },
 
@@ -63,7 +75,8 @@ export const polosEscolasApi = {
   },
 
   async createEscola(payload: EscolaCreatePayload): Promise<EscolaItem> {
-    const response = await apiClient.post<EscolaItem>('/escolas', payload);
+    const { polo_id, ...body } = payload;
+    const response = await apiClient.post<EscolaItem>(`/polos/${polo_id}/escolas`, body);
     return response.data;
   },
 

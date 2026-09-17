@@ -10,60 +10,52 @@ export interface EnderecoCompleto {
 export interface PoloItem {
   id: string;
   nome: string;
-  responsavel_nome?: string;
-  responsavel_cpf?: string;
-  responsavel_email?: string;
-  endereco_completo?: EnderecoCompleto;
+  coordenador_id?: string;
+  coordenador_nome?: string;
+  coordenador_email?: string;
+  endereco: EnderecoCompleto;
   status: string;
-  created_at?: string;
-  updated_at?: string;
+  criado_em?: string;
+  atualizado_em?: string;
 }
 
 export interface EscolaItem {
   id: string;
   polo_id: string;
   nome: string;
-  responsavel_nome?: string;
-  responsavel_cpf?: string;
-  responsavel_email?: string;
-  endereco_completo?: EnderecoCompleto;
+  secretario_id?: string;
+  secretario_nome?: string;
+  secretario_email?: string;
+  endereco: EnderecoCompleto;
   status: string;
-  created_at?: string;
-  updated_at?: string;
+  criado_em?: string;
+  atualizado_em?: string;
+}
+
+export interface PaginacaoResponse<T> {
+  total: number;
+  items: T[];
+  limit: number;
+  offset: number;
 }
 
 export interface PoloCreatePayload {
   nome: string;
-  responsavel_nome?: string;
-  responsavel_cpf?: string;
-  responsavel_email?: string;
-  logradouro?: string;
-  numero?: string;
-  bairro?: string;
-  cidade?: string;
-  estado?: string;
-  cep?: string;
+  endereco?: EnderecoCompleto;
+  coordenador_nome: string;
+  coordenador_cpf: string;
+  coordenador_email: string;
+  coordenador_senha: string;
 }
 
 export interface EscolaCreatePayload {
   polo_id: string;
   nome: string;
-  responsavel_nome?: string;
-  responsavel_cpf?: string;
-  responsavel_email?: string;
-  logradouro?: string;
-  numero?: string;
-  bairro?: string;
-  cidade?: string;
-  estado?: string;
-  cep?: string;
-}
-
-export interface CoordenadorCreatePayload {
-  nome: string;
-  cpf: string;
-  email: string;
-  senha: string;
+  endereco?: EnderecoCompleto;
+  secretario_nome: string;
+  secretario_cpf: string;
+  secretario_email: string;
+  secretario_senha: string;
 }
 
 export interface ResumoPoloResponse {
@@ -76,4 +68,30 @@ export interface ResumoPoloResponse {
     licencas_no_polo: number;
     licencas_nas_escolas: number;
   };
+}
+
+export interface DashboardPoloKpis {
+  total_licencas_compradas: number;
+  total_licencas_vendidas_alunos: number;
+  total_licencas_nao_vendidas: number;
+  total_nao_vendidas_escolas: number;
+  total_nao_vendidas_polo: number;
+  taxa_conversao_global: number;
+  taxa_distribuicao: number;
+}
+
+export interface DashboardEscolaKpis {
+  licencas_recebidas: number;
+  licencas_vendidas: number;
+  licencas_nao_vendidas: number;
+  taxa_conversao: number;
+  taxa_ociosidade: number;
+}
+
+export interface AlertaItem {
+  nivel: string;
+  escopo: string;
+  referencia_id: string;
+  referencia_nome: string;
+  mensagem: string;
 }
