@@ -1,6 +1,5 @@
 """Testes dos mappers de usuarios/polos/escolas/alunos/professores."""
 from batch.legacy_sync.mappers.alunos_mapper import AlunoMapper
-from batch.legacy_sync.mappers.escolas_mapper import EscolaMapper
 from batch.legacy_sync.mappers.perfis_mapper import PerfilMapper
 from batch.legacy_sync.mappers.polos_mapper import PoloMapper
 from batch.legacy_sync.mappers.professores_mapper import ProfessorMapper
@@ -116,17 +115,6 @@ def test_polo_seleciona_apenas_role_de_polo():
     out = m.map(rows[0])
     assert out["nome"] == "Polo Centro"
     assert m.current_legacy_id(rows[0]) == 10
-
-
-def test_escola_mapeia_com_polo():
-    reg = FakeRegistry(mapping={("polos", "users", 5): "polo-uuid"})
-    m = EscolaMapper(registry=reg)
-    out = m.map({"id": 1, "escola": 9, "nome_escola": "Escola Luz",
-                 "polo": 5, "first_name": "C", "last_name": "D",
-                 "email": "c@x", "cpf": None, "status": 1})
-    assert out["nome"] == "Escola Luz"
-    assert out["polo_id"] == "polo-uuid"
-    assert m.current_legacy_id({"escola": 9}) == 9
 
 
 def test_aluno_modalidade_e_matricula():

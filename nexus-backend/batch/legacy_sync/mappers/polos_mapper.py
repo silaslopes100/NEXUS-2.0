@@ -22,6 +22,7 @@ class PoloMapper(BaseMapper):
     source_columns: ClassVar[list[str]] = USERS_POLO_COLS
     target_table: ClassVar[str] = "polos"
     order_by: ClassVar[str | None] = "id"
+    legacy_table: ClassVar[str] = "teo-eadetademp.users"
 
     def initial_where(self, last_run=None) -> str | None:
         return "role_id = 3"

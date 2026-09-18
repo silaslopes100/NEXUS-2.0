@@ -9,11 +9,11 @@ from pathlib import Path
 
 from .mappers.alunos_mapper import AlunoMapper
 from .mappers.certificados_mapper import CertificadoMapper
-from .mappers.configuracoes_mapper import ConfigMapper, CustomizeMapper, FrontendSettingsMapper
 from .mappers.cupons_mapper import CupomMapper
+from .mappers.configuracoes_mapper import ConfigMapper, CustomizeMapper, FrontendSettingsMapper
 from .mappers.cursos_mapper import CursoMapper
 from .mappers.disciplinas_mapper import DisciplinaConteudoMapper, DisciplinaMapper
-from .mappers.escolas_mapper import EscolaMapper
+from .mappers.escolas_legacy_mapper import EscolaLegacyMapper
 from .mappers.feed_mapper import FeedPostMapper, LembreteMapper
 from .mappers.licencas_mapper import LicencaMapper
 from .mappers.matriculas_mapper import MatriculaMapper
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 FULL_LOAD_ORDER = [
     PerfilMapper,       # roles + perfis padrao
     PoloMapper,         # users.polo distinto
-    EscolaMapper,       # users.escola distinto
+    EscolaLegacyMapper, # escolas via query complexa MySQL (role 3 -> role 4)
     UsuarioMapper,      # users -> usuarios
     ProfessorMapper,    # users instrutor -> professores
     AlunoMapper,        # users aluno -> alunos
@@ -93,6 +93,51 @@ def link_polo_coordenadores(target) -> None:
 POST_STEPS.insert(0, ("vinculo polo/coordenador por CPF", link_polo_coordenadores))
 
 
+def update_escolas_polo_id(source, target) -> None:
+    """Atualiza polo_id das escolas via join MySQL users (role 3) -> polos PG.
+
+    Le users.role_id=3, expande campo CSV `escolas`, faz lookup em polos.legacy_id = u3.id,
+    e atualiza escolas.legacy_id = escola_id com o polo_id correspondente.
+    """
+    logger.info("Atualizando polo_id das escolas...")
+    # 1. Carrega mapa legacy_id -> polo_id da tabela polos (PG)
+    with target.conn.cursor() as cur:
+        cur.execute("SELECT legacy_id, id FROM polos WHERE legacy_id IS NOT NULL")
+        polo_map = {int(r[0]): r[1] for r in cur.fetchall()}
+    if not polo_map:
+        logger.warning("Nenhum polo com legacy_id encontrado; pulando atualizacao de escolas")
+        return
+
+    # 2. Le do MySQL: users role_id=3 com campo escolas
+    cols = ["id", "escolas"]
+    where = "role_id = 3 AND COALESCE(escolas, '') <> ''"
+    updates = 0
+    for u3 in source.stream("users", cols, where=where):
+        u3_id = int(u3["id"])
+        polo_id = polo_map.get(u3_id)
+        if not polo_id:
+            continue
+        escolas_csv = u3.get("escolas", "")
+        escola_ids = [
+            int(e) for e in escolas_csv.replace("[", "").replace("]", "").replace('"', "").split(",")
+            if e.strip().isdigit()
+        ]
+        if not escola_ids:
+            continue
+        # 3. Atualiza escolas em batch
+        placeholders = ",".join(["%s"] * len(escola_ids))
+        sql = f"""
+            UPDATE escolas
+            SET polo_id = %s, atualizado_em = NOW()
+            WHERE legacy_id IN ({placeholders})
+        """
+        with target.conn.cursor() as cur:
+            cur.execute(sql, (polo_id, *escola_ids))
+            updates += cur.rowcount
+    target.commit()
+    logger.info("polo_id atualizado em %d escolas", updates)
+
+
 def run_full_load(source, target, registry, run_log, runner, only: str | None = None) -> None:
     ensure_defaults(target)
 
@@ -107,6 +152,10 @@ def run_full_load(source, target, registry, run_log, runner, only: str | None = 
     for nome, step in POST_STEPS:
         logger.info("Passo pos-migracao: %s", nome)
         step(target)
+
+    # Passo extra: atualiza polo_id das escolas (precisa do source MySQL)
+    if not only or "EscolaLegacyMapper".lower() == only.lower():
+        update_escolas_polo_id(source, target)
 
 
 # Conferencia legado x novo, usada no relatorio do baseline.

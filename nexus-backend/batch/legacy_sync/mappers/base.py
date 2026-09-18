@@ -23,6 +23,7 @@ class BaseMapper:
     has_tracking: ClassVar[bool] = True                # False p/ tabelas sem legacy_*
     conflict_columns: ClassVar[list[str]] = []         # cols de conflito p/ sem tracking
     upsert_conflict_columns: ClassVar[tuple[str, ...]] = ("legacy_table", "legacy_id")
+    legacy_table: ClassVar[str | None] = None          # valor para coluna legacy_table (default: source_table)
 
     def __init__(self, registry=None) -> None:
         from ..registry import IdRegistry

@@ -4,6 +4,11 @@
 A escola nao pode existir sem vinculo a um Polo; quando o `users.polo` nao
 existe ou o polo ainda nao foi migrado, a escola fica com polo_id NULL e e
 contada como pendente de revisao.
+
+NOTA: Este mapper NAO e mais usado no fluxo principal (FULL_LOAD_ORDER).
+A carga de escolas agora e feita via SQL direto em run_full_load.py
+(POST_STEP load_escolas_from_legacy), que faz JOIN entre MySQL users
+e PostgreSQL polos. Mantido apenas para historico e testes.
 """
 from __future__ import annotations
 
@@ -11,16 +16,8 @@ from typing import ClassVar
 
 from .base import BaseMapper
 
-USERS_ESCOLA_COLS = [
-    "id", "escola", "nome_escola", "polo", "first_name", "last_name", "email",
-    "cpf", "cep", "logradouro", "numero", "bairro", "cidade", "uf", "complemento",
-    "telefone", "status",
-]
-
 
 class EscolaMapper(BaseMapper):
-    source_table: ClassVar[str] = "users"
-    source_columns: ClassVar[list[str]] = USERS_ESCOLA_COLS
     target_table: ClassVar[str] = "escolas"
     order_by: ClassVar[str | None] = "id"
 
