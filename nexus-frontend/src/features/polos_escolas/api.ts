@@ -12,6 +12,7 @@ import {
 export interface ListPolosParams {
   limit?: number;
   offset?: number;
+  q?: string;
 }
 
 export interface ListEscolasParams {
