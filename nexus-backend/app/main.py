@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import close_connection_pool
 from app.modules.admin.router import router as admin_router
+from app.modules.admin.router import router_operacional
 from app.modules.alunos import router as alunos_router
 from app.modules.auth.router import router as auth_router
 from app.modules.certificados import router as certificados_router
@@ -51,6 +52,7 @@ app.add_middleware(
 # Inclusão dos 18 Módulos do Sistema
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(router_operacional)
 app.include_router(polos_escolas_router)
 app.include_router(professores_router)
 app.include_router(alunos_router)

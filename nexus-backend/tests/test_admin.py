@@ -411,3 +411,126 @@ async def test_etl_execucoes_e_erros(client: AsyncClient):
     assert len(erros) == 1
     assert erros[0]["tabela_origem"] == "users"
     assert "E-mail duplicado" in erros[0]["erro"]
+
+
+def _get_token(user_id: str, email: str, perfil: str) -> str:
+    return create_access_token({"sub": user_id, "email": email, "perfil": perfil, "permissoes": []})
+
+
+# ==========================================
+# RN-01..RN-07 — Validação de regras de negócio
+# ==========================================
+
+@pytest.mark.asyncio
+async def test_rn01_create_polo_cria_coordenador(client: AsyncClient):
+    admin_token = _get_admin_token()
+    from app.modules.admin.schemas import PoloCreateRequest
+    body = PoloCreateRequest(
+        nome="Polo RN01 Teste",
+        responsavel="Maria Costa",
+        cpf="12345678900",
+        email="maria@rn01.com.br",
+        endereco="Rua A, 100",
+        senha="senha123",
+    )
+    res = await client.post("/admin/operacional/polos", json=body.model_dump(), headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 201, res.json()
+    polo = res.json()
+    assert polo["responsavel"] == "Maria Costa"
+    assert polo["usuario_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_rn02_actor_scope():
+    from app.modules.admin.service import AdminService
+    from app.modules.admin.repository import InMemoryAdminRepository
+    repo = InMemoryAdminRepository()
+    service = AdminService(repo=repo)
+    admin = {"user_id": "a", "perfil": "admin", "global_view": True, "polo_id": None, "escola_id": None}
+    coord = {"user_id": "c", "perfil": "coordenador_polo", "global_view": False, "polo_id": "p1", "escola_id": None}
+    esc = {"user_id": "s", "perfil": "secretario_escola", "global_view": False, "polo_id": None, "escola_id": "e1"}
+    assert service._actor_is_global(admin) is True
+    assert service._actor_is_global(coord) is False
+    assert service._actor_scope(admin) == (None, None)
+    assert service._actor_scope(coord) == ("p1", None)
+    assert service._actor_scope(esc) == (None, "e1")
+
+
+@pytest.mark.asyncio
+async def test_rn03_ead_limite_2_materias_mes(client: AsyncClient):
+    admin_token = _get_admin_token()
+    from app.modules.admin.schemas import MatriculaEadCreateRequest
+    from datetime import date
+    body1 = MatriculaEadCreateRequest(aluno_id="ead1", materia_id="m1", data_inicio=date(2026, 9, 1))
+    body2 = MatriculaEadCreateRequest(aluno_id="ead1", materia_id="m2", data_inicio=date(2026, 9, 15))
+    body3 = MatriculaEadCreateRequest(aluno_id="ead1", materia_id="m3", data_inicio=date(2026, 9, 20))
+    r1 = await client.post("/admin/operacional/ead/matricula", json=body1.model_dump(), headers={"Authorization": f"Bearer {admin_token}"})
+    assert r1.status_code == 201
+    r2 = await client.post("/admin/operacional/ead/matricula", json=body2.model_dump(), headers={"Authorization": f"Bearer {admin_token}"})
+    assert r2.status_code == 201
+    r3 = await client.post("/admin/operacional/ead/matricula", json=body3.model_dump(), headers={"Authorization": f"Bearer {admin_token}"})
+    assert r3.status_code == 400
+    assert "2 matérias" in r3.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_rn04_churn_lista_e_reativacao(client: AsyncClient):
+    admin_token = _get_admin_token()
+    res = await client.get("/admin/operacional/churn", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 200
+    from app.modules.admin.schemas import ReingressoRequest
+    body = ReingressoRequest(pagamento_taxa=True)
+    res_reat = await client.post("/admin/operacional/churn/inexistente/reativar", json=body.model_dump(), headers={"Authorization": f"Bearer {admin_token}"})
+    assert res_reat.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rn05_certificado_elegibilidade():
+    from app.modules.admin.service import AdminService
+    from app.modules.admin.repository import InMemoryAdminRepository
+    repo = InMemoryAdminRepository()
+    service = AdminService(repo=repo)
+    from datetime import datetime, timezone
+    aluno_id = "aluno-cert"
+    estagios = [
+        {"nome": "Teologia do Ministério", "entregue": True, "data_entrega": datetime.now(timezone.utc)},
+        {"nome": "Homilética", "entregue": True, "data_entrega": datetime.now(timezone.utc)},
+    ]
+    repo.notas_alunos[aluno_id] = [{"id": "n1", "aluno_id": aluno_id, "nota": 7.5}]
+    repo.historico_alunos[aluno_id] = [{"id": "h1", "aluno_id": aluno_id, "descricao": "histórico"}]
+    elegivel, motivo = service._certificado_elegivel(aluno_id)
+    assert elegivel is True, motivo
+
+
+@pytest.mark.asyncio
+async def test_rn06_chat_proibido_aluno_aluno():
+    from app.modules.admin.service import AdminService
+    from app.modules.admin.repository import InMemoryAdminRepository
+    repo = InMemoryAdminRepository()
+    service = AdminService(repo=repo)
+    aluno_actor = {"user_id": "al1", "perfil": "aluno", "global_view": False, "polo_id": None, "escola_id": None}
+    from app.modules.admin.schemas import ConversaCreateRequest
+    data_conv = ConversaCreateRequest(tipo="individual", nome="Chat proibido", participantes=["aluno1", "aluno2"])
+    try:
+        service.create_chat_conversa(actor=aluno_actor, data=data_conv)
+        assert False, "Deveria ter levantado exceção"
+    except Exception as e:
+        assert "proibido" in str(e).lower() or "400" in str(e)
+
+
+@pytest.mark.asyncio
+async def test_rn07_presencas_registro():
+    from app.modules.admin.service import AdminService
+    from app.modules.admin.repository import InMemoryAdminRepository
+    repo = InMemoryAdminRepository()
+    service = AdminService(repo=repo)
+    from datetime import datetime, timezone
+    aula_id = "aula-1"
+    admin_actor = {"user_id": "admin", "perfil": "admin", "global_view": True, "polo_id": None, "escola_id": None}
+    service.registrar_presenca(actor=admin_actor, aula_id=aula_id, registros=[{"aluno_id": "alu1", "presente": True}, {"aluno_id": "alu2", "presente": False}])
+    presencas = repo.list_presencas(aula_id=aula_id)
+    assert len(presencas) == 2
+    # Presença = presenças / total_aulas_previstas * 100 (RN-07)
+    presencas_aluno = repo.get_presencas_resumo_aluno("alu1")
+    assert presencas_aluno is not None
+
