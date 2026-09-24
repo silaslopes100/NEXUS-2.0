@@ -95,3 +95,28 @@ export interface AlertaItem {
   referencia_nome: string;
   mensagem: string;
 }
+
+// Payload para atualização de um Polo (inclui vínculo com usuário)
+export interface PoloUpdatePayload {
+  nome?: string;
+  endereco?: EnderecoCompleto;
+  coordenador_id?: string;        // ID do usuário (perfil Polo) a ser vinculado
+  coordenador_nome?: string;      // Nome manual (fallback)
+  coordenador_cpf?: string;       // CPF manual (fallback)
+  coordenador_email?: string;     // E-mail manual (fallback)
+  coordenador_senha?: string;     // Nova senha (opcional)
+  status?: string;
+}
+
+// Payload para atualização de uma Escola (inclui vínculo com usuário)
+export interface EscolaUpdatePayload {
+  polo_id?: string;               // Permite alterar o polo vinculado
+  nome?: string;
+  endereco?: EnderecoCompleto;
+  secretario_id?: string;         // ID do usuário (perfil Escola) a ser vinculado
+  secretario_nome?: string;
+  secretario_cpf?: string;
+  secretario_email?: string;
+  secretario_senha?: string;
+  status?: string;
+}

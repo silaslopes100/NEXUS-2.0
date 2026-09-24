@@ -1,5 +1,7 @@
+import { PoloEditModal } from '@/features/polos_escolas/components/PoloEditModal';
+import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, CheckCircle2, Loader2, MapPin, Plus, RefreshCw, Search, School, X } from 'lucide-react';
+import { Building2, CheckCircle2, Edit2, Loader2, MapPin, Plus, RefreshCw, Search, School, X } from 'lucide-react';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import { DashboardPoloKpis, EscolaCreatePayload, EscolaItem, PoloCreatePayload, PoloItem } from '@/types/polos';
 import { useAuthStore } from '@/stores/authStore';
@@ -28,6 +30,8 @@ export const PolosEscolasPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [editPolo, setEditPolo] = useState<PoloItem | null>(null);
+  const [editEscola, setEditEscola] = useState<EscolaItem | null>(null);
   const [modal, setModal] = useState<'polo' | 'escola' | null>(null);
   const [poloForm, setPoloForm] = useState<PoloCreatePayload>({ nome: '', endereco: emptyAddress, coordenador_nome: '', coordenador_cpf: '', coordenador_email: '', coordenador_senha: '' });
   const [escolaForm, setEscolaForm] = useState<EscolaCreatePayload>({ polo_id: user?.polo_id || '', nome: '', endereco: emptyAddress, secretario_nome: '', secretario_cpf: '', secretario_email: '', secretario_senha: '' });
@@ -134,7 +138,7 @@ export const PolosEscolasPage: React.FC = () => {
     <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
       {loading ? <div className="flex justify-center py-16 text-blue-400"><Loader2 className="animate-spin" /></div> : tab === 'polos' ? (
         <div className="grid gap-4 p-4 md:grid-cols-2">
-          {polos.map((polo) => <article key={polo.id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+          {polos.map((polo) => <article key={polo.id} className="relative rounded-2xl border border-slate-800 bg-slate-950/50 p-5">
             <div className="flex items-start justify-between">
               <div className="flex gap-3">
                 <Building2 className="mt-1 text-blue-400" />
@@ -143,9 +147,9 @@ export const PolosEscolasPage: React.FC = () => {
                   <p className="mt-1 flex items-center gap-1 text-xs text-slate-400"><MapPin size={13} /> {polo.endereco?.cidade || 'Cidade não informada'} / {polo.endereco?.estado || '--'}</p>
                 </div>
               </div>
-              <span className="rounded-full border border-emerald-500/30 px-2 py-1 text-xs text-emerald-400">{polo.status}</span>
             </div>
             <p className="mt-5 border-t border-slate-800 pt-4 text-sm text-slate-300">Coordenador: <b className="text-white">{polo.coordenador_nome || 'Não informado'}</b></p>
+            <button onClick={(e) => {e.stopPropagation();setEditPolo(polo);}}className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"title="Editar Polo"> <Edit2 size={16} /></button>
             <button onClick={() => { setSelectedPolo(polo.id); setTab('escolas'); loadEscolas(polo.id); }} className="mt-4 text-sm font-semibold text-blue-400 hover:text-blue-300">Ver escolas e métricas →</button>
           </article>)}
           {!polos.length && <p className="col-span-full py-12 text-center text-slate-500">Nenhum polo encontrado. Use a busca ou cadastre um novo.</p>}
@@ -159,6 +163,7 @@ export const PolosEscolasPage: React.FC = () => {
                 <th className="p-4">Secretário</th>
                 <th className="p-4">Localidade</th>
                 <th className="p-4 text-right">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -167,6 +172,7 @@ export const PolosEscolasPage: React.FC = () => {
                 <td className="p-4">{escola.secretario_nome || 'Não informado'}</td>
                 <td className="p-4">{escola.endereco?.cidade || 'Cidade não informada'} / {escola.endereco?.estado || '--'}</td>
                 <td className="p-4 text-right"><span className={`rounded-full px-2 py-1 text-xs ${escola.status === 'ativo' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400'}`}>{escola.status}</span></td>
+                <td className="px-4 py-3 text-right"><button onClick={() => setEditEscola(escola)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Escola"><Edit2 size={16} /></button></td>
               </tr>)}
               {!escolas.length && <tr><td colSpan={4} className="p-12 text-center text-slate-500">Nenhuma escola encontrada para este polo.</td></tr>}
             </tbody>
@@ -192,6 +198,8 @@ export const PolosEscolasPage: React.FC = () => {
             const form = modal === 'polo' ? poloForm : escolaForm;
             return <input key={key} className={inputClass} required minLength={key === 'senha' ? 8 : undefined} type={key === 'senha' ? 'password' : 'text'} placeholder={key[0].toUpperCase() + key.slice(1)} value={form[field] || ''} onChange={(event) => modal === 'polo' ? setPoloForm({ ...poloForm, [field]: event.target.value }) : setEscolaForm({ ...escolaForm, [field]: event.target.value })} />
           })}
+          {editPolo && (<PoloEditModal polo={editPolo}onClose={() => setEditPolo(null)} onSuccess={() => {loadPolos(query); setEditPolo(null);}} />)}
+          {editEscola && (<EscolaEditModal escola={editEscola} polos={polos} onClose={() => setEditEscola(null)} onSuccess={() => { if (selectedPolo) loadEscolas(selectedPolo); setEditEscola(null); }} /> )}
         </div>
         <div className="flex justify-end gap-2 pt-4">
           <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800">Cancelar</button>
