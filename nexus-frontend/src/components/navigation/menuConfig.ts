@@ -14,7 +14,7 @@ import {
   Clock,
   Key,
   CreditCard,
-  TicketPercent,
+  Ticket,
   Truck,
   ArrowLeftRight,
   MessageSquare,
@@ -157,7 +157,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
         {
           title: 'Cupons de Desconto',
           path: '/admin/cupons',
-          icon: TicketPercent,
+          icon: Ticket,
           isPlaceholder: true,
         },
         {
