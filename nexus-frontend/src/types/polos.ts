@@ -10,6 +10,7 @@ export interface EnderecoCompleto {
 export interface PoloItem {
   id: string;
   nome: string;
+  responsavel_nome?: string;
   coordenador_id?: string;
   coordenador_nome?: string;
   coordenador_email?: string;

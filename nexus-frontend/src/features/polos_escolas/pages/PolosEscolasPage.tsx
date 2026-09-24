@@ -65,6 +65,10 @@ export const PolosEscolasPage: React.FC = () => {
     setQuery(value);
     debouncedLoadPolos(value);
   }, [debouncedLoadPolos]);
+    useEffect(() => {
+    void loadPolos(query);
+  }, [loadPolos, query]);
+
 
   useEffect(() => {
     if (!selectedPolo) {
@@ -148,7 +152,7 @@ export const PolosEscolasPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <p className="mt-5 border-t border-slate-800 pt-4 text-sm text-slate-300">Coordenador: <b className="text-white">{polo.coordenador_nome || 'Não informado'}</b></p>
+            <p className="mt-5 border-t border-slate-800 pt-4 text-sm text-slate-300">Coordenador: <b className="text-white">{polo.responsavel_nome || 'Não informado'}</b></p>
             <button onClick={(e) => {e.stopPropagation();setEditPolo(polo);}}className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"title="Editar Polo"> <Edit2 size={16} /></button>
             <button onClick={() => { setSelectedPolo(polo.id); setTab('escolas'); loadEscolas(polo.id); }} className="mt-4 text-sm font-semibold text-blue-400 hover:text-blue-300">Ver escolas e métricas →</button>
           </article>)}

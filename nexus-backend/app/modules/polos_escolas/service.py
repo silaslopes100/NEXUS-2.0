@@ -112,28 +112,38 @@ class PolosEscolasService:
             cep=data.get("cep", "") or "",
         )
 
-    def _build_polo_response(self, polo: Dict[str, Any]) -> PoloResponse:
+    def _build_polo_response(self, polo: Dict[str, Any], usuarios_por_id: Optional[Dict[str, Dict[str, Any]]] = None) -> PoloResponse:
         coordenador = None
         coord_id = polo.get("coordenador_usuario_id")
         if coord_id:
-            coordenador = self.repo.get_usuario_by_id(str(coord_id))
+            usuarios_por_id = usuarios_por_id or {}
+            coordenador = usuarios_por_id.get(str(coord_id))
+
+        coordenador_nome = polo.get("responsavel_nome") or (coordenador.get("nome") if coordenador else None)
+        coordenador_email = (coordenador.get("email") if coordenador else None) or polo.get("responsavel_email")
+
         return PoloResponse(
             id=str(polo["id"]),
             nome=polo["nome"],
             endereco=self._endereco_from(polo),
             status=polo.get("status", "ativo"),
             coordenador_id=str(coord_id) if coord_id else None,
-            coordenador_nome=coordenador.get("nome") if coordenador else None,
-            coordenador_email=coordenador.get("email") if coordenador else None,
+            coordenador_nome=coordenador_nome,
+            coordenador_email=coordenador_email,
             criado_em=polo.get("criado_em"),
             atualizado_em=polo.get("atualizado_em"),
         )
 
-    def _build_escola_response(self, escola: Dict[str, Any]) -> EscolaResponse:
+    def _build_escola_response(self, escola: Dict[str, Any], usuarios_por_id: Optional[Dict[str, Dict[str, Any]]] = None) -> EscolaResponse:
         secretario = None
         sec_id = escola.get("secretario_usuario_id")
         if sec_id:
-            secretario = self.repo.get_usuario_by_id(str(sec_id))
+            usuarios_por_id = usuarios_por_id or {}
+            secretario = usuarios_por_id.get(str(sec_id))
+
+        secretario_nome = escola.get("secretario_nome") or (secretario.get("nome") if secretario else None)
+        secretario_email = escola.get("secretario_email") or (secretario.get("email") if secretario else None)
+
         return EscolaResponse(
             id=str(escola["id"]),
             polo_id=str(escola["polo_id"]),
@@ -141,11 +151,17 @@ class PolosEscolasService:
             endereco=self._endereco_from(escola),
             status=escola.get("status", "ativo"),
             secretario_id=str(sec_id) if sec_id else None,
-            secretario_nome=secretario.get("nome") if secretario else None,
-            secretario_email=secretario.get("email") if secretario else None,
+            secretario_nome=secretario_nome,
+            secretario_email=secretario_email,
             criado_em=escola.get("criado_em"),
             atualizado_em=escola.get("atualizado_em"),
         )
+
+    def _load_usuarios_by_ids(self, usuario_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        ids = [str(uid) for uid in usuario_ids if uid]
+        if not ids:
+            return {}
+        return self.repo.get_usuarios_by_ids(ids)
 
     def _validar_email_cpf_unicos(self, email: str, cpf: str) -> None:
         if self.repo.get_usuario_by_email(email):
@@ -268,8 +284,13 @@ class PolosEscolasService:
 
     def list_polos(self, limit: int = 50, offset: int = 0) -> PoloListResponse:
         total, items = self.repo.list_polos(limit=limit, offset=offset)
+        usuario_ids = [str(p.get("coordenador_usuario_id")) for p in items if p.get("coordenador_usuario_id")]
+        usuarios_por_id = self._load_usuarios_by_ids(usuario_ids)
         return PoloListResponse(
-            total=total, items=[self._build_polo_response(p) for p in items], limit=limit, offset=offset
+            total=total,
+            items=[self._build_polo_response(p, usuarios_por_id=usuarios_por_id) for p in items],
+            limit=limit,
+            offset=offset,
         )
 
     # ------------------------------------------------------------------
@@ -379,7 +400,10 @@ class PolosEscolasService:
     def list_escolas(self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0) -> EscolaListResponse:
         total, items = self.repo.list_escolas(polo_id=polo_id, limit=limit, offset=offset)
         return EscolaListResponse(
-            total=total, items=[self._build_escola_response(e) for e in items], limit=limit, offset=offset
+            total=total,
+            items=[self._build_escola_response(e) for e in items],
+            limit=limit,
+            offset=offset,
         )
 
     # ------------------------------------------------------------------

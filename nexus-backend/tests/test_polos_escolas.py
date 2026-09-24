@@ -143,6 +143,76 @@ async def test_rn01_create_escola_gera_secretario(client: AsyncClient, repos):
 
 
 @pytest.mark.asyncio
+async def test_list_polos_e_escolas_usam_carregamento_em_lote_de_usuarios(client: AsyncClient, repos):
+    admin_token = _token("admin-1")
+    _, polos_repo = repos
+
+    class CountingRepo(InMemoryPolosEscolasRepository):
+        def __init__(self, base):
+            self._base = base
+            self.get_usuarios_by_ids_calls = 0
+
+        def __getattr__(self, name):
+            return getattr(self._base, name)
+
+        def get_usuarios_by_ids(self, usuario_ids):
+            self.get_usuarios_by_ids_calls += 1
+            return self._base.get_usuarios_by_ids(usuario_ids)
+
+    counting_repo = CountingRepo(polos_repo)
+    set_polos_escolas_repository(counting_repo)
+
+    polo_a = (
+        await client.post(
+            "/polos", json=_polo_payload(nome="Polo A", coordenador_email="coordA@polo.com", coordenador_cpf="10000000001"),
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    ).json()
+    polo_b = (
+        await client.post(
+            "/polos", json=_polo_payload(nome="Polo B", coordenador_email="coordB@polo.com", coordenador_cpf="10000000002"),
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    ).json()
+
+    await client.post(
+        f"/polos/{polo_a['id']}/escolas",
+        json={
+            "nome": "Escola A",
+            "secretario_nome": "Secretaria A",
+            "secretario_cpf": "55566677788",
+            "secretario_email": "secretariaA@escola.com",
+            "secretario_senha": "senha_segura_456",
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    polos_res = await client.get("/polos", headers={"Authorization": f"Bearer {admin_token}"})
+    escolas_res = await client.get(f"/polos/{polo_a['id']}/escolas", headers={"Authorization": f"Bearer {admin_token}"})
+
+    assert polos_res.status_code == 200, polos_res.text
+    assert escolas_res.status_code == 200, escolas_res.text
+    assert counting_repo.get_usuarios_by_ids_calls >= 1, "As listagens devem buscar usuários em lote, e não item a item"
+
+
+@pytest.mark.asyncio
+async def test_polo_usa_responsavel_nome_quando_nao_ha_usuario_coordenador(client: AsyncClient, repos):
+    admin_token = _token("admin-1")
+    _, polos_repo = repos
+
+    polo_id = polos_repo.create_polo({
+        "nome": "Polo Legacy",
+        "responsavel_nome": "Responsável Legacy",
+        "responsavel_email": "responsavel@legacy.com",
+        "status": "ativo",
+    })
+
+    response = await client.get(f"/polos/{polo_id}", headers={"Authorization": f"Bearer {admin_token}"})
+    assert response.status_code == 200, response.text
+    assert response.json()["coordenador_nome"] == "Responsável Legacy"
+
+
+@pytest.mark.asyncio
 async def test_rn09_multi_tenancy_restringe_coordenador_a_proprio_polo(client: AsyncClient, repos):
     admin_token = _token("admin-1")
     auth_repo, _ = repos

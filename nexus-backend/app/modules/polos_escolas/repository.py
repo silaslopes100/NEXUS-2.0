@@ -15,6 +15,7 @@ class PolosEscolasRepositoryInterface(Protocol):
     def get_usuario_by_email(self, email: str) -> Optional[Dict[str, Any]]: ...
     def get_usuario_by_cpf(self, cpf: str) -> Optional[Dict[str, Any]]: ...
     def get_usuario_by_id(self, usuario_id: str) -> Optional[Dict[str, Any]]: ...
+    def get_usuarios_by_ids(self, usuario_ids: List[str]) -> Dict[str, Dict[str, Any]]: ...
     def create_usuario(self, data: Dict[str, Any]) -> str: ...
     def update_usuario(self, usuario_id: str, data: Dict[str, Any]) -> None: ...
 
@@ -193,6 +194,15 @@ class PostgresPolosEscolasRepository:
             row = cur.fetchone()
             return dict(row) if row else None
 
+    def get_usuarios_by_ids(self, usuario_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        ids = [str(uid) for uid in usuario_ids if uid]
+        if not ids:
+            return {}
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM usuarios WHERE id::text = ANY(%s::text[])", (ids,))
+            rows = cur.fetchall()
+        return {str(row["id"]): dict(row) for row in rows}
+
     def create_usuario(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
         with get_db_cursor() as cur:
@@ -327,23 +337,54 @@ class PostgresPolosEscolasRepository:
 
     def get_escola(self, escola_id: str) -> Optional[Dict[str, Any]]:
         with get_db_cursor() as cur:
-            cur.execute("SELECT * FROM escolas WHERE id = %s LIMIT 1", (str(escola_id),))
+            cur.execute(
+                """
+                SELECT e.*, u.nome AS secretario_nome, u.email AS secretario_email
+                FROM escolas e
+                LEFT JOIN usuarios u ON u.id = e.secretario_usuario_id
+                WHERE e.id = %s
+                LIMIT 1
+                """,
+                (str(escola_id),),
+            )
             row = cur.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            data = dict(row)
+            if data.get("secretario_nome") is None:
+                data["secretario_nome"] = None
+            if data.get("secretario_email") is None:
+                data["secretario_email"] = None
+            return data
 
     def list_escolas(
         self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        where = "WHERE polo_id = %s" if polo_id else ""
+        where = "WHERE e.polo_id = %s" if polo_id else ""
         params = [str(polo_id)] if polo_id else []
         with get_db_cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) as total FROM escolas {where}", tuple(params))
+            cur.execute(f"SELECT COUNT(*) as total FROM escolas e {where}", tuple(params))
             total = int(cur.fetchone()["total"])
             cur.execute(
-                f"SELECT * FROM escolas {where} ORDER BY nome ASC LIMIT %s OFFSET %s",
+                f"""
+                SELECT e.*, u.nome AS secretario_nome, u.email AS secretario_email
+                FROM escolas e
+                LEFT JOIN usuarios u ON u.id = e.secretario_usuario_id
+                {where}
+                ORDER BY e.nome ASC
+                LIMIT %s OFFSET %s
+                """,
                 tuple(params + [limit, offset]),
             )
-            return total, [dict(r) for r in cur.fetchall()]
+            items = []
+            for row in cur.fetchall():
+                data = dict(row)
+                if data.get("secretario_nome") is None:
+                    data["secretario_nome"] = None
+                if data.get("secretario_email") is None:
+                    data["secretario_email"] = None
+                items.append(data)
+            return total, items
 
     # ---------- Estoque ----------
 
@@ -1168,6 +1209,14 @@ class InMemoryPolosEscolasRepository:
         u = self.usuarios.get(str(usuario_id))
         return u.copy() if u else None
 
+    def get_usuarios_by_ids(self, usuario_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        result: Dict[str, Dict[str, Any]] = {}
+        for usuario_id in usuario_ids:
+            u = self.usuarios.get(str(usuario_id))
+            if u:
+                result[str(usuario_id)] = u.copy()
+        return result
+
     def create_usuario(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
         self.usuarios[new_id] = {"id": new_id, "status": "ativo", "criado_em": _now(), "atualizado_em": _now(), **data}
@@ -1215,7 +1264,13 @@ class InMemoryPolosEscolasRepository:
 
     def get_escola(self, escola_id: str) -> Optional[Dict[str, Any]]:
         e = self.escolas.get(str(escola_id))
-        return e.copy() if e else None
+        if not e:
+            return None
+        data = e.copy()
+        secretario = self.usuarios.get(str(e.get("secretario_usuario_id")))
+        data["secretario_nome"] = (secretario or {}).get("nome")
+        data["secretario_email"] = (secretario or {}).get("email")
+        return data
 
     def list_escolas(
         self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0
@@ -1224,7 +1279,14 @@ class InMemoryPolosEscolasRepository:
         if polo_id:
             items = [e for e in items if str(e.get("polo_id")) == str(polo_id)]
         items.sort(key=lambda x: x["nome"])
-        return len(items), items[offset : offset + limit]
+        result = []
+        for e in items[offset : offset + limit]:
+            data = e.copy()
+            secretario = self.usuarios.get(str(e.get("secretario_usuario_id")))
+            data["secretario_nome"] = (secretario or {}).get("nome")
+            data["secretario_email"] = (secretario or {}).get("email")
+            result.append(data)
+        return len(items), result
 
     # ---------- Estoque ----------
 
