@@ -10,6 +10,7 @@ import {
   Configuracao,
   EtlSyncRunListResponse,
   EtlErro,
+  AdminDashboardMetrics,
 } from '@/types/admin';
 
 export interface ListUsuariosParams {
@@ -32,6 +33,12 @@ export interface ListAuditLogsParams {
 }
 
 export const adminApi = {
+  // Dashboard
+  async getDashboardMetrics(): Promise<AdminDashboardMetrics> {
+    const response = await apiClient.get<AdminDashboardMetrics>('/admin/dashboard/metrics');
+    return response.data;
+  },
+
   // Usuários
   async listUsuarios(params?: ListUsuariosParams): Promise<UsuarioListResponse> {
     const response = await apiClient.get<UsuarioListResponse>('/admin/usuarios', { params });

@@ -126,3 +126,13 @@ export interface EtlErro {
   linha_raw?: any;
   criado_em?: string | null;
 }
+
+export interface AdminDashboardMetrics {
+  alunos_ativos: number;
+  matriculas_total: number;
+  polos_ativos: number;
+  escolas_ativas: number;
+  professores_ativos: number;
+  certificados_emitidos: number;
+  licencas_em_estoque: number;
+}

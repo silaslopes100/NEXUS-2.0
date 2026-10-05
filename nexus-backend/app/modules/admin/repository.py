@@ -10,6 +10,9 @@ from app.core.database import get_db_cursor
 
 
 class AdminRepositoryInterface(Protocol):
+    # Dashboard
+    def get_dashboard_metrics(self) -> Dict[str, int]: ...
+
     # Usuários
     def list_users(
         self,
@@ -81,6 +84,31 @@ class AdminRepositoryInterface(Protocol):
 
 class PostgresAdminRepository:
     """Implementação PostgreSQL das operações administrativas."""
+
+    def get_dashboard_metrics(self) -> Dict[str, int]:
+        sql = """
+            SELECT
+                (SELECT COUNT(*)
+                 FROM alunos a
+                 JOIN usuarios u ON u.id = a.usuario_id
+                 WHERE a.status = 'ativo' AND u.status = 'ativo') AS alunos_ativos,
+                (SELECT COUNT(*) FROM matriculas_ead) AS matriculas_total,
+                (SELECT COUNT(*) FROM polos WHERE status = 'ativo') AS polos_ativos,
+                (SELECT COUNT(*) FROM escolas WHERE status = 'ativo') AS escolas_ativas,
+                (SELECT COUNT(*)
+                 FROM professores p
+                 JOIN usuarios u ON u.id = p.usuario_id
+                 WHERE u.status = 'ativo') AS professores_ativos,
+                (SELECT COUNT(*) FROM certificados WHERE emitido_em IS NOT NULL) AS certificados_emitidos,
+                (SELECT COALESCE(SUM(quantidade_disponivel), 0)
+                 FROM estoque_licencas) AS licencas_em_estoque
+        """
+        with get_db_cursor() as cur:
+            cur.execute(sql)
+            row = cur.fetchone()
+            if row is None:
+                raise RuntimeError("Não foi possível obter as métricas da Dashboard administrativa.")
+            return {key: int(value or 0) for key, value in row.items()}
 
     def list_users(
         self,
@@ -528,6 +556,18 @@ class InMemoryAdminRepository:
         self.configuracoes: Dict[str, Dict[str, Any]] = {}  # chave -> dict
         self.etl_sync_runs: List[Dict[str, Any]] = []
         self.etl_erros: List[Dict[str, Any]] = []
+        self.dashboard_metrics: Dict[str, int] = {
+            "alunos_ativos": 0,
+            "matriculas_total": 0,
+            "polos_ativos": 0,
+            "escolas_ativas": 0,
+            "professores_ativos": 0,
+            "certificados_emitidos": 0,
+            "licencas_em_estoque": 0,
+        }
+
+    def get_dashboard_metrics(self) -> Dict[str, int]:
+        return self.dashboard_metrics.copy()
 
     def list_users(
         self,

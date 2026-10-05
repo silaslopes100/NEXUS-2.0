@@ -160,6 +160,36 @@ async def test_admin_access_forbidden_para_nao_admin(client: AsyncClient):
     assert "apenas administradores" in res.json()["detail"]
 
 
+@pytest.mark.asyncio
+async def test_dashboard_metrics_retornam_dados_do_repositorio(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    admin_repo.dashboard_metrics.update({
+        "alunos_ativos": 125,
+        "matriculas_total": 240,
+        "polos_ativos": 8,
+        "escolas_ativas": 15,
+        "professores_ativos": 12,
+        "certificados_emitidos": 4,
+        "licencas_em_estoque": 30,
+    })
+
+    res = await client.get(
+        "/admin/dashboard/metrics",
+        headers={"Authorization": f"Bearer {_get_admin_token()}"},
+    )
+
+    assert res.status_code == 200
+    assert res.json() == {
+        "alunos_ativos": 125,
+        "matriculas_total": 240,
+        "polos_ativos": 8,
+        "escolas_ativas": 15,
+        "professores_ativos": 12,
+        "certificados_emitidos": 4,
+        "licencas_em_estoque": 30,
+    }
+
+
 # ==========================================
 # 2. CRUD Completo de Usuários Internos / Staff
 # ==========================================

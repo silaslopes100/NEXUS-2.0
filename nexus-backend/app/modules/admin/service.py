@@ -11,6 +11,7 @@ from app.modules.admin.repository import AdminRepositoryInterface, get_admin_rep
 from app.modules.admin.schemas import (
     ConfiguracaoResponse,
     ConfiguracaoSetRequest,
+    AdminDashboardMetricsResponse,
     EtlErroResponse,
     EtlSyncRunListResponse,
     EtlSyncRunResponse,
@@ -33,6 +34,9 @@ class AdminService:
     @property
     def repo(self) -> AdminRepositoryInterface:
         return self._repo or get_admin_repository()
+
+    def get_dashboard_metrics(self) -> AdminDashboardMetricsResponse:
+        return AdminDashboardMetricsResponse(**self.repo.get_dashboard_metrics())
 
     def _build_user_response(
         self, user_data: Dict[str, Any], permissoes: Optional[List[str]] = None
