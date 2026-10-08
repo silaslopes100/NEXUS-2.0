@@ -6,6 +6,18 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+# ---------- Dashboard Administrativa ----------
+
+class AdminDashboardMetricsResponse(BaseModel):
+    alunos_ativos: int
+    matriculas_total: int
+    polos_ativos: int
+    escolas_ativas: int
+    professores_ativos: int
+    certificados_emitidos: int
+    licencas_em_estoque: int
+
+
 # ---------- Perfis & Permissões ----------
 
 class PerfilItemResponse(BaseModel):

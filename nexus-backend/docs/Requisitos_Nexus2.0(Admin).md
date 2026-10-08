@@ -102,6 +102,23 @@ POST /admin/polos
 
 # REQUISITOS FUNCIONAIS (DASHBOARD INTERATIVA)
 
+### Indicadores iniciais conectados ao Batch
+O endpoint autenticado `GET /admin/dashboard/metrics` alimenta os cards atuais com:
+alunos ativos (aluno e usuário com status ativo), total de matrículas EAD migradas,
+polos e escolas ativos, professores com usuário ativo, certificados com `emitido_em`
+preenchido e saldo disponível em `estoque_licencas`. A quantidade de matrículas ainda
+é total geral, sem os filtros por período descritos abaixo. O Batch legado não informa
+a data de emissão dos certificados e não possui saldo inicial equivalente de estoque;
+por isso, esses dois indicadores podem retornar zero até que os dados sejam mantidos
+no novo sistema. Listagens, filtros, ranking e exportação PDF ligados a dados reais
+permanecem pendentes.
+Para demonstrações antes da conclusão das consultas, a Dashboard inclui visualizadores
+de prévia com registros fictícios no frontend. Eles simulam filtros, listas, detalhes e
+o relatório de ranking (via impressão do navegador, com opção de salvar como PDF); a
+edição nessa prévia não persiste alterações. Esses exemplos não substituem as listagens
+e consultas reais descritas abaixo e devem ser removidos ou conectados a dados reais
+antes da liberação operacional.
+
 ## 1. Visualizadores (cards clicáveis com contagem)
 Implementar endpoints de contagem + listagem paginada com filtros para:
 

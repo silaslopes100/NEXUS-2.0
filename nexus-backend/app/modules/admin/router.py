@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.modules.admin.dependencies import get_admin_service, require_admin_user
 from app.modules.admin.schemas import (
+    AdminDashboardMetricsResponse,
     ConfiguracaoBulkUpdateRequest,
     ConfiguracaoResponse,
     ConfiguracaoSetRequest,
@@ -33,6 +34,21 @@ router = APIRouter(
     tags=["Administração Geral"],
     dependencies=[Depends(require_admin_user)],
 )
+
+
+# ==========================================
+# Dashboard Administrativa
+# ==========================================
+
+@router.get(
+    "/dashboard/metrics",
+    response_model=AdminDashboardMetricsResponse,
+    summary="Retorna os indicadores da Dashboard com dados sincronizados pelo Batch",
+)
+async def get_dashboard_metrics(
+    service: AdminService = Depends(get_admin_service),
+) -> AdminDashboardMetricsResponse:
+    return service.get_dashboard_metrics()
 
 
 # ==========================================

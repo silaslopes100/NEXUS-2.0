@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { adminApi } from '@/features/admin/api';
+import { AdminDashboardMetrics } from '@/types/admin';
+import { AdminDashboardPreview } from './AdminDashboardPreview';
 import {
   Users,
   Building2,
@@ -14,12 +17,58 @@ import { Link } from 'react-router-dom';
 
 export const AdminDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
+  const [metrics, setMetrics] = useState<AdminDashboardMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    adminApi.getDashboardMetrics()
+      .then((data) => {
+        if (isMounted) setMetrics(data);
+      })
+      .catch((error: unknown) => {
+        console.error('Erro ao carregar indicadores da Dashboard administrativa:', error);
+        if (isMounted) setMetricsError(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const formatMetric = (value: number | undefined) =>
+    value === undefined ? '—' : new Intl.NumberFormat('pt-BR').format(value);
 
   const stats = [
-    { label: 'Usuários Ativos', val: '17.903+', icon: Users, change: '+12% este mês', color: 'text-blue-400' },
-    { label: 'Polos Integrados', val: '48', icon: Building2, change: '100% migrados', color: 'text-nexus-yellow' },
-    { label: 'Professores / Tutores', val: '124', icon: GraduationCap, change: 'Corpo docente', color: 'text-emerald-400' },
-    { label: 'Faturamento & Licenças', val: 'R$ 184.500', icon: CreditCard, change: 'Via Asaas Gateway', color: 'text-purple-400' },
+    {
+      label: 'Alunos Ativos / Matrículas EAD',
+      val: metrics ? `${formatMetric(metrics.alunos_ativos)} / ${formatMetric(metrics.matriculas_total)}` : '—',
+      icon: Users,
+      change: metricsError ? 'Dados indisponíveis' : 'Alunos ativos / matrículas EAD migradas',
+      color: 'text-blue-400',
+    },
+    {
+      label: 'Polos / Escolas Ativas',
+      val: metrics ? `${formatMetric(metrics.polos_ativos)} / ${formatMetric(metrics.escolas_ativas)}` : '—',
+      icon: Building2,
+      change: metricsError ? 'Dados indisponíveis' : 'Polos ativos / escolas ativas',
+      color: 'text-nexus-yellow',
+    },
+    {
+      label: 'Professores / Certificados',
+      val: metrics ? `${formatMetric(metrics.professores_ativos)} / ${formatMetric(metrics.certificados_emitidos)}` : '—',
+      icon: GraduationCap,
+      change: metricsError ? 'Dados indisponíveis' : 'Professores ativos / certificados emitidos',
+      color: 'text-emerald-400',
+    },
+    {
+      label: 'Licenças em Estoque',
+      val: metrics ? formatMetric(metrics.licencas_em_estoque) : '—',
+      icon: CreditCard,
+      change: metricsError ? 'Dados indisponíveis' : 'Quantidade disponível no estoque geral',
+      color: 'text-purple-400',
+    },
   ];
 
   return (
@@ -85,6 +134,8 @@ export const AdminDashboardPage: React.FC = () => {
           );
         })}
       </div>
+
+      <AdminDashboardPreview />
 
       {/* Quick Security & Architecture Facts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
