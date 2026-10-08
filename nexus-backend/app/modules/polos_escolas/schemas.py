@@ -33,7 +33,6 @@ class PoloCreateRequest(BaseModel):
 
     nome: str = Field(min_length=2)
     endereco: Optional[EnderecoSchema] = None
-    # Dados do coordenador (RN-01: mesmo cadastro do responsável do polo)
     coordenador_nome: str = Field(min_length=1)
     coordenador_cpf: str = Field(min_length=11, max_length=14)
     coordenador_email: EmailStr
@@ -41,10 +40,16 @@ class PoloCreateRequest(BaseModel):
 
 
 class PoloUpdateRequest(BaseModel):
+    """Atualiza o Polo. Permite trocar o usuário coordenador vinculado."""
+
     nome: Optional[str] = None
     endereco: Optional[EnderecoSchema] = None
     status: Optional[str] = Field(default=None, pattern="^(ativo|inativo)$")
-    # RN-01: ao editar o Polo, sincroniza dados do coordenador
+
+    # NOVO: vincular um usuário existente (perfil coordenador_polo)
+    coordenador_usuario_id: Optional[str] = None
+
+    # Sincronização de dados do coordenador (comportamento existente)
     coordenador_nome: Optional[str] = None
     coordenador_cpf: Optional[str] = None
     coordenador_email: Optional[EmailStr] = None
@@ -88,9 +93,19 @@ class EscolaCreateRequest(BaseModel):
 
 
 class EscolaUpdateRequest(BaseModel):
+    """Atualiza a Escola. Permite trocar de polo e vincular outro secretário."""
+
     nome: Optional[str] = None
     endereco: Optional[EnderecoSchema] = None
     status: Optional[str] = Field(default=None, pattern="^(ativo|inativo)$")
+
+    # NOVO: permitir mover a escola para outro polo
+    polo_id: Optional[str] = None
+
+    # NOVO: vincular um usuário existente (perfil secretario_escola)
+    secretario_usuario_id: Optional[str] = None
+
+    # Sincronização de dados do secretário (comportamento existente)
     secretario_nome: Optional[str] = None
     secretario_cpf: Optional[str] = None
     secretario_email: Optional[EmailStr] = None
@@ -120,7 +135,33 @@ class EscolaListResponse(BaseModel):
 
 
 # =========================================================================
-# 3. Dashboard do Polo (RN-03, RN-04)
+# 3. Vinculação de Usuários (NOVO)
+# =========================================================================
+
+class UsuarioVinculavelResponse(BaseModel):
+    """Usuário elegível para ser vinculado a um Polo ou Escola."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    nome: str
+    sobrenome: Optional[str] = ""
+    email: Optional[str] = None
+    cpf: Optional[str] = None
+    perfil_nome: Optional[str] = None
+    polo_id: Optional[str] = None
+    escola_id: Optional[str] = None
+    status: Optional[str] = None
+
+
+class UsuarioVinculavelListResponse(BaseModel):
+    total: int
+    items: List[UsuarioVinculavelResponse]
+    limit: int
+    offset: int
+
+
+# =========================================================================
+# 4. Dashboard do Polo (RN-03, RN-04)
 # =========================================================================
 
 class DashboardPoloKpisResponse(BaseModel):
@@ -151,7 +192,7 @@ class DashboardFunilResponse(BaseModel):
 class TreemapNode(BaseModel):
     nome: str
     valor: int
-    tipo: str  # 'polo' | 'escola' | 'status'
+    tipo: str
     filhos: List["TreemapNode"] = Field(default_factory=list)
 
 
@@ -200,8 +241,8 @@ class DashboardDrilldownResponse(BaseModel):
 
 
 class AlertaResponse(BaseModel):
-    nivel: str  # 'vermelho' | 'amarelo' | 'laranja'
-    escopo: str  # 'polo' | 'escola'
+    nivel: str
+    escopo: str
     referencia_id: str
     referencia_nome: str
     mensagem: str
@@ -213,11 +254,11 @@ class AlertaListResponse(BaseModel):
 
 
 # =========================================================================
-# 4. Relatório Dinâmico Hierárquico
+# 5. Relatório Dinâmico Hierárquico
 # =========================================================================
 
 class RelatorioDrilldownLinha(BaseModel):
-    nivel: str  # 'Polo' | 'Escola' | 'Aluno'
+    nivel: str
     campo: str
     descricao: str
     formula: str
@@ -236,7 +277,7 @@ class RelatorioDrilldownResponse(BaseModel):
 
 
 # =========================================================================
-# 5. Fluxo de Licenças (RN-02)
+# 6. Fluxo de Licenças (RN-02)
 # =========================================================================
 
 class LicencaCompraRequest(BaseModel):
@@ -288,7 +329,7 @@ class MovimentacaoListResponse(BaseModel):
 
 
 # =========================================================================
-# 6. Dashboard da Escola
+# 7. Dashboard da Escola
 # =========================================================================
 
 class DashboardEscolaKpisResponse(BaseModel):
@@ -338,7 +379,7 @@ class EvolucaoResponse(BaseModel):
 
 
 # =========================================================================
-# 7. Financeiro
+# 8. Financeiro
 # =========================================================================
 
 class CompraLicencaResponse(BaseModel):
@@ -384,7 +425,7 @@ class BoletoListResponse(BaseModel):
 
 
 # =========================================================================
-# 8. Alunos do Polo
+# 9. Alunos do Polo
 # =========================================================================
 
 class AlunoPoloResponse(BaseModel):
@@ -478,7 +519,7 @@ class AlunoDesistenteListResponse(BaseModel):
 
 
 # =========================================================================
-# 9. Professores
+# 10. Professores
 # =========================================================================
 
 class ProfessorDashboardResponse(BaseModel):
@@ -592,8 +633,6 @@ class ProfessorCreateRequest(BaseModel):
     conteudo_programatico: Optional[str] = None
 
 
-# ---------- Gestão Pedagógica (RN-08) ----------
-
 class FeedPostCreateRequest(BaseModel):
     titulo: str = Field(min_length=1)
     conteudo: str = Field(min_length=1)
@@ -652,7 +691,7 @@ class CalendarioEadResponse(BaseModel):
 
 
 # =========================================================================
-# 10. Treinamentos
+# 11. Treinamentos
 # =========================================================================
 
 class TreinamentoResponse(BaseModel):
@@ -678,7 +717,7 @@ class TreinamentoInscricaoResponse(BaseModel):
 
 
 # =========================================================================
-# 11. Perfil
+# 12. Perfil
 # =========================================================================
 
 class PerfilUsuarioResponse(BaseModel):

@@ -72,6 +72,7 @@ from app.modules.polos_escolas.schemas import (
     TreinamentoInscricaoResponse,
     TreinamentoResponse,
     TrocaPoloRequest,
+    UsuarioVinculavelListResponse,  # NOVO
 )
 from app.modules.polos_escolas.service import PolosEscolasService
 
@@ -80,6 +81,34 @@ router = APIRouter(tags=["Polos & Escolas"])
 _PERFIS_GESTAO = ["admin", "secretario_geral", "coordenador_polo"]
 _PERFIS_ESCOLA = _PERFIS_GESTAO + ["secretario_escola"]
 _PERFIS_PROFESSOR = _PERFIS_ESCOLA + ["professor"]
+
+
+# =========================================================================
+# 0. Vinculação de Usuários (NOVO)
+# =========================================================================
+
+@router.get(
+    "/usuarios-vinculaveis",
+    response_model=UsuarioVinculavelListResponse,
+    dependencies=[Depends(require_role(["admin", "secretario_geral", "coordenador_polo"]))],
+)
+async def list_usuarios_vinculaveis(
+    perfil: str = Query(..., description="Perfil do usuário (coordenador_polo, secretario_escola)"),
+    q: Optional[str] = Query(None, description="Busca por nome, sobrenome, e-mail ou CPF"),
+    polo_id: Optional[str] = Query(None, description="Filtra por polo atualmente vinculado"),
+    escola_id: Optional[str] = Query(None, description="Filtra por escola atualmente vinculada"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    return service.list_usuarios_vinculaveis(
+        perfil_nome=perfil,
+        q=q,
+        polo_id=polo_id,
+        escola_id=escola_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 # =========================================================================

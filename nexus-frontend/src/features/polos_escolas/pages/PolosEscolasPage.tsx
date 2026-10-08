@@ -40,10 +40,10 @@ export const PolosEscolasPage: React.FC = () => {
     setLoading(true);
     try {
       const poloResponse = isAdmin
-        ? await polosEscolasApi.listPolos({ limit: 50, offset: 0, q: searchQuery })
+        ? await polosEscolasApi.listarPolos({ limit: 50, offset: 0, search: searchQuery })
         : user?.polo_id
-          ? { total: 1, items: [await polosEscolasApi.getPolo(user.polo_id)], limit: 1, offset: 0 }
-          : await polosEscolasApi.listPolos({ limit: 50, offset: 0, q: searchQuery });
+          ? { total: 1, items: [await polosEscolasApi.obterPolo(user.polo_id)], limit: 1, offset: 0 }
+          : await polosEscolasApi.listarPolos({ limit: 50, offset: 0, search: searchQuery });
       setPolos(poloResponse.items);
     } catch (error: any) {
       setFeedback(error.response?.data?.detail || 'Não foi possível carregar os polos.');
@@ -52,7 +52,7 @@ export const PolosEscolasPage: React.FC = () => {
 
   const loadEscolas = useCallback(async (poloId: string) => {
     try {
-      const schoolResponse = await polosEscolasApi.listEscolas(poloId, { limit: 50, offset: 0 });
+      const schoolResponse = await polosEscolasApi.listarEscolasDoPolo(poloId);
       setEscolas(schoolResponse.items);
     } catch (error: any) {
       setFeedback(error.response?.data?.detail || 'Não foi possível carregar as escolas.');
@@ -75,14 +75,14 @@ export const PolosEscolasPage: React.FC = () => {
       setKpis(null);
       return;
     }
-    polosEscolasApi.getResumoPolo(selectedPolo).then(setKpis).catch(() => setKpis(null));
+    polosEscolasApi.obterKpisPolo(selectedPolo).then(setKpis).catch(() => setKpis(null));
   }, [selectedPolo]);
 
   const savePolo = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
     try {
-      await polosEscolasApi.createPolo(poloForm);
+      await polosEscolasApi.criarPolo(poloForm);
       setFeedback('Polo e coordenador criados com sucesso.');
       setModal(null);
       await loadPolos(query);
@@ -95,7 +95,7 @@ export const PolosEscolasPage: React.FC = () => {
     event.preventDefault();
     setSaving(true);
     try {
-      await polosEscolasApi.createEscola(escolaForm);
+      await polosEscolasApi.criarEscola(escolaForm.polo_id, escolaForm);
       setFeedback('Escola e secretário criados com sucesso.');
       setModal(null);
       await loadPolos(query);
@@ -153,7 +153,7 @@ export const PolosEscolasPage: React.FC = () => {
               </div>
             </div>
             <p className="mt-5 border-t border-slate-800 pt-4 text-sm text-slate-300">Coordenador: <b className="text-white">{polo.responsavel_nome || 'Não informado'}</b></p>
-            <button onClick={(e) => {e.stopPropagation();setEditPolo(polo);}}className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"title="Editar Polo"> <Edit2 size={16} /></button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setEditPolo(polo); }} className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Polo"> <Edit2 size={16} /></button>
             <button onClick={() => { setSelectedPolo(polo.id); setTab('escolas'); loadEscolas(polo.id); }} className="mt-4 text-sm font-semibold text-blue-400 hover:text-blue-300">Ver escolas e métricas →</button>
           </article>)}
           {!polos.length && <p className="col-span-full py-12 text-center text-slate-500">Nenhum polo encontrado. Use a busca ou cadastre um novo.</p>}
@@ -176,7 +176,7 @@ export const PolosEscolasPage: React.FC = () => {
                 <td className="p-4">{escola.secretario_nome || 'Não informado'}</td>
                 <td className="p-4">{escola.endereco?.cidade || 'Cidade não informada'} / {escola.endereco?.estado || '--'}</td>
                 <td className="p-4 text-right"><span className={`rounded-full px-2 py-1 text-xs ${escola.status === 'ativo' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400'}`}>{escola.status}</span></td>
-                <td className="px-4 py-3 text-right"><button onClick={() => setEditEscola(escola)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Escola"><Edit2 size={16} /></button></td>
+                <td className="px-4 py-3 text-right"><button type="button" onClick={() => setEditEscola(escola)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Escola"><Edit2 size={16} /></button></td>
               </tr>)}
               {!escolas.length && <tr><td colSpan={4} className="p-12 text-center text-slate-500">Nenhuma escola encontrada para este polo.</td></tr>}
             </tbody>
@@ -202,8 +202,6 @@ export const PolosEscolasPage: React.FC = () => {
             const form = modal === 'polo' ? poloForm : escolaForm;
             return <input key={key} className={inputClass} required minLength={key === 'senha' ? 8 : undefined} type={key === 'senha' ? 'password' : 'text'} placeholder={key[0].toUpperCase() + key.slice(1)} value={form[field] || ''} onChange={(event) => modal === 'polo' ? setPoloForm({ ...poloForm, [field]: event.target.value }) : setEscolaForm({ ...escolaForm, [field]: event.target.value })} />
           })}
-          {editPolo && (<PoloEditModal polo={editPolo}onClose={() => setEditPolo(null)} onSuccess={() => {loadPolos(query); setEditPolo(null);}} />)}
-          {editEscola && (<EscolaEditModal escola={editEscola} polos={polos} onClose={() => setEditEscola(null)} onSuccess={() => { if (selectedPolo) loadEscolas(selectedPolo); setEditEscola(null); }} /> )}
         </div>
         <div className="flex justify-end gap-2 pt-4">
           <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800">Cancelar</button>
@@ -211,5 +209,7 @@ export const PolosEscolasPage: React.FC = () => {
         </div>
       </form>
     </div>}
+    {editPolo && <PoloEditModal polo={editPolo} onClose={() => setEditPolo(null)} onSuccess={() => { void loadPolos(query); setEditPolo(null); }} />}
+    {editEscola && <EscolaEditModal escola={editEscola} polos={polos} onClose={() => setEditEscola(null)} onSuccess={() => { if (selectedPolo) void loadEscolas(selectedPolo); setEditEscola(null); }} />}
   </div>;
 };

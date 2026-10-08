@@ -19,6 +19,17 @@ class PolosEscolasRepositoryInterface(Protocol):
     def create_usuario(self, data: Dict[str, Any]) -> str: ...
     def update_usuario(self, usuario_id: str, data: Dict[str, Any]) -> None: ...
 
+    # NOVO: lista usuários de um perfil específico para vincular a Polos/Escolas
+    def list_usuarios_por_perfil(
+        self,
+        perfil_nome: str,
+        q: Optional[str] = None,
+        polo_id: Optional[str] = None,
+        escola_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[int, List[Dict[str, Any]]]: ...
+
     # ---------- Polos ----------
     def create_polo(self, data: Dict[str, Any]) -> str: ...
     def update_polo(self, polo_id: str, data: Dict[str, Any]) -> None: ...
@@ -240,6 +251,53 @@ class PostgresPolosEscolasRepository:
                 f"UPDATE usuarios SET {', '.join(fields)}, atualizado_em = now() WHERE id = %s",
                 tuple(params),
             )
+
+    # NOVO: lista usuários de um perfil para vinculação
+    def list_usuarios_por_perfil(
+        self,
+        perfil_nome: str,
+        q: Optional[str] = None,
+        polo_id: Optional[str] = None,
+        escola_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[int, List[Dict[str, Any]]]:
+        conds = ["lower(p.nome) = lower(%s)"]
+        params: List[Any] = [perfil_nome]
+        if q:
+            conds.append("(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s)")
+            like = f"%{q.lower()}%"
+            params.extend([like, like])
+        if polo_id:
+            conds.append("u.polo_id = %s")
+            params.append(str(polo_id))
+        if escola_id:
+            conds.append("u.escola_id = %s")
+            params.append(str(escola_id))
+        where = "WHERE " + " AND ".join(conds)
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT COUNT(*) as total
+                FROM usuarios u
+                JOIN perfis p ON p.id = u.perfil_id
+                {where}
+                """,
+                tuple(params),
+            )
+            total = int(cur.fetchone()["total"])
+            cur.execute(
+                f"""
+                SELECT u.*, p.nome AS perfil_nome
+                FROM usuarios u
+                JOIN perfis p ON p.id = u.perfil_id
+                {where}
+                ORDER BY u.nome ASC
+                LIMIT %s OFFSET %s
+                """,
+                tuple(params + [limit, offset]),
+            )
+            return total, [dict(r) for r in cur.fetchall()]
 
     # ---------- Polos ----------
 
@@ -1167,7 +1225,7 @@ class InMemoryPolosEscolasRepository:
         }
         self.polos: Dict[str, Dict[str, Any]] = {}
         self.escolas: Dict[str, Dict[str, Any]] = {}
-        self.estoques: Dict[Tuple[str, str], Dict[str, Any]] = {}  # (polo_id or '', escola_id or '')
+        self.estoques: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self.compras: Dict[str, Dict[str, Any]] = {}
         self.movimentacoes: Dict[str, Dict[str, Any]] = {}
         self.boletos: Dict[str, Dict[str, Any]] = {}
@@ -1227,6 +1285,28 @@ class InMemoryPolosEscolasRepository:
         if u:
             u.update(data)
             u["atualizado_em"] = _now()
+
+    # NOVO: lista usuários de um perfil para vinculação
+    def list_usuarios_por_perfil(
+        self,
+        perfil_nome: str,
+        q: Optional[str] = None,
+        polo_id: Optional[str] = None,
+        escola_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[int, List[Dict[str, Any]]]:
+        perfil_id = self.perfis.get(perfil_nome.lower().strip())
+        items = [u for u in self.usuarios.values() if u.get("perfil_id") == perfil_id]
+        if q:
+            ql = q.lower()
+            items = [u for u in items if ql in (u.get("nome", "") + u.get("email", "")).lower()]
+        if polo_id:
+            items = [u for u in items if str(u.get("polo_id")) == str(polo_id)]
+        if escola_id:
+            items = [u for u in items if str(u.get("escola_id")) == str(escola_id)]
+        items.sort(key=lambda x: x.get("nome", ""))
+        return len(items), items[offset : offset + limit]
 
     # ---------- Polos ----------
 

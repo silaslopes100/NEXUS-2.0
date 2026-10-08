@@ -81,12 +81,11 @@ from app.modules.polos_escolas.schemas import (
     TreinamentoInscricaoResponse,
     TreinamentoResponse,
     TrocaPoloRequest,
+    UsuarioVinculavelListResponse,
+    UsuarioVinculavelResponse,
 )
 
-# RN-08: perfis autorizados a publicar no feed pedagógico
 _PERFIS_FEED_AUTORIZADOS = {"professor", "coordenador_polo", "secretario_escola", "admin", "diretor"}
-
-# RN-05: 1 ano sem movimentação = churn
 _DIAS_CHURN = 365
 
 
@@ -99,7 +98,7 @@ class PolosEscolasService:
         return self._repo or get_polos_escolas_repository()
 
     # ------------------------------------------------------------------
-    # Helpers de montagem
+    # Helpers
     # ------------------------------------------------------------------
 
     def _endereco_from(self, data: Dict[str, Any]) -> EnderecoSchema:
@@ -174,7 +173,6 @@ class PolosEscolasService:
     # ------------------------------------------------------------------
 
     def create_polo(self, dados: PoloCreateRequest, actor_id: Optional[str], ip: Optional[str]) -> PoloResponse:
-        # RN-01: cadastro do Polo cria o usuário coordenador na mesma transação
         self._validar_email_cpf_unicos(dados.coordenador_email, dados.coordenador_cpf)
 
         perfil_id = self.repo.get_perfil_id_by_nome("coordenador_polo")
@@ -194,7 +192,6 @@ class PolosEscolasService:
             }
         )
 
-        # RN-01: usuário coordenador criado automaticamente, sem endpoint separado
         coordenador_id = self.repo.create_usuario(
             {
                 "nome": dados.coordenador_nome,
@@ -232,11 +229,22 @@ class PolosEscolasService:
             update_dict.update(dados.endereco.model_dump())
         if dados.status is not None:
             update_dict["status"] = dados.status
+
+        # NOVO: trocar/vincular usuário coordenador
+        if dados.coordenador_usuario_id:
+            novo_coord = self.repo.get_usuario_by_id(dados.coordenador_usuario_id)
+            if not novo_coord:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail="Usuário coordenador informado não encontrado",
+                )
+            update_dict["coordenador_usuario_id"] = dados.coordenador_usuario_id
+
         if update_dict:
             self.repo.update_polo(polo_id, update_dict)
 
-        # RN-01: sincroniza dados do coordenador ao editar o Polo
-        coord_id = polo.get("coordenador_usuario_id")
+        # Sincroniza dados do coordenador (atual ou novo)
+        coord_id = update_dict.get("coordenador_usuario_id") or polo.get("coordenador_usuario_id")
         if coord_id:
             coord_update: Dict[str, Any] = {}
             if dados.coordenador_nome is not None:
@@ -248,6 +256,11 @@ class PolosEscolasService:
             if dados.coordenador_senha:
                 coord_update["senha_hash"] = hash_password(dados.coordenador_senha)
                 coord_update["senha_algoritmo"] = "argon2id"
+
+            # Se vinculou um novo usuário, garante que o polo_id dele fique apontando para este Polo
+            if dados.coordenador_usuario_id:
+                coord_update["polo_id"] = polo_id
+
             if coord_update:
                 self.repo.update_usuario(str(coord_id), coord_update)
 
@@ -267,7 +280,6 @@ class PolosEscolasService:
         if not polo:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Polo não encontrado")
         self.repo.update_polo(polo_id, {"status": "inativo"})
-        # RN-01: desativa o usuário coordenador vinculado
         coord_id = polo.get("coordenador_usuario_id")
         if coord_id:
             self.repo.update_usuario(str(coord_id), {"status": "inativo"})
@@ -303,7 +315,6 @@ class PolosEscolasService:
         if not self.repo.get_polo(polo_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Polo não encontrado")
 
-        # RN-01: cadastro da Escola cria o usuário secretário na mesma transação
         self._validar_email_cpf_unicos(dados.secretario_email, dados.secretario_cpf)
 
         perfil_id = self.repo.get_perfil_id_by_nome("secretario_escola")
@@ -362,10 +373,31 @@ class PolosEscolasService:
             update_dict.update(dados.endereco.model_dump())
         if dados.status is not None:
             update_dict["status"] = dados.status
+
+        # NOVO: mover escola para outro polo
+        if dados.polo_id is not None:
+            if not self.repo.get_polo(dados.polo_id):
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail="Polo informado não encontrado",
+                )
+            update_dict["polo_id"] = dados.polo_id
+
+        # NOVO: vincular/trocar usuário secretário
+        if dados.secretario_usuario_id:
+            novo_sec = self.repo.get_usuario_by_id(dados.secretario_usuario_id)
+            if not novo_sec:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail="Usuário secretário informado não encontrado",
+                )
+            update_dict["secretario_usuario_id"] = dados.secretario_usuario_id
+
         if update_dict:
             self.repo.update_escola(escola_id, update_dict)
 
-        sec_id = escola.get("secretario_usuario_id")
+        # Sincroniza dados do secretário (atual ou novo)
+        sec_id = update_dict.get("secretario_usuario_id") or escola.get("secretario_usuario_id")
         if sec_id:
             sec_update: Dict[str, Any] = {}
             if dados.secretario_nome is not None:
@@ -377,6 +409,12 @@ class PolosEscolasService:
             if dados.secretario_senha:
                 sec_update["senha_hash"] = hash_password(dados.secretario_senha)
                 sec_update["senha_algoritmo"] = "argon2id"
+
+            # Se vinculou um novo usuário, garante escola_id/polo_id apontando corretamente
+            if dados.secretario_usuario_id:
+                sec_update["escola_id"] = escola_id
+                sec_update["polo_id"] = update_dict.get("polo_id") or escola.get("polo_id")
+
             if sec_update:
                 self.repo.update_usuario(str(sec_id), sec_update)
 
@@ -407,7 +445,48 @@ class PolosEscolasService:
         )
 
     # ------------------------------------------------------------------
-    # 3. Dashboard do Polo (RN-03, RN-04)
+    # 3. Vincular Usuários (NOVO)
+    # ------------------------------------------------------------------
+
+    def list_usuarios_vinculaveis(
+        self,
+        perfil_nome: str,
+        q: Optional[str] = None,
+        polo_id: Optional[str] = None,
+        escola_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> UsuarioVinculavelListResponse:
+        total, items = self.repo.list_usuarios_por_perfil(
+            perfil_nome=perfil_nome,
+            q=q,
+            polo_id=polo_id,
+            escola_id=escola_id,
+            limit=limit,
+            offset=offset,
+        )
+        return UsuarioVinculavelListResponse(
+            total=total,
+            items=[
+                UsuarioVinculavelResponse(
+                    id=str(u["id"]),
+                    nome=u.get("nome", ""),
+                    sobrenome=u.get("sobrenome", ""),
+                    email=u.get("email"),
+                    cpf=u.get("cpf"),
+                    perfil_nome=u.get("perfil_nome"),
+                    polo_id=str(u["polo_id"]) if u.get("polo_id") else None,
+                    escola_id=str(u["escola_id"]) if u.get("escola_id") else None,
+                    status=u.get("status"),
+                )
+                for u in items
+            ],
+            limit=limit,
+            offset=offset,
+        )
+
+    # ------------------------------------------------------------------
+    # 4. Dashboard do Polo (RN-03, RN-04)
     # ------------------------------------------------------------------
 
     def dashboard_kpis_polo(self, polo_id: str) -> DashboardPoloKpisResponse:
@@ -436,7 +515,7 @@ class PolosEscolasService:
         return dash.gerar_relatorio_drilldown(self.repo, polo_id)
 
     # ------------------------------------------------------------------
-    # 4. Fluxo de Licenças (RN-02)
+    # 5. Fluxo de Licenças (RN-02)
     # ------------------------------------------------------------------
 
     def comprar_licencas(
@@ -528,7 +607,7 @@ class PolosEscolasService:
         )
 
     # ------------------------------------------------------------------
-    # 5. Dashboard da Escola
+    # 6. Dashboard da Escola
     # ------------------------------------------------------------------
 
     def dashboard_kpis_escola(self, escola_id: str) -> DashboardEscolaKpisResponse:
@@ -586,7 +665,7 @@ class PolosEscolasService:
         return AlertaListResponse(total=len(itens), items=itens)
 
     # ------------------------------------------------------------------
-    # 6. Financeiro
+    # 7. Financeiro
     # ------------------------------------------------------------------
 
     def list_compras(
@@ -615,7 +694,7 @@ class PolosEscolasService:
         return boleto
 
     # ------------------------------------------------------------------
-    # 7. Alunos do Polo
+    # 8. Alunos do Polo
     # ------------------------------------------------------------------
 
     def list_alunos_polo(
@@ -739,7 +818,6 @@ class PolosEscolasService:
     def solicitar_troca_polo(
         self, polo_id: str, aluno_id: str, dados: TrocaPoloRequest, actor_id: Optional[str], ip: Optional[str]
     ) -> RequisicaoResponse:
-        """RN-05: só permite troca sem nova matrícula se < 1 ano sem movimentação."""
         aluno = self.repo.get_aluno_usuario(aluno_id)
         if not aluno or str(aluno.get("polo_id")) != str(polo_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado neste Polo")
@@ -788,7 +866,6 @@ class PolosEscolasService:
         actor_id: Optional[str],
         ip: Optional[str],
     ) -> RequisicaoResponse:
-        """RN-06: Migração de Modalidade (Polo <-> EAD)."""
         aluno = self.repo.get_aluno_usuario(aluno_id)
         if not aluno or str(aluno.get("polo_id")) != str(polo_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado neste Polo")
@@ -830,7 +907,6 @@ class PolosEscolasService:
         )
 
     def list_alunos_desistentes(self, polo_id: str) -> AlunoDesistenteListResponse:
-        """RN-05: alunos > 1 ano sem movimentação são marcados como desistentes."""
         self.get_polo(polo_id)
         candidatos = self.repo.list_alunos_desistentes(polo_id, dias_limite=_DIAS_CHURN)
         itens = []
@@ -848,7 +924,7 @@ class PolosEscolasService:
         return AlunoDesistenteListResponse(total=len(itens), items=itens)
 
     # ------------------------------------------------------------------
-    # 8. Professores
+    # 9. Professores
     # ------------------------------------------------------------------
 
     def dashboard_professores(
@@ -915,11 +991,10 @@ class PolosEscolasService:
         return [AtaResponse(**{**i, "id": str(i["id"]), "aula_id": str(i["aula_id"]), "professor_id": str(i["professor_id"])}) for i in itens]
 
     def list_chamada(self, professor_id: str, materia_id: str) -> ChamadaResponse:
-        """RN-07: percentual = (presenças / total_aulas_previstas) * 100."""
         itens = self.repo.list_chamada(professor_id, materia_id)
         out = []
         for i in itens:
-            total_previsto = i.get("total_previsto") or i.get("total_previsto") or 0
+            total_previsto = i.get("total_previsto") or 0
             presencas = i.get("presencas", 0)
             pct = round((presencas / total_previsto) * 100, 2) if total_previsto else 0.0
             out.append(
@@ -997,7 +1072,7 @@ class PolosEscolasService:
         return self.get_professor_card(professor_id)
 
     # ------------------------------------------------------------------
-    # 9. Gestão Pedagógica (RN-08)
+    # 10. Gestão Pedagógica (RN-08)
     # ------------------------------------------------------------------
 
     def create_feed_post(
@@ -1075,7 +1150,7 @@ class PolosEscolasService:
         return [CalendarioEadResponse(**{**i, "id": str(i["id"])}) for i in items]
 
     # ------------------------------------------------------------------
-    # 10. Treinamentos
+    # 11. Treinamentos
     # ------------------------------------------------------------------
 
     def list_treinamentos(self, limit: int, offset: int) -> List[TreinamentoResponse]:
@@ -1095,7 +1170,7 @@ class PolosEscolasService:
         return [TreinamentoInscricaoResponse(**{**i, "id": str(i["id"])}) for i in items]
 
     # ------------------------------------------------------------------
-    # 11. Perfil
+    # 12. Perfil
     # ------------------------------------------------------------------
 
     def get_perfil(self, usuario_id: str) -> PerfilUsuarioResponse:
@@ -1152,7 +1227,6 @@ def _dias_desde(referencia: datetime) -> int:
 
 
 def uuid_token() -> str:
-    """Gera uma senha aleatória temporária para alunos cadastrados sem login direto."""
     import secrets
 
     return secrets.token_urlsafe(16)
