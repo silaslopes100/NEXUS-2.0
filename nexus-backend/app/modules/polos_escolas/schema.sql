@@ -4,9 +4,14 @@
 -- logs_auditoria, configuracoes, polos, escolas
 -- =====================================================================
 
--- RN-01: vínculo 1:1 entre Polo/Escola e o usuário coordenador/secretário
+-- RN-01: vínculo do coordenador com o Polo. O secretário da Escola é derivado de
+-- usuarios.escola_id (escolas não possui mais secretario_usuario_id).
 ALTER TABLE polos ADD COLUMN IF NOT EXISTS coordenador_usuario_id UUID REFERENCES usuarios(id);
-ALTER TABLE escolas ADD COLUMN IF NOT EXISTS secretario_usuario_id UUID REFERENCES usuarios(id);
+
+-- Turmas vinculadas a escolas e sequence de matrícula (NX-AAAA-NNNNNNN)
+ALTER TABLE turmas ADD COLUMN IF NOT EXISTS escola_id UUID REFERENCES escolas(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_turmas_escola_id ON turmas (escola_id);
+CREATE SEQUENCE IF NOT EXISTS seq_matricula_aluno START 1;
 
 -- Estoque de licenças por local (polo OU escola)
 CREATE TABLE IF NOT EXISTS licencas_estoque (

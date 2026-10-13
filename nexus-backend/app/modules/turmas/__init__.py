@@ -18,6 +18,7 @@ class TurmaSchema(BaseModel):
     id: Optional[str] = None
     curso_id: Optional[str] = None
     polo_id: Optional[str] = None
+    escola_id: Optional[str] = None
     nome: str
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
@@ -39,15 +40,18 @@ _turma_alunos_db: List[Dict[str, Any]] = []
 
 
 @router.get("", response_model=List[TurmaSchema])
-async def list_turmas(polo_id: Optional[str] = None, curso_id: Optional[str] = None):
+async def list_turmas(polo_id: Optional[str] = None, curso_id: Optional[str] = None, escola_id: Optional[str] = None):
     try:
         with get_db_cursor() as cur:
-            sql = "SELECT id, curso_id, polo_id, nome, data_inicio, data_fim, calendario_oficial_id FROM turmas"
+            sql = "SELECT id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim, calendario_oficial_id FROM turmas"
             conds = []
             params = []
             if polo_id:
                 conds.append("polo_id = %s")
                 params.append(polo_id)
+            if escola_id:
+                conds.append("escola_id = %s")
+                params.append(escola_id)
             if curso_id:
                 conds.append("curso_id = %s")
                 params.append(curso_id)
@@ -69,8 +73,8 @@ async def create_turma(dados: TurmaSchema):
     t_dict["id"] = new_id
     try:
         with get_db_cursor() as cur:
-            sql = "INSERT INTO turmas (id, curso_id, polo_id, nome, data_inicio, data_fim, calendario_oficial_id, criado_em, atualizado_em) VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())"
-            cur.execute(sql, (new_id, dados.curso_id, dados.polo_id, dados.nome, dados.data_inicio, dados.data_fim, dados.calendario_oficial_id))
+            sql = "INSERT INTO turmas (id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim, calendario_oficial_id, criado_em, atualizado_em) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())"
+            cur.execute(sql, (new_id, dados.curso_id, dados.polo_id, dados.escola_id, dados.nome, dados.data_inicio, dados.data_fim, dados.calendario_oficial_id))
     except Exception:
         _turmas_db[new_id] = t_dict
     return t_dict

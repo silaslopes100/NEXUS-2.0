@@ -297,7 +297,7 @@ async def test_rn02_fluxo_completo_de_licencas(client: AsyncClient, repos):
         json={
             "nome": "Joao",
             "sobrenome": "Aluno",
-            "cpf": "99988877766",
+            "cpf": "529.982.247-25",
             "email": "aluno@nexus.com.br",
             "data_nascimento": "2000-01-01",
             "escola_id": escola["id"],
@@ -307,6 +307,48 @@ async def test_rn02_fluxo_completo_de_licencas(client: AsyncClient, repos):
     )
     assert aluno_res.status_code == 201, aluno_res.text
     aluno_id = aluno_res.json()["id"]
+    assert aluno_res.json()["numero_matricula"].startswith(f"NX-{date.today().year}-")
+    assert aluno_res.json()["cpf"] == "52998224725"
+
+    # CPF duplicado (mesmo número, outra máscara) e CPF inválido
+    dup = await client.post(
+        f"/polos/{polo['id']}/alunos",
+        json={"nome": "X", "cpf": "52998224725", "email": "outro@nexus.com.br", "data_nascimento": "2000-01-01"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert dup.status_code == 400
+    invalido = await client.post(
+        f"/polos/{polo['id']}/alunos",
+        json={"nome": "X", "cpf": "11111111111", "email": "inv@nexus.com.br", "data_nascimento": "2000-01-01"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert invalido.status_code == 422
+
+    # Modalidade escola exige escola; EAD não admite escola
+    sem_escola = await client.post(
+        f"/polos/{polo['id']}/alunos",
+        json={"nome": "X", "cpf": "39053344705", "email": "se@nexus.com.br", "data_nascimento": "2000-01-01", "modalidade": "escola"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert sem_escola.status_code == 400
+    ead_escola = await client.post(
+        f"/polos/{polo['id']}/alunos",
+        json={"nome": "X", "cpf": "39053344705", "email": "ee@nexus.com.br", "data_nascimento": "2000-01-01", "modalidade": "ead", "escola_id": escola["id"]},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert ead_escola.status_code == 400
+
+    # Turmas da escola
+    turma = await client.post(
+        f"/escolas/{escola['id']}/turmas",
+        json={"nome": "Turma 2026-A"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert turma.status_code == 201, turma.text
+    turmas = (
+        await client.get(f"/escolas/{escola['id']}/turmas", headers={"Authorization": f"Bearer {admin_token}"})
+    ).json()
+    assert turmas["total"] == 1 and turmas["items"][0]["escola_id"] == escola["id"]
 
     venda = await client.post(
         f"/escolas/{escola['id']}/licencas/vender",

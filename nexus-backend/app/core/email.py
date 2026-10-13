@@ -63,3 +63,20 @@ def send_password_reset_email(to_email: str, nome: str, reset_token: str) -> boo
         "Equipe NEXUS 2.0"
     )
     return send_email(to_email, subject, body)
+
+
+def send_student_invite_email(to_email: str, nome: str, numero_matricula: str, token: str, validade_horas: int) -> bool:
+    """Convite de primeiro acesso: o aluno define a própria senha usando o token."""
+    nome_exibicao = nome.strip() if nome else "Aluno"
+    subject = "NEXUS 2.0 - Bem-vindo! Defina sua senha"
+    body = (
+        f"Olá, {nome_exibicao}!\n\n"
+        "Seu cadastro no NEXUS 2.0 foi realizado.\n"
+        f"Sua matrícula: {numero_matricula}\n\n"
+        "Para definir sua senha de acesso, utilize o código (token) abaixo na tela de redefinição de senha:\n\n"
+        f"Token: {token}\n\n"
+        f"Este token é válido por {validade_horas} horas.\n\n"
+        "Atenciosamente,\n"
+        "Equipe NEXUS 2.0"
+    )
+    return send_email(to_email, subject, body)

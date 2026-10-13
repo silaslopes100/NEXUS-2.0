@@ -123,6 +123,7 @@ class EscolaResponse(BaseModel):
     secretario_id: Optional[str] = None
     secretario_nome: Optional[str] = None
     secretario_email: Optional[str] = None
+    total_turmas: int = 0
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
 
@@ -130,6 +131,36 @@ class EscolaResponse(BaseModel):
 class EscolaListResponse(BaseModel):
     total: int
     items: List[EscolaResponse]
+    limit: int
+    offset: int
+
+
+class TurmaEscolaCreateRequest(BaseModel):
+    nome: str = Field(min_length=2)
+    curso_id: Optional[str] = None
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    calendario_oficial_id: Optional[str] = None
+
+
+class TurmaEscolaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    escola_id: str
+    polo_id: Optional[str] = None
+    curso_id: Optional[str] = None
+    nome: str
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    calendario_oficial_id: Optional[str] = None
+    total_alunos: int = 0
+    criado_em: Optional[datetime] = None
+
+
+class TurmaEscolaListResponse(BaseModel):
+    total: int
+    items: List[TurmaEscolaResponse]
     limit: int
     offset: int
 
@@ -432,6 +463,9 @@ class AlunoPoloResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    aluno_id: Optional[str] = None
+    numero_matricula: Optional[str] = None
+    data_nascimento: Optional[date] = None
     nome: str
     sobrenome: Optional[str] = ""
     email: Optional[str] = None
@@ -439,6 +473,7 @@ class AlunoPoloResponse(BaseModel):
     escola_id: Optional[str] = None
     modalidade: str = "polo"
     status: str = "ativo"
+    convite_enviado: Optional[bool] = None
     quantidade_presencas: int = 0
     percentual_presenca: float = 0.0
     criado_em: Optional[datetime] = None

@@ -144,6 +144,7 @@ DDL: List[str] = [
         "turmas",
         """    curso_id UUID REFERENCES cursos(id) ON DELETE SET NULL,
     polo_id UUID REFERENCES polos(id) ON DELETE SET NULL,
+    escola_id UUID REFERENCES escolas(id) ON DELETE SET NULL,
     nome VARCHAR(255) NOT NULL,
     data_inicio DATE,
     data_fim DATE,
@@ -464,4 +465,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email ON usuarios (email) WHERE em
     """
 CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_cpf ON usuarios (cpf) WHERE cpf IS NOT NULL;
 """,
+    "CREATE INDEX IF NOT EXISTS idx_usuarios_escola_id ON usuarios (escola_id);",
+    "CREATE INDEX IF NOT EXISTS idx_turmas_escola_id ON turmas (escola_id);",
+    "CREATE SEQUENCE IF NOT EXISTS seq_matricula_aluno START 1;",
 ]
