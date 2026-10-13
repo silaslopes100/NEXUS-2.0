@@ -728,7 +728,7 @@ class PolosEscolasService:
             out.append(
                 AlunoPoloResponse(
                     id=str(a["id"]),
-                    aluno_id=str(a["aluno_id"]) if a.get("aluno_id") else None,
+                    usuario_id=str(a["usuario_id"]) if a.get("usuario_id") else None,
                     numero_matricula=a.get("numero_matricula"),
                     data_nascimento=a.get("data_nascimento"),
                     nome=a.get("nome", ""),
@@ -766,7 +766,7 @@ class PolosEscolasService:
             usuario_id=actor_id,
             acao="aluno_atualizado",
             entidade="alunos",
-            entidade_id=str(aluno["id"]),
+            entidade_id=str(aluno["aluno_id"]),
             dados_antes=aluno,
             dados_depois=update_dict,
             ip=ip,
@@ -781,7 +781,7 @@ class PolosEscolasService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado neste Polo")
         nota_id = self.repo.registrar_nota(
             {
-                "aluno_id": str(aluno["id"]),
+                "aluno_id": str(aluno["aluno_id"]),
                 "materia_id": dados.materia_id,
                 "valor": dados.valor,
                 "descricao": dados.descricao,
@@ -844,11 +844,12 @@ class PolosEscolasService:
             }
         )
         criado = self.repo.get_aluno_usuario(aluno_id) or {}
+        usuario_id = str(criado["id"])
         matricula = criado.get("numero_matricula")
 
         raw_token = generate_secure_token(32)
         self.repo.create_password_reset(
-            aluno_id,
+            usuario_id,
             hash_token(raw_token),
             datetime.now(timezone.utc) + timedelta(hours=INVITE_TOKEN_EXPIRE_HOURS),
         )
@@ -866,7 +867,7 @@ class PolosEscolasService:
         )
         return AlunoPoloResponse(
             id=aluno_id,
-            aluno_id=str(criado["aluno_id"]) if criado.get("aluno_id") else None,
+            usuario_id=usuario_id,
             numero_matricula=matricula,
             data_nascimento=dados.data_nascimento,
             nome=dados.nome,
@@ -1030,6 +1031,10 @@ class PolosEscolasService:
         candidatos = self.repo.list_alunos_desistentes(polo_id, dias_limite=_DIAS_CHURN)
         itens = []
         for c in candidatos:
+            ref = c.get("atualizado_em") or c.get("criado_em")
+            dias = c.get("dias_sem_movimentacao")
+            if dias is None:
+                dias = (datetime.now(timezone.utc) - ref).days if ref else 0
             self.repo.marcar_aluno_desistente(str(c["id"]))
             itens.append(
                 AlunoDesistenteResponse(
@@ -1037,7 +1042,7 @@ class PolosEscolasService:
                     nome=f"{c.get('nome', '')} {c.get('sobrenome', '')}".strip(),
                     polo_id=polo_id,
                     ultima_movimentacao_em=c.get("atualizado_em") or c.get("criado_em"),
-                    dias_sem_movimentacao=c["dias_sem_movimentacao"],
+                    dias_sem_movimentacao=dias,
                 )
             )
         return AlunoDesistenteListResponse(total=len(itens), items=itens)

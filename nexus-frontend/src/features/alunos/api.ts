@@ -4,7 +4,7 @@ export type Modalidade = 'polo' | 'escola' | 'ead';
 
 export interface AlunoItem {
   id: string;
-  aluno_id?: string | null;
+  usuario_id?: string | null;
   numero_matricula?: string | null;
   data_nascimento?: string | null;
   nome: string;

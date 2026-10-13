@@ -463,7 +463,7 @@ class AlunoPoloResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    aluno_id: Optional[str] = None
+    usuario_id: Optional[str] = None
     numero_matricula: Optional[str] = None
     data_nascimento: Optional[date] = None
     nome: str

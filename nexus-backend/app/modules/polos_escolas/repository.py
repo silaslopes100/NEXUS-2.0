@@ -739,7 +739,8 @@ class PostgresPolosEscolasRepository:
                 """
                 SELECT la.id, la.aluno_id, u.nome, u.sobrenome, la.status, la.ativada_em
                 FROM licencas_alunos la
-                JOIN usuarios u ON u.id = la.aluno_id
+                JOIN alunos al ON al.id = la.aluno_id
+                JOIN usuarios u ON u.id = al.usuario_id
                 WHERE la.escola_id = %s
                 ORDER BY la.ativada_em DESC LIMIT %s OFFSET %s
                 """,
@@ -753,7 +754,8 @@ class PostgresPolosEscolasRepository:
                 """
                 SELECT la.aluno_id, u.nome, u.sobrenome, COUNT(*) as qtd_licencas
                 FROM licencas_alunos la
-                JOIN usuarios u ON u.id = la.aluno_id
+                JOIN alunos al ON al.id = la.aluno_id
+                JOIN usuarios u ON u.id = al.usuario_id
                 WHERE la.escola_id = %s
                 GROUP BY la.aluno_id, u.nome, u.sobrenome
                 ORDER BY qtd_licencas DESC LIMIT %s
@@ -781,17 +783,17 @@ class PostgresPolosEscolasRepository:
     # ---------- Alunos ----------
 
     def get_aluno_usuario(self, aluno_id: str) -> Optional[Dict[str, Any]]:
-        """Resolve por alunos.id ou usuarios.id; retorna a linha de usuarios + dados de alunos."""
+        """Resolve por alunos.id (id canônico); retorna a linha de usuarios (id = usuarios.id) + dados de alunos."""
         with get_db_cursor() as cur:
             cur.execute(
                 """
                 SELECT u.*, a.id AS aluno_id, a.numero_matricula, a.data_nascimento,
                        a.modalidade, a.status AS aluno_status
                 FROM alunos a JOIN usuarios u ON u.id = a.usuario_id
-                WHERE a.id::text = %s OR u.id::text = %s
+                WHERE a.id::text = %s
                 LIMIT 1
                 """,
-                (str(aluno_id), str(aluno_id)),
+                (str(aluno_id),),
             )
             row = cur.fetchone()
             return dict(row) if row else None
@@ -830,8 +832,8 @@ class PostgresPolosEscolasRepository:
             total = int(cur.fetchone()["total"])
             cur.execute(
                 f"""
-                SELECT u.id, u.nome, u.sobrenome, u.email, u.cpf, u.criado_em,
-                       a.id AS aluno_id, a.polo_id, a.escola_id, a.modalidade, a.status,
+                SELECT a.id, u.id AS usuario_id, u.nome, u.sobrenome, u.email, u.cpf, u.criado_em,
+                       a.polo_id, a.escola_id, a.modalidade, a.status,
                        a.numero_matricula, a.data_nascimento,
                        COALESCE(pr.presentes, 0) AS presentes, COALESCE(pr.total_aulas, 0) AS total_aulas
                 FROM alunos a
@@ -848,8 +850,9 @@ class PostgresPolosEscolasRepository:
             return total, [dict(r) for r in cur.fetchall()]
 
     def create_aluno(self, data: Dict[str, Any]) -> str:
-        """Cria usuarios + alunos na mesma transação, gerando a matrícula NX-AAAA-NNNNNNN."""
+        """Cria usuarios + alunos na mesma transação (matrícula NX-AAAA-NNNNNNN); retorna alunos.id."""
         usuario_id = str(uuid.uuid4())
+        aluno_id = str(uuid.uuid4())
         with get_db_cursor() as cur:
             cur.execute(
                 """
@@ -877,12 +880,13 @@ class PostgresPolosEscolasRepository:
                     id, usuario_id, polo_id, escola_id, modalidade, numero_matricula,
                     data_nascimento, status, ultima_movimentacao_em, criado_em, atualizado_em
                 ) VALUES (
-                    gen_random_uuid(), %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
                     'NX-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('seq_matricula_aluno')::text, 7, '0'),
                     %s, 'ativo', now(), now(), now()
                 )
                 """,
                 (
+                    aluno_id,
                     usuario_id,
                     data.get("polo_id"),
                     data.get("escola_id"),
@@ -890,7 +894,7 @@ class PostgresPolosEscolasRepository:
                     data.get("data_nascimento"),
                 ),
             )
-        return usuario_id
+        return aluno_id
 
     def create_turma_escola(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
@@ -958,7 +962,7 @@ class PostgresPolosEscolasRepository:
                 """
                 INSERT INTO notas (id, aluno_id, disciplina_id, turma_id, origem, valor, lancado_por, lancado_em, criado_em, atualizado_em)
                 SELECT %s, a.id, %s, %s, 'polo', %s, %s, now(), now(), now()
-                FROM alunos a WHERE a.id::text = %s OR a.usuario_id::text = %s
+                FROM alunos a WHERE a.id::text = %s
                 """,
                 (
                     new_id,
@@ -966,7 +970,6 @@ class PostgresPolosEscolasRepository:
                     data.get("turma_id"),
                     data["valor"],
                     data.get("lancado_por"),
-                    str(data["aluno_id"]),
                     str(data["aluno_id"]),
                 ),
             )
@@ -980,9 +983,9 @@ class PostgresPolosEscolasRepository:
                 """
                 SELECT COUNT(*) FILTER (WHERE p.presente) AS presentes, COUNT(*) AS total
                 FROM presencas p JOIN alunos a ON a.id = p.aluno_id
-                WHERE a.id::text = %s OR a.usuario_id::text = %s
+                WHERE a.id::text = %s
                 """,
-                (str(aluno_id), str(aluno_id)),
+                (str(aluno_id),),
             )
             row = cur.fetchone()
             return int(row["presentes"] or 0), int(row["total"] or 0)
@@ -1039,10 +1042,11 @@ class PostgresPolosEscolasRepository:
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                SELECT id, nome, sobrenome, polo_id, ultimo_login_em, atualizado_em
-                FROM usuarios
-                WHERE polo_id = %s AND status = 'ativo'
-                  AND COALESCE(atualizado_em, criado_em) < now() - (%s || ' days')::interval
+                SELECT a.id, u.nome, u.sobrenome, a.polo_id, u.ultimo_login_em,
+                       COALESCE(a.ultima_movimentacao_em, a.atualizado_em) AS atualizado_em
+                FROM alunos a JOIN usuarios u ON u.id = a.usuario_id
+                WHERE a.polo_id = %s AND a.status = 'ativo'
+                  AND COALESCE(a.ultima_movimentacao_em, a.atualizado_em, a.criado_em) < now() - (%s || ' days')::interval
                 """,
                 (str(polo_id), str(dias_limite)),
             )
@@ -1051,7 +1055,7 @@ class PostgresPolosEscolasRepository:
     def marcar_aluno_desistente(self, aluno_id: str) -> None:
         with get_db_cursor() as cur:
             cur.execute(
-                "UPDATE usuarios SET status = 'desistente', atualizado_em = now() WHERE id = %s",
+                "UPDATE alunos SET status = 'desistente', atualizado_em = now() WHERE id = %s",
                 (str(aluno_id),),
             )
 
@@ -1360,6 +1364,7 @@ class InMemoryPolosEscolasRepository:
 
     def __init__(self) -> None:
         self.usuarios: Dict[str, Dict[str, Any]] = {}
+        self.alunos: Dict[str, Dict[str, Any]] = {}
         self.perfis: Dict[str, str] = {
             "admin": "perfil-admin",
             "secretario_geral": "perfil-secgeral",
@@ -1725,7 +1730,20 @@ class InMemoryPolosEscolasRepository:
     # ---------- Alunos ----------
 
     def get_aluno_usuario(self, aluno_id: str) -> Optional[Dict[str, Any]]:
-        return self.get_usuario_by_id(aluno_id)
+        a = self.alunos.get(str(aluno_id))
+        u = self.usuarios.get(str(a["usuario_id"])) if a else None
+        if not a or not u:
+            return None
+        return {
+            **u,
+            "aluno_id": a["id"],
+            "numero_matricula": a["numero_matricula"],
+            "data_nascimento": a.get("data_nascimento"),
+            "modalidade": a["modalidade"],
+            "aluno_status": a["status"],
+            "polo_id": a.get("polo_id"),
+            "escola_id": a.get("escola_id"),
+        }
 
     def list_alunos_polo(
         self,
@@ -1736,26 +1754,46 @@ class InMemoryPolosEscolasRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        items = [
-            u for u in self.usuarios.values()
-            if str(u.get("polo_id")) == str(polo_id) and (u.get("perfil_id") == self.perfis.get("aluno"))
-        ]
+        items = [a for a in self.alunos.values() if str(a.get("polo_id")) == str(polo_id)]
         if q:
             ql = q.lower()
-            items = [u for u in items if ql in (u.get("nome", "") + u.get("email", "")).lower()]
+            items = [
+                a for a in items
+                if ql in (
+                    self.usuarios[a["usuario_id"]].get("nome", "")
+                    + (self.usuarios[a["usuario_id"]].get("email") or "")
+                    + a["numero_matricula"]
+                ).lower()
+            ]
         if escola_id:
-            items = [u for u in items if str(u.get("escola_id")) == str(escola_id)]
+            items = [a for a in items if str(a.get("escola_id")) == str(escola_id)]
         if status_filter:
-            items = [u for u in items if u.get("status") == status_filter]
-        items.sort(key=lambda x: x.get("nome", ""))
-        return len(items), items[offset : offset + limit]
+            items = [a for a in items if a.get("status") == status_filter]
+        rows = []
+        for a in items:
+            u = self.usuarios[a["usuario_id"]]
+            rows.append({**u, **a, "usuario_id": u["id"], "id": a["id"]})
+        rows.sort(key=lambda x: x.get("nome", ""))
+        return len(rows), rows[offset : offset + limit]
 
     def create_aluno(self, data: Dict[str, Any]) -> str:
         self._seq_matricula = getattr(self, "_seq_matricula", 0) + 1
         matricula = f"NX-{_now().year}-{self._seq_matricula:07d}"
-        usuario_id = self.create_usuario({**data, "numero_matricula": matricula})
-        self.usuarios[usuario_id]["aluno_id"] = usuario_id
-        return usuario_id
+        usuario_id = self.create_usuario(
+            {k: v for k, v in data.items() if k not in ("modalidade", "data_nascimento")}
+        )
+        aluno_id = str(uuid.uuid4())
+        self.alunos[aluno_id] = {
+            "id": aluno_id,
+            "usuario_id": usuario_id,
+            "polo_id": data.get("polo_id"),
+            "escola_id": data.get("escola_id"),
+            "modalidade": data.get("modalidade", "polo"),
+            "data_nascimento": data.get("data_nascimento"),
+            "numero_matricula": matricula,
+            "status": "ativo",
+        }
+        return aluno_id
 
     def create_turma_escola(self, data: Dict[str, Any]) -> str:
         if not hasattr(self, "turmas"):
@@ -1770,7 +1808,10 @@ class InMemoryPolosEscolasRepository:
         return len(items), [{**t, "total_alunos": 0} for t in items[offset : offset + limit]]
 
     def update_aluno(self, usuario_id: str, data: Dict[str, Any]) -> None:
-        self.update_usuario(usuario_id, data)
+        self.update_usuario(usuario_id, {k: v for k, v in data.items() if k in ("nome", "sobrenome", "email", "escola_id")})
+        for a in self.alunos.values():
+            if str(a["usuario_id"]) == str(usuario_id):
+                a.update({k: v for k, v in data.items() if k in ("modalidade", "status", "escola_id", "data_nascimento")})
 
     def create_password_reset(self, usuario_id: str, token_hash: str, expira_em: Any) -> None:
         if not hasattr(self, "password_reset"):
@@ -1811,20 +1852,21 @@ class InMemoryPolosEscolasRepository:
     def list_alunos_desistentes(self, polo_id: str, dias_limite: int = 365) -> List[Dict[str, Any]]:
         cutoff = _now()
         result = []
-        for u in self.usuarios.values():
-            if str(u.get("polo_id")) != str(polo_id) or u.get("status") != "ativo":
+        for a in self.alunos.values():
+            if str(a.get("polo_id")) != str(polo_id) or a.get("status") != "ativo":
                 continue
-            referencia = u.get("atualizado_em") or u.get("criado_em") or cutoff
+            u = self.usuarios[a["usuario_id"]]
+            referencia = a.get("atualizado_em") or u.get("criado_em") or cutoff
             dias = (cutoff - referencia).days
             if dias >= dias_limite:
-                result.append({**u, "dias_sem_movimentacao": dias})
+                result.append({**u, "id": a["id"], "atualizado_em": referencia, "dias_sem_movimentacao": dias})
         return result
 
     def marcar_aluno_desistente(self, aluno_id: str) -> None:
-        u = self.usuarios.get(str(aluno_id))
-        if u:
-            u["status"] = "desistente"
-            u["atualizado_em"] = _now()
+        a = self.alunos.get(str(aluno_id))
+        if a:
+            a["status"] = "desistente"
+            a["atualizado_em"] = _now()
 
     # ---------- Professores ----------
 

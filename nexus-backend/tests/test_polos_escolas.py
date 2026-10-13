@@ -308,6 +308,7 @@ async def test_rn02_fluxo_completo_de_licencas(client: AsyncClient, repos):
     assert aluno_res.status_code == 201, aluno_res.text
     aluno_id = aluno_res.json()["id"]
     assert aluno_res.json()["numero_matricula"].startswith(f"NX-{date.today().year}-")
+    assert aluno_res.json()["usuario_id"] and aluno_res.json()["usuario_id"] != aluno_id
     assert aluno_res.json()["cpf"] == "52998224725"
 
     # CPF duplicado (mesmo número, outra máscara) e CPF inválido
