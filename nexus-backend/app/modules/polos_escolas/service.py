@@ -107,7 +107,7 @@ class PolosEscolasService:
             numero=data.get("numero", "") or "",
             bairro=data.get("bairro", "") or "",
             cidade=data.get("cidade", "") or "",
-            estado=data.get("estado", "") or "",
+            estado=data.get("estado") or data.get("uf") or "",
             cep=data.get("cep", "") or "",
         )
 
@@ -294,8 +294,10 @@ class PolosEscolasService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Polo não encontrado")
         return self._build_polo_response(polo)
 
-    def list_polos(self, limit: int = 50, offset: int = 0) -> PoloListResponse:
-        total, items = self.repo.list_polos(limit=limit, offset=offset)
+    def list_polos(
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+    ) -> PoloListResponse:
+        total, items = self.repo.list_polos(limit=limit, offset=offset, search=search)
         usuario_ids = [str(p.get("coordenador_usuario_id")) for p in items if p.get("coordenador_usuario_id")]
         usuarios_por_id = self._load_usuarios_by_ids(usuario_ids)
         return PoloListResponse(

@@ -34,7 +34,9 @@ class PolosEscolasRepositoryInterface(Protocol):
     def create_polo(self, data: Dict[str, Any]) -> str: ...
     def update_polo(self, polo_id: str, data: Dict[str, Any]) -> None: ...
     def get_polo(self, polo_id: str) -> Optional[Dict[str, Any]]: ...
-    def list_polos(self, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]: ...
+    def list_polos(
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+    ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
     # ---------- Escolas ----------
     def create_escola(self, data: Dict[str, Any]) -> str: ...
@@ -171,6 +173,11 @@ class PolosEscolasRepositoryInterface(Protocol):
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _colunas_endereco(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Converte as chaves de endereço da API (estado) para as colunas reais (uf)."""
+    return {"uf" if chave == "estado" else chave: valor for chave, valor in data.items()}
 
 
 class PostgresPolosEscolasRepository:
@@ -327,6 +334,7 @@ class PostgresPolosEscolasRepository:
         return new_id
 
     def update_polo(self, polo_id: str, data: Dict[str, Any]) -> None:
+        data = _colunas_endereco(data)
         if not data:
             return
         fields = [f"{k} = %s" for k in data]
@@ -344,12 +352,21 @@ class PostgresPolosEscolasRepository:
             row = cur.fetchone()
             return dict(row) if row else None
 
-    def list_polos(self, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]:
+    def list_polos(
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+    ) -> Tuple[int, List[Dict[str, Any]]]:
+        conds: List[str] = []
+        params: List[Any] = []
+        if search and search.strip():
+            conds.append("lower(nome) LIKE %s")
+            params.append(f"%{search.strip().lower()}%")
+        where = f"WHERE {' AND '.join(conds)}" if conds else ""
         with get_db_cursor() as cur:
-            cur.execute("SELECT COUNT(*) as total FROM polos")
+            cur.execute(f"SELECT COUNT(*) as total FROM polos {where}", tuple(params))
             total = int(cur.fetchone()["total"])
             cur.execute(
-                "SELECT * FROM polos ORDER BY nome ASC LIMIT %s OFFSET %s", (limit, offset)
+                f"SELECT * FROM polos {where} ORDER BY nome ASC LIMIT %s OFFSET %s",
+                (*params, limit, offset),
             )
             return total, [dict(r) for r in cur.fetchall()]
 
@@ -382,6 +399,7 @@ class PostgresPolosEscolasRepository:
         return new_id
 
     def update_escola(self, escola_id: str, data: Dict[str, Any]) -> None:
+        data = _colunas_endereco(data)
         if not data:
             return
         fields = [f"{k} = %s" for k in data]
@@ -1325,8 +1343,13 @@ class InMemoryPolosEscolasRepository:
         p = self.polos.get(str(polo_id))
         return p.copy() if p else None
 
-    def list_polos(self, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]:
+    def list_polos(
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+    ) -> Tuple[int, List[Dict[str, Any]]]:
         items = sorted(self.polos.values(), key=lambda x: x["nome"])
+        if search and search.strip():
+            termo = search.strip().lower()
+            items = [p for p in items if termo in str(p.get("nome") or "").lower()]
         return len(items), items[offset : offset + limit]
 
     # ---------- Escolas ----------

@@ -1,6 +1,6 @@
 import { PoloEditModal } from '@/features/polos_escolas/components/PoloEditModal';
 import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Building2, CheckCircle2, Edit2, Loader2, MapPin, Plus, RefreshCw, Search, School, X } from 'lucide-react';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import { DashboardPoloKpis, EscolaCreatePayload, EscolaItem, PoloCreatePayload, PoloItem } from '@/types/polos';
@@ -27,6 +27,9 @@ export const PolosEscolasPage: React.FC = () => {
   const [selectedPolo, setSelectedPolo] = useState('');
   const [kpis, setKpis] = useState<DashboardPoloKpis | null>(null);
   const [query, setQuery] = useState('');
+  // Indica se o usuário já acionou a busca (nenhum dado é carregado antes disso)
+  const [searchTriggered, setSearchTriggered] = useState(false);
+  const searchTriggeredRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -37,6 +40,8 @@ export const PolosEscolasPage: React.FC = () => {
   const [escolaForm, setEscolaForm] = useState<EscolaCreatePayload>({ polo_id: user?.polo_id || '', nome: '', endereco: emptyAddress, secretario_nome: '', secretario_cpf: '', secretario_email: '', secretario_senha: '' });
 
   const loadPolos = useCallback(async (searchQuery = '') => {
+    // Só consulta a API após o usuário acionar a busca
+    if (!searchTriggeredRef.current) return;
     setLoading(true);
     try {
       const poloResponse = isAdmin
@@ -61,14 +66,11 @@ export const PolosEscolasPage: React.FC = () => {
 
   const debouncedLoadPolos = useMemo(() => debounce(loadPolos, 300), [loadPolos]);
 
-  const handleSearch = useCallback((value: string) => {
-    setQuery(value);
-    debouncedLoadPolos(value);
-  }, [debouncedLoadPolos]);
-    useEffect(() => {
-    void loadPolos(query);
-  }, [loadPolos, query]);
-
+  const handleSearch = useCallback(() => {
+    searchTriggeredRef.current = true;
+    setSearchTriggered(true);
+    debouncedLoadPolos(query);
+  }, [debouncedLoadPolos, query]);
 
   useEffect(() => {
     if (!selectedPolo) {
@@ -134,8 +136,17 @@ export const PolosEscolasPage: React.FC = () => {
       <div className="flex gap-2">
         <div className="relative">
           <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
-          <input className={`${inputClass} pl-9`} placeholder="Buscar polo por nome" value={query} onChange={(event) => handleSearch(event.target.value)} />
+          <input
+            className={`${inputClass} pl-9`}
+            placeholder="Buscar polo por nome"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') handleSearch();
+            }}
+          />
         </div>
+        <button onClick={handleSearch} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-500">Buscar</button>
         <button title="Recarregar" onClick={() => loadPolos(query)} className="rounded-xl border border-slate-800 bg-slate-900 px-3 text-slate-300 hover:text-white"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /></button>
       </div>
     </div>
@@ -156,7 +167,7 @@ export const PolosEscolasPage: React.FC = () => {
             <button type="button" onClick={(e) => { e.stopPropagation(); setEditPolo(polo); }} className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Polo"> <Edit2 size={16} /></button>
             <button onClick={() => { setSelectedPolo(polo.id); setTab('escolas'); loadEscolas(polo.id); }} className="mt-4 text-sm font-semibold text-blue-400 hover:text-blue-300">Ver escolas e métricas →</button>
           </article>)}
-          {!polos.length && <p className="col-span-full py-12 text-center text-slate-500">Nenhum polo encontrado. Use a busca ou cadastre um novo.</p>}
+          {!polos.length && <p className="col-span-full py-12 text-center text-slate-500">{searchTriggered ? 'Nenhum polo encontrado. Use a busca ou cadastre um novo.' : 'Preencha a busca e clique em "Buscar" para carregar os polos.'}</p>}
         </div>
       ) : (
         <div className="overflow-x-auto">

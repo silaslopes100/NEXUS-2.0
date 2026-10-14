@@ -129,9 +129,10 @@ async def create_polo(
 async def list_polos(
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
+    search: Optional[str] = Query(None, description="Termo de busca por nome do polo"),
     service: PolosEscolasService = Depends(get_polos_escolas_service),
 ):
-    return service.list_polos(limit=limit, offset=offset)
+    return service.list_polos(limit=limit, offset=offset, search=search)
 
 
 @router.get("/polos/{polo_id}", response_model=PoloResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])

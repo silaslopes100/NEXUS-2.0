@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   Users,
   UserPlus,
@@ -36,7 +36,11 @@ export const UsuariosInternosPage: React.FC = () => {
 
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Indica se o usuário já acionou a busca (nenhum dado é carregado antes disso)
+  const [searchTriggered, setSearchTriggered] = useState(false);
+  const searchTriggeredRef = useRef(false);
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,6 +72,8 @@ export const UsuariosInternosPage: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const loadData = useCallback(async () => {
+    // Só consulta a API após o usuário acionar a busca
+    if (!searchTriggeredRef.current) return;
     setIsLoading(true);
     try {
       const [usersRes] = await Promise.all([
@@ -91,9 +97,11 @@ export const UsuariosInternosPage: React.FC = () => {
     }
   }, [searchTerm, selectedPerfil, selectedStatus]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const handleSearch = () => {
+    searchTriggeredRef.current = true;
+    setSearchTriggered(true);
+    void loadData();
+  };
 
   const handleOpenCreate = () => {
     setEditingUser(null);
@@ -323,6 +331,9 @@ export const UsuariosInternosPage: React.FC = () => {
             placeholder="Buscar por nome, email ou CPF..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSearch();
+            }}
             className="w-full pl-10 pr-4 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-nexus-yellow transition-colors"
           />
         </div>
@@ -357,6 +368,15 @@ export const UsuariosInternosPage: React.FC = () => {
           </select>
 
           <button
+            onClick={handleSearch}
+            className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0"
+            title="Buscar"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span>Buscar</span>
+          </button>
+
+          <button
             onClick={loadData}
             className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors"
             title="Recarregar"
@@ -386,6 +406,12 @@ export const UsuariosInternosPage: React.FC = () => {
                   <td colSpan={6} className="py-12 text-center text-slate-500">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-nexus-yellow" />
                     Carregando usuários do NEXUS 2.0...
+                  </td>
+                </tr>
+              ) : !searchTriggered ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
+                    Preencha a busca ou selecione um filtro e clique em <strong className="text-nexus-yellow">Buscar</strong> para carregar os usuários.
                   </td>
                 </tr>
               ) : usuarios.length === 0 ? (
