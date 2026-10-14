@@ -11,12 +11,12 @@ from app.core.database import get_db_cursor
 # O secretário da escola é derivado de usuarios.escola_id (único vínculo escola<->usuário).
 SECRETARIO_PERFIS = ("secretario_escola", "escola")
 _SECRETARIO_COLS = (
-    "sec.id AS secretario_usuario_id, sec.nome AS secretario_nome, sec.email AS secretario_email, "
+    "sec.id AS secretario_usuario_id, sec.nome AS secretario_nome, sec.email AS secretario_email, sec.cpf AS secretario_cpf, "
     "(SELECT COUNT(*) FROM turmas t WHERE t.escola_id = e.id) AS total_turmas"
 )
 _SECRETARIO_JOIN = """
     LEFT JOIN LATERAL (
-        SELECT u.id, u.nome, u.email
+        SELECT u.id, u.nome, u.email, u.cpf
         FROM usuarios u JOIN perfis p ON p.id = u.perfil_id
         WHERE u.escola_id = e.id AND lower(p.nome) IN ('secretario_escola', 'escola')
         ORDER BY u.criado_em ASC
@@ -74,6 +74,11 @@ class PolosEscolasRepositoryInterface(Protocol):
         delta_vendida: int = 0,
     ) -> None: ...
     def list_estoques_escolas_do_polo(self, polo_id: str) -> List[Dict[str, Any]]: ...
+
+    # NOVO: contagens operacionais agregadas (tela de detalhe Polo/Escola)
+    def contagens_operacionais(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, int]: ...
 
     # ---------- Movimentações / compras / boletos ----------
     def registrar_compra(self, data: Dict[str, Any]) -> str: ...
@@ -334,19 +339,24 @@ class PostgresPolosEscolasRepository:
             cur.execute(
                 """
                 INSERT INTO polos (
-                    id, nome, logradouro, numero, bairro, cidade, uf, cep,
+                    id, nome, logradouro, numero, complemento, bairro, cidade, uf, cep,
+                    responsavel_nome, responsavel_cpf, responsavel_email,
                     coordenador_usuario_id, status, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
                     data["nome"],
                     data.get("logradouro", ""),
                     data.get("numero", ""),
+                    data.get("complemento", ""),
                     data.get("bairro", ""),
                     data.get("cidade", ""),
                     data.get("estado", ""),
                     data.get("cep", ""),
+                    data.get("responsavel_nome"),
+                    data.get("responsavel_cpf"),
+                    data.get("responsavel_email"),
                     data.get("coordenador_usuario_id"),
                     data.get("status", "ativo"),
                 ),
@@ -398,9 +408,10 @@ class PostgresPolosEscolasRepository:
             cur.execute(
                 """
                 INSERT INTO escolas (
-                    id, polo_id, nome, logradouro, numero, bairro, cidade, uf, cep,
+                    id, polo_id, nome, logradouro, numero, complemento, bairro, cidade, uf, cep,
+                    responsavel_nome, responsavel_cpf, responsavel_email,
                     status, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
@@ -408,10 +419,14 @@ class PostgresPolosEscolasRepository:
                     data["nome"],
                     data.get("logradouro", ""),
                     data.get("numero", ""),
+                    data.get("complemento", ""),
                     data.get("bairro", ""),
                     data.get("cidade", ""),
                     data.get("estado", ""),
                     data.get("cep", ""),
+                    data.get("responsavel_nome"),
+                    data.get("responsavel_cpf"),
+                    data.get("responsavel_email"),
                     data.get("status", "ativo"),
                 ),
             )
@@ -536,6 +551,66 @@ class PostgresPolosEscolasRepository:
                 (str(polo_id),),
             )
             return [dict(r) for r in cur.fetchall()]
+
+    # NOVO: contagens operacionais agregadas (tela de detalhe Polo/Escola)
+    def contagens_operacionais(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, int]:
+        if not polo_id and not escola_id:
+            raise ValueError("polo_id ou escola_id é obrigatório")
+        escopo = "polo_id" if polo_id else "escola_id"
+        valor = str(polo_id or escola_id)
+        with get_db_cursor() as cur:
+            if polo_id:
+                cur.execute(
+                    """
+                    SELECT
+                        (SELECT COUNT(*) FROM escolas e WHERE e.polo_id = %s) AS escolas,
+                        (SELECT COUNT(*) FROM turmas t WHERE t.polo_id = %s) AS turmas,
+                        (SELECT COUNT(*) FROM professores p WHERE p.polo_id = %s) AS professores,
+                        (SELECT COUNT(*) FROM alunos a WHERE a.polo_id = %s AND a.status = 'ativo') AS alunos,
+                        (SELECT COUNT(*) FROM aulas au WHERE au.polo_id = %s) AS aulas,
+                        (SELECT COALESCE(SUM(le.quantidade_disponivel), 0) FROM licencas_estoque le
+                         WHERE le.polo_id = %s AND le.escola_id IS NULL) AS licencas_estoque,
+                        (SELECT COUNT(*) FROM licencas_alunos la WHERE la.polo_id = %s AND la.status = 'ativa') AS licencas_atribuidas,
+                        (SELECT COUNT(*) FROM licencas_movimentacoes lm WHERE lm.polo_id = %s) AS licencas_movimentacoes
+                    """,
+                    (valor,) * 8,
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        (SELECT COUNT(*) FROM alunos a WHERE a.escola_id = %s AND a.status = 'ativo') AS alunos,
+                        (SELECT COUNT(*) FROM aulas au WHERE au.escola_id = %s) AS aulas,
+                        (SELECT COALESCE(SUM(le.quantidade_disponivel), 0) FROM licencas_estoque le
+                         WHERE le.escola_id = %s) AS licencas_estoque,
+                        (SELECT COUNT(*) FROM licencas_alunos la WHERE la.escola_id = %s) AS licencas_alunos,
+                        (SELECT COUNT(*) FROM licencas_alunos la WHERE la.escola_id = %s AND la.status = 'ativa') AS licencas_atribuidas,
+                        (SELECT COUNT(*) FROM licencas_movimentacoes lm WHERE lm.escola_id = %s) AS licencas_movimentacoes,
+                        (SELECT COUNT(*) FROM professores p WHERE p.escola_id = %s) AS professores,
+                        (SELECT COUNT(*) FROM turmas t WHERE t.escola_id = %s) AS turmas
+                    """,
+                    (valor,) * 8,
+                )
+            row = cur.fetchone()
+            result = {key: int(row[key] or 0) for key in row.keys()} if row else {}
+
+            # pedidos_* vêm do schema legado; a tabela pode não existir em bancos novos
+            cur.execute(
+                "SELECT to_regclass('pedidos_licenca') IS NOT NULL AS lic, "
+                "to_regclass('pedidos_livros') IS NOT NULL AS liv"
+            )
+            guard = cur.fetchone()
+            result["pedidos_licencas"] = 0
+            result["pedidos_livros"] = 0
+            if guard["lic"]:
+                cur.execute(f"SELECT COUNT(*) AS total FROM pedidos_licenca WHERE {escopo} = %s", (valor,))
+                result["pedidos_licencas"] = int(cur.fetchone()["total"] or 0)
+            if guard["liv"]:
+                cur.execute(f"SELECT COUNT(*) AS total FROM pedidos_livros WHERE {escopo} = %s", (valor,))
+                result["pedidos_livros"] = int(cur.fetchone()["total"] or 0)
+            return result
 
     # ---------- Movimentações / compras / boletos ----------
 
@@ -1536,6 +1611,7 @@ class InMemoryPolosEscolasRepository:
         data["secretario_usuario_id"] = secretario["id"] if secretario else None
         data["secretario_nome"] = (secretario or {}).get("nome")
         data["secretario_email"] = (secretario or {}).get("email")
+        data["secretario_cpf"] = (secretario or {}).get("cpf")
         return data
 
     def list_escolas(
@@ -1593,6 +1669,66 @@ class InMemoryPolosEscolasRepository:
                 }
             )
         return result
+
+    # NOVO: contagens operacionais agregadas (tela de detalhe Polo/Escola)
+    def contagens_operacionais(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, int]:
+        if not polo_id and not escola_id:
+            raise ValueError("polo_id ou escola_id é obrigatório")
+        pedidos_licenca = getattr(self, "pedidos_licenca", {})
+        pedidos_livros = getattr(self, "pedidos_livros", {})
+        if polo_id:
+            return {
+                "escolas": sum(1 for e in self.escolas.values() if str(e.get("polo_id")) == str(polo_id)),
+                "turmas": sum(1 for t in getattr(self, "turmas", {}).values() if str(t.get("polo_id")) == str(polo_id)),
+                "professores": sum(
+                    1 for p in self.professores.values()
+                    if str(p.get("polo_id")) == str(polo_id)
+                ),
+                "alunos": sum(
+                    1 for a in self.alunos.values()
+                    if str(a.get("polo_id")) == str(polo_id) and a.get("status", "ativo") == "ativo"
+                ),
+                "aulas": sum(1 for a in self.aulas.values() if str(a.get("polo_id")) == str(polo_id)),
+                "licencas_estoque": int(self.get_estoque(polo_id=polo_id)["quantidade_disponivel"] or 0),
+                "licencas_atribuidas": sum(
+                    1 for lic in self.licencas_alunos.values()
+                    if str(lic.get("polo_id")) == str(polo_id) and lic.get("status") == "ativa"
+                ),
+                "licencas_movimentacoes": sum(
+                    1 for m in self.movimentacoes.values() if str(m.get("polo_id")) == str(polo_id)
+                ),
+                "pedidos_licencas": sum(1 for p in pedidos_licenca.values() if str(p.get("polo_id")) == str(polo_id)),
+                "pedidos_livros": sum(1 for p in pedidos_livros.values() if str(p.get("polo_id")) == str(polo_id)),
+            }
+        return {
+            "alunos": sum(
+                1 for a in self.alunos.values()
+                if str(a.get("escola_id")) == str(escola_id) and a.get("status", "ativo") == "ativo"
+            ),
+            "aulas": sum(1 for a in self.aulas.values() if str(a.get("escola_id")) == str(escola_id)),
+            "licencas_estoque": int(self.get_estoque(escola_id=escola_id)["quantidade_disponivel"] or 0),
+            "licencas_alunos": sum(
+                1 for lic in self.licencas_alunos.values() if str(lic.get("escola_id")) == str(escola_id)
+            ),
+            "licencas_atribuidas": sum(
+                1 for lic in self.licencas_alunos.values()
+                if str(lic.get("escola_id")) == str(escola_id) and lic.get("status") == "ativa"
+            ),
+            "licencas_movimentacoes": sum(
+                1 for m in self.movimentacoes.values() if str(m.get("escola_id")) == str(escola_id)
+            ),
+            "pedidos_licencas": sum(
+                1 for p in pedidos_licenca.values() if str(p.get("escola_id")) == str(escola_id)
+            ),
+            "pedidos_livros": sum(1 for p in pedidos_livros.values() if str(p.get("escola_id")) == str(escola_id)),
+            "professores": sum(
+                1 for p in self.professores.values()
+                if str(p.get("escola_id")) == str(escola_id)
+            ),
+            "turmas": sum(1 for t in getattr(self, "turmas", {}).values() if str(t.get("escola_id")) == str(escola_id)),
+        }
 
     # ---------- Movimentações / compras / boletos ----------
 

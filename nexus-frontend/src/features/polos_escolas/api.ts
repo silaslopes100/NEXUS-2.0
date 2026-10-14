@@ -1,4 +1,5 @@
 import { apiClient } from '@/api/client';
+import { ResumoOperacionalEscola, ResumoOperacionalPolo } from '@/types/polos';
 
 const http = apiClient;
 
@@ -21,6 +22,17 @@ export const polosEscolasApi = {
 
   getResumoPolo: async (id: string) => {
     const { data } = await http.get(`/polos/${id}/dashboard/kpis`);
+    return data;
+  },
+
+  // Contagens operacionais do Polo (escolas, turmas, alunos, aulas, licenças, pedidos)
+  getResumoOperacionalPolo: async (id: string): Promise<ResumoOperacionalPolo> => {
+    const { data } = await http.get(`/polos/${id}/dashboard/resumo`);
+    return data;
+  },
+
+  getResumoOperacionalEscola: async (id: string): Promise<ResumoOperacionalEscola> => {
+    const { data } = await http.get(`/escolas/${id}/dashboard/resumo`);
     return data;
   },
 
