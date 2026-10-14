@@ -6,7 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 
-from app.core.security import hash_password, verify_password
+from app.core.email import send_student_invite_email
+from app.core.security import generate_secure_token, hash_password, hash_token, verify_password
 from app.modules.polos_escolas import dashboard as dash
 from app.modules.polos_escolas import licencas as lic
 from app.modules.polos_escolas.repository import (
@@ -44,6 +45,9 @@ from app.modules.polos_escolas.schemas import (
     EscolaListResponse,
     EscolaResponse,
     EscolaUpdateRequest,
+    TurmaEscolaCreateRequest,
+    TurmaEscolaListResponse,
+    TurmaEscolaResponse,
     EvolucaoMesItem,
     EvolucaoResponse,
     FeedPostCreateRequest,
@@ -152,6 +156,7 @@ class PolosEscolasService:
             secretario_id=str(sec_id) if sec_id else None,
             secretario_nome=secretario_nome,
             secretario_email=secretario_email,
+            total_turmas=int(escola.get("total_turmas") or 0),
             criado_em=escola.get("criado_em"),
             atualizado_em=escola.get("atualizado_em"),
         )
@@ -349,7 +354,6 @@ class PolosEscolasService:
                 "escola_id": escola_id,
             }
         )
-        self.repo.update_escola(escola_id, {"secretario_usuario_id": secretario_id})
 
         self.repo.record_audit_log(
             usuario_id=actor_id,
@@ -385,21 +389,25 @@ class PolosEscolasService:
                 )
             update_dict["polo_id"] = dados.polo_id
 
-        # NOVO: vincular/trocar usuário secretário
-        if dados.secretario_usuario_id:
-            novo_sec = self.repo.get_usuario_by_id(dados.secretario_usuario_id)
+        # Vincular/trocar secretário: o vínculo vive apenas em usuarios.escola_id
+        novo_sec_id = dados.secretario_usuario_id
+        if novo_sec_id:
+            novo_sec = self.repo.get_usuario_by_id(novo_sec_id)
             if not novo_sec:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND,
                     detail="Usuário secretário informado não encontrado",
                 )
-            update_dict["secretario_usuario_id"] = dados.secretario_usuario_id
 
         if update_dict:
             self.repo.update_escola(escola_id, update_dict)
 
+        antigo_sec_id = escola.get("secretario_usuario_id")
+        if novo_sec_id and antigo_sec_id and str(antigo_sec_id) != str(novo_sec_id):
+            self.repo.update_usuario(str(antigo_sec_id), {"escola_id": None})
+
         # Sincroniza dados do secretário (atual ou novo)
-        sec_id = update_dict.get("secretario_usuario_id") or escola.get("secretario_usuario_id")
+        sec_id = novo_sec_id or antigo_sec_id
         if sec_id:
             sec_update: Dict[str, Any] = {}
             if dados.secretario_nome is not None:
@@ -412,13 +420,16 @@ class PolosEscolasService:
                 sec_update["senha_hash"] = hash_password(dados.secretario_senha)
                 sec_update["senha_algoritmo"] = "argon2id"
 
-            # Se vinculou um novo usuário, garante escola_id/polo_id apontando corretamente
-            if dados.secretario_usuario_id:
+            if novo_sec_id:
                 sec_update["escola_id"] = escola_id
+            if novo_sec_id or "polo_id" in update_dict:
                 sec_update["polo_id"] = update_dict.get("polo_id") or escola.get("polo_id")
 
             if sec_update:
                 self.repo.update_usuario(str(sec_id), sec_update)
+
+        if novo_sec_id:
+            update_dict["secretario_usuario_id"] = novo_sec_id
 
         self.repo.record_audit_log(
             usuario_id=actor_id,
@@ -712,10 +723,16 @@ class PolosEscolasService:
         total, items = self.repo.list_alunos_polo(polo_id, q, escola_id, status_filter, limit, offset)
         out = []
         for a in items:
-            presentes, total_aulas = self.repo.contar_presencas_aluno(str(a["id"]))
+            if "presentes" in a:
+                presentes, total_aulas = int(a["presentes"] or 0), int(a["total_aulas"] or 0)
+            else:
+                presentes, total_aulas = self.repo.contar_presencas_aluno(str(a["id"]))
             out.append(
                 AlunoPoloResponse(
                     id=str(a["id"]),
+                    usuario_id=str(a["usuario_id"]) if a.get("usuario_id") else None,
+                    numero_matricula=a.get("numero_matricula"),
+                    data_nascimento=a.get("data_nascimento"),
                     nome=a.get("nome", ""),
                     sobrenome=a.get("sobrenome", ""),
                     email=a.get("email"),
@@ -737,13 +754,21 @@ class PolosEscolasService:
         if not aluno or str(aluno.get("polo_id")) != str(polo_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado neste Polo")
         update_dict = {k: v for k, v in dados.model_dump(exclude_unset=True).items() if v is not None}
+        modalidade = update_dict.get("modalidade") or aluno.get("modalidade") or "polo"
+        escola_destino = update_dict.get("escola_id", aluno.get("escola_id"))
+        if modalidade == "ead" and update_dict.get("escola_id"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Aluno EAD não pode ser vinculado a uma escola")
+        if "escola_id" in update_dict:
+            self._validar_escola_do_polo(update_dict["escola_id"], polo_id)
+        if modalidade == "escola" and not escola_destino:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Modalidade 'escola' exige escola_id")
         if update_dict:
-            self.repo.update_usuario(aluno_id, update_dict)
+            self.repo.update_aluno(str(aluno["id"]), update_dict)
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="aluno_atualizado",
-            entidade="usuarios",
-            entidade_id=aluno_id,
+            entidade="alunos",
+            entidade_id=str(aluno["aluno_id"]),
             dados_antes=aluno,
             dados_depois=update_dict,
             ip=ip,
@@ -757,25 +782,49 @@ class PolosEscolasService:
         if not aluno or str(aluno.get("polo_id")) != str(polo_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado neste Polo")
         nota_id = self.repo.registrar_nota(
-            {"aluno_id": aluno_id, "materia_id": dados.materia_id, "valor": dados.valor, "descricao": dados.descricao}
+            {
+                "aluno_id": str(aluno["aluno_id"]),
+                "materia_id": dados.materia_id,
+                "valor": dados.valor,
+                "descricao": dados.descricao,
+                "lancado_por": actor_id,
+            }
         )
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="nota_registrada",
-            entidade="notas_alunos",
+            entidade="notas",
             entidade_id=nota_id,
             dados_depois={"aluno_id": aluno_id, "valor": dados.valor},
             ip=ip,
         )
         return MessageResponse(message="Nota registrada com sucesso")
 
+    def _validar_escola_do_polo(self, escola_id: Optional[str], polo_id: str) -> None:
+        if not escola_id:
+            return
+        escola = self.repo.get_escola(str(escola_id))
+        if not escola or str(escola.get("polo_id")) != str(polo_id):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="A escola informada não pertence a este Polo")
+
     def create_aluno(
         self, polo_id: str, dados: AlunoCreateRequest, actor_id: Optional[str], ip: Optional[str]
     ) -> AlunoPoloResponse:
         self.get_polo(polo_id)
+        if not cpf_valido(dados.cpf):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="CPF inválido")
+        if dados.data_nascimento >= date.today():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Data de nascimento inválida")
+        if dados.modalidade == "ead" and dados.escola_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Aluno EAD não pode ser vinculado a uma escola")
+        if dados.modalidade == "escola" and not dados.escola_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Modalidade 'escola' exige escola_id")
+        self._validar_escola_do_polo(dados.escola_id, polo_id)
+
+        cpf = normalizar_cpf(dados.cpf)
         if self.repo.get_usuario_by_email(dados.email):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"O e-mail '{dados.email}' já está em uso")
-        if self.repo.get_usuario_by_cpf(dados.cpf):
+        if self.repo.get_usuario_by_cpf(cpf):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="O CPF informado já está cadastrado")
         perfil_id = self.repo.get_perfil_id_by_nome("aluno")
         if not perfil_id:
@@ -785,7 +834,7 @@ class PolosEscolasService:
             {
                 "nome": dados.nome,
                 "sobrenome": dados.sobrenome,
-                "cpf": dados.cpf,
+                "cpf": cpf,
                 "email": dados.email,
                 "senha_hash": hash_password(str(uuid_token())),
                 "senha_algoritmo": "argon2id",
@@ -793,28 +842,99 @@ class PolosEscolasService:
                 "polo_id": polo_id,
                 "escola_id": dados.escola_id,
                 "modalidade": dados.modalidade,
+                "data_nascimento": dados.data_nascimento,
             }
         )
+        criado = self.repo.get_aluno_usuario(aluno_id) or {}
+        usuario_id = str(criado["id"])
+        matricula = criado.get("numero_matricula")
+
+        raw_token = generate_secure_token(32)
+        self.repo.create_password_reset(
+            usuario_id,
+            hash_token(raw_token),
+            datetime.now(timezone.utc) + timedelta(hours=INVITE_TOKEN_EXPIRE_HOURS),
+        )
+        convite = send_student_invite_email(
+            dados.email, dados.nome, matricula or "", raw_token, INVITE_TOKEN_EXPIRE_HOURS
+        )
+
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="aluno_cadastrado",
-            entidade="usuarios",
+            entidade="alunos",
             entidade_id=aluno_id,
-            dados_depois={"nome": dados.nome, "modalidade": dados.modalidade},
+            dados_depois={"nome": dados.nome, "modalidade": dados.modalidade, "numero_matricula": matricula},
             ip=ip,
         )
         return AlunoPoloResponse(
             id=aluno_id,
+            usuario_id=usuario_id,
+            numero_matricula=matricula,
+            data_nascimento=dados.data_nascimento,
             nome=dados.nome,
             sobrenome=dados.sobrenome or "",
             email=dados.email,
-            cpf=dados.cpf,
+            cpf=cpf,
             escola_id=dados.escola_id,
             modalidade=dados.modalidade,
             status="ativo",
             quantidade_presencas=0,
             percentual_presenca=0.0,
-            criado_em=None,
+            criado_em=criado.get("criado_em"),
+            convite_enviado=convite,
+        )
+
+    # ------------------------------------------------------------------
+    # Turmas da escola
+    # ------------------------------------------------------------------
+
+    def create_turma_escola(
+        self, escola_id: str, dados: TurmaEscolaCreateRequest, actor_id: Optional[str], ip: Optional[str]
+    ) -> TurmaEscolaResponse:
+        escola = self.repo.get_escola(escola_id)
+        if not escola:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada")
+        if dados.data_inicio and dados.data_fim and dados.data_fim < dados.data_inicio:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="data_fim anterior a data_inicio")
+        turma_id = self.repo.create_turma_escola(
+            {**dados.model_dump(), "escola_id": escola_id, "polo_id": str(escola["polo_id"])}
+        )
+        self.repo.record_audit_log(
+            usuario_id=actor_id,
+            acao="turma_criada",
+            entidade="turmas",
+            entidade_id=turma_id,
+            dados_depois={"escola_id": escola_id, "nome": dados.nome},
+            ip=ip,
+        )
+        return TurmaEscolaResponse(
+            id=turma_id, escola_id=escola_id, polo_id=str(escola["polo_id"]), **dados.model_dump()
+        )
+
+    def list_turmas_escola(self, escola_id: str, limit: int, offset: int) -> TurmaEscolaListResponse:
+        if not self.repo.get_escola(escola_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada")
+        total, items = self.repo.list_turmas_escola(escola_id, limit, offset)
+        return TurmaEscolaListResponse(
+            total=total,
+            items=[
+                TurmaEscolaResponse(
+                    id=str(t["id"]),
+                    escola_id=str(t["escola_id"]),
+                    polo_id=str(t["polo_id"]) if t.get("polo_id") else None,
+                    curso_id=str(t["curso_id"]) if t.get("curso_id") else None,
+                    nome=t["nome"],
+                    data_inicio=t.get("data_inicio"),
+                    data_fim=t.get("data_fim"),
+                    calendario_oficial_id=str(t["calendario_oficial_id"]) if t.get("calendario_oficial_id") else None,
+                    total_alunos=int(t.get("total_alunos") or 0),
+                    criado_em=t.get("criado_em"),
+                )
+                for t in items
+            ],
+            limit=limit,
+            offset=offset,
         )
 
     def solicitar_troca_polo(
@@ -913,6 +1033,10 @@ class PolosEscolasService:
         candidatos = self.repo.list_alunos_desistentes(polo_id, dias_limite=_DIAS_CHURN)
         itens = []
         for c in candidatos:
+            ref = c.get("atualizado_em") or c.get("criado_em")
+            dias = c.get("dias_sem_movimentacao")
+            if dias is None:
+                dias = (datetime.now(timezone.utc) - ref).days if ref else 0
             self.repo.marcar_aluno_desistente(str(c["id"]))
             itens.append(
                 AlunoDesistenteResponse(
@@ -920,7 +1044,7 @@ class PolosEscolasService:
                     nome=f"{c.get('nome', '')} {c.get('sobrenome', '')}".strip(),
                     polo_id=polo_id,
                     ultima_movimentacao_em=c.get("atualizado_em") or c.get("criado_em"),
-                    dias_sem_movimentacao=c["dias_sem_movimentacao"],
+                    dias_sem_movimentacao=dias,
                 )
             )
         return AlunoDesistenteListResponse(total=len(itens), items=itens)
@@ -1232,3 +1356,21 @@ def uuid_token() -> str:
     import secrets
 
     return secrets.token_urlsafe(16)
+
+
+def normalizar_cpf(cpf: str) -> str:
+    return "".join(filter(str.isdigit, cpf or ""))
+
+
+def cpf_valido(cpf: str) -> bool:
+    digitos = normalizar_cpf(cpf)
+    if len(digitos) != 11 or digitos == digitos[0] * 11:
+        return False
+    for i in (9, 10):
+        soma = sum(int(digitos[n]) * (i + 1 - n) for n in range(i))
+        if (soma * 10 % 11) % 10 != int(digitos[i]):
+            return False
+    return True
+
+
+INVITE_TOKEN_EXPIRE_HOURS = 72

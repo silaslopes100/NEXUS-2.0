@@ -4,9 +4,14 @@
 -- logs_auditoria, configuracoes, polos, escolas
 -- =====================================================================
 
--- RN-01: vínculo 1:1 entre Polo/Escola e o usuário coordenador/secretário
+-- RN-01: vínculo do coordenador com o Polo. O secretário da Escola é derivado de
+-- usuarios.escola_id (escolas não possui mais secretario_usuario_id).
 ALTER TABLE polos ADD COLUMN IF NOT EXISTS coordenador_usuario_id UUID REFERENCES usuarios(id);
-ALTER TABLE escolas ADD COLUMN IF NOT EXISTS secretario_usuario_id UUID REFERENCES usuarios(id);
+
+-- Turmas vinculadas a escolas e sequence de matrícula (NX-AAAA-NNNNNNN)
+ALTER TABLE turmas ADD COLUMN IF NOT EXISTS escola_id UUID REFERENCES escolas(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_turmas_escola_id ON turmas (escola_id);
+CREATE SEQUENCE IF NOT EXISTS seq_matricula_aluno START 1;
 
 -- Estoque de licenças por local (polo OU escola)
 CREATE TABLE IF NOT EXISTS licencas_estoque (
@@ -27,7 +32,7 @@ CREATE TABLE IF NOT EXISTS licencas_movimentacoes (
     tipo VARCHAR(30) NOT NULL, -- compra_fornecedor, distribuicao_polo_escola, venda_aluno, devolucao_escola_polo, devolucao_aluno_escola
     polo_id UUID REFERENCES polos(id),
     escola_id UUID REFERENCES escolas(id),
-    aluno_id UUID REFERENCES usuarios(id),
+    aluno_id UUID REFERENCES alunos(id),
     materia_id UUID,
     quantidade INT NOT NULL CHECK (quantidade > 0),
     valor_unitario DECIMAL(10,2),
@@ -40,7 +45,7 @@ CREATE TABLE IF NOT EXISTS licencas_movimentacoes (
 -- Licenças vinculadas a alunos (1 licença ativa = 1 vínculo)
 CREATE TABLE IF NOT EXISTS licencas_alunos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    aluno_id UUID NOT NULL REFERENCES usuarios(id),
+    aluno_id UUID NOT NULL REFERENCES alunos(id),
     escola_id UUID REFERENCES escolas(id),
     polo_id UUID REFERENCES polos(id),
     materia_id UUID,
@@ -130,7 +135,7 @@ CREATE TABLE IF NOT EXISTS atas (
 -- Presenças (RN-07)
 CREATE TABLE IF NOT EXISTS presencas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    aluno_id UUID NOT NULL REFERENCES usuarios(id),
+    aluno_id UUID NOT NULL REFERENCES alunos(id),
     aula_id UUID NOT NULL REFERENCES aulas(id),
     materia_id UUID,
     presente BOOLEAN NOT NULL DEFAULT false,
@@ -140,7 +145,7 @@ CREATE TABLE IF NOT EXISTS presencas (
 -- Requisições de troca de polo / migração de modalidade (RN-05, RN-06)
 CREATE TABLE IF NOT EXISTS requisicoes_troca (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    aluno_id UUID NOT NULL REFERENCES usuarios(id),
+    aluno_id UUID NOT NULL REFERENCES alunos(id),
     tipo VARCHAR(30) NOT NULL, -- troca_polo, migracao_modalidade
     polo_origem_id UUID REFERENCES polos(id),
     polo_destino_id UUID REFERENCES polos(id),

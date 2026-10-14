@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
 from app.modules.auth.schemas import UserResponse
@@ -52,6 +52,9 @@ from app.modules.polos_escolas.schemas import (
     MigracaoModalidadeRequest,
     MovimentacaoListResponse,
     NotaCreateRequest,
+    TurmaEscolaCreateRequest,
+    TurmaEscolaListResponse,
+    TurmaEscolaResponse,
     PerfilFotoResponse,
     PerfilSenhaUpdateRequest,
     PerfilUpdateRequest,
@@ -215,6 +218,30 @@ async def update_escola(
 ):
     check_escola_scope(current_user, escola_id)
     return service.update_escola(escola_id, payload, current_user.id, client_ip)
+
+
+@router.get("/escolas/{escola_id}/turmas", response_model=TurmaEscolaListResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def list_turmas_escola(
+    escola_id: str,
+    limit: int = Query(50, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    check_escola_scope(current_user, escola_id)
+    return service.list_turmas_escola(escola_id, limit, offset)
+
+
+@router.post("/escolas/{escola_id}/turmas", response_model=TurmaEscolaResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def create_turma_escola(
+    escola_id: str,
+    payload: TurmaEscolaCreateRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    check_escola_scope(current_user, escola_id)
+    return service.create_turma_escola(escola_id, payload, current_user.id, client_ip)
 
 
 # =========================================================================
@@ -518,6 +545,10 @@ async def create_aluno(
     client_ip: Optional[str] = Depends(get_client_ip),
 ):
     check_polo_scope(current_user, polo_id)
+    if payload.escola_id:
+        check_escola_scope(current_user, payload.escola_id)
+    elif (current_user.perfil.nome if current_user.perfil else "").lower() == "secretario_escola":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Secretário de escola só cadastra alunos da própria escola")
     return service.create_aluno(polo_id, payload, current_user.id, client_ip)
 
 

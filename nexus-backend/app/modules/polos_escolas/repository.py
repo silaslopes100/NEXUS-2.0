@@ -8,6 +8,22 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from app.core.database import get_db_cursor
 
+# O secretário da escola é derivado de usuarios.escola_id (único vínculo escola<->usuário).
+SECRETARIO_PERFIS = ("secretario_escola", "escola")
+_SECRETARIO_COLS = (
+    "sec.id AS secretario_usuario_id, sec.nome AS secretario_nome, sec.email AS secretario_email, "
+    "(SELECT COUNT(*) FROM turmas t WHERE t.escola_id = e.id) AS total_turmas"
+)
+_SECRETARIO_JOIN = """
+    LEFT JOIN LATERAL (
+        SELECT u.id, u.nome, u.email
+        FROM usuarios u JOIN perfis p ON p.id = u.perfil_id
+        WHERE u.escola_id = e.id AND lower(p.nome) IN ('secretario_escola', 'escola')
+        ORDER BY u.criado_em ASC
+        LIMIT 1
+    ) sec ON TRUE
+"""
+
 
 class PolosEscolasRepositoryInterface(Protocol):
     # ---------- Usuários auxiliares ----------
@@ -110,6 +126,10 @@ class PolosEscolasRepositoryInterface(Protocol):
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
     def create_aluno(self, data: Dict[str, Any]) -> str: ...
+    def update_aluno(self, usuario_id: str, data: Dict[str, Any]) -> None: ...
+    def create_password_reset(self, usuario_id: str, token_hash: str, expira_em: Any) -> None: ...
+    def create_turma_escola(self, data: Dict[str, Any]) -> str: ...
+    def list_turmas_escola(self, escola_id: str, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]: ...
     def registrar_nota(self, data: Dict[str, Any]) -> str: ...
     def contar_presencas_aluno(self, aluno_id: str) -> Tuple[int, int]: ...
     def create_requisicao(self, data: Dict[str, Any]) -> str: ...
@@ -379,8 +399,8 @@ class PostgresPolosEscolasRepository:
                 """
                 INSERT INTO escolas (
                     id, polo_id, nome, logradouro, numero, bairro, cidade, uf, cep,
-                    secretario_usuario_id, status, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                    status, criado_em, atualizado_em
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
@@ -392,7 +412,6 @@ class PostgresPolosEscolasRepository:
                     data.get("cidade", ""),
                     data.get("estado", ""),
                     data.get("cep", ""),
-                    data.get("secretario_usuario_id"),
                     data.get("status", "ativo"),
                 ),
             )
@@ -414,24 +433,17 @@ class PostgresPolosEscolasRepository:
     def get_escola(self, escola_id: str) -> Optional[Dict[str, Any]]:
         with get_db_cursor() as cur:
             cur.execute(
-                """
-                SELECT e.*, u.nome AS secretario_nome, u.email AS secretario_email
+                f"""
+                SELECT e.*, {_SECRETARIO_COLS}
                 FROM escolas e
-                LEFT JOIN usuarios u ON u.id = e.secretario_usuario_id
+                {_SECRETARIO_JOIN}
                 WHERE e.id = %s
                 LIMIT 1
                 """,
                 (str(escola_id),),
             )
             row = cur.fetchone()
-            if not row:
-                return None
-            data = dict(row)
-            if data.get("secretario_nome") is None:
-                data["secretario_nome"] = None
-            if data.get("secretario_email") is None:
-                data["secretario_email"] = None
-            return data
+            return dict(row) if row else None
 
     def list_escolas(
         self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0
@@ -443,24 +455,16 @@ class PostgresPolosEscolasRepository:
             total = int(cur.fetchone()["total"])
             cur.execute(
                 f"""
-                SELECT e.*, u.nome AS secretario_nome, u.email AS secretario_email
+                SELECT e.*, {_SECRETARIO_COLS}
                 FROM escolas e
-                LEFT JOIN usuarios u ON u.id = e.secretario_usuario_id
+                {_SECRETARIO_JOIN}
                 {where}
                 ORDER BY e.nome ASC
                 LIMIT %s OFFSET %s
                 """,
                 tuple(params + [limit, offset]),
             )
-            items = []
-            for row in cur.fetchall():
-                data = dict(row)
-                if data.get("secretario_nome") is None:
-                    data["secretario_nome"] = None
-                if data.get("secretario_email") is None:
-                    data["secretario_email"] = None
-                items.append(data)
-            return total, items
+            return total, [dict(row) for row in cur.fetchall()]
 
     # ---------- Estoque ----------
 
@@ -753,7 +757,8 @@ class PostgresPolosEscolasRepository:
                 """
                 SELECT la.id, la.aluno_id, u.nome, u.sobrenome, la.status, la.ativada_em
                 FROM licencas_alunos la
-                JOIN usuarios u ON u.id = la.aluno_id
+                JOIN alunos al ON al.id = la.aluno_id
+                JOIN usuarios u ON u.id = al.usuario_id
                 WHERE la.escola_id = %s
                 ORDER BY la.ativada_em DESC LIMIT %s OFFSET %s
                 """,
@@ -767,7 +772,8 @@ class PostgresPolosEscolasRepository:
                 """
                 SELECT la.aluno_id, u.nome, u.sobrenome, COUNT(*) as qtd_licencas
                 FROM licencas_alunos la
-                JOIN usuarios u ON u.id = la.aluno_id
+                JOIN alunos al ON al.id = la.aluno_id
+                JOIN usuarios u ON u.id = al.usuario_id
                 WHERE la.escola_id = %s
                 GROUP BY la.aluno_id, u.nome, u.sobrenome
                 ORDER BY qtd_licencas DESC LIMIT %s
@@ -795,7 +801,20 @@ class PostgresPolosEscolasRepository:
     # ---------- Alunos ----------
 
     def get_aluno_usuario(self, aluno_id: str) -> Optional[Dict[str, Any]]:
-        return self.get_usuario_by_id(aluno_id)
+        """Resolve por alunos.id (id canônico); retorna a linha de usuarios (id = usuarios.id) + dados de alunos."""
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT u.*, a.id AS aluno_id, a.numero_matricula, a.data_nascimento,
+                       a.modalidade, a.status AS aluno_status
+                FROM alunos a JOIN usuarios u ON u.id = a.usuario_id
+                WHERE a.id::text = %s
+                LIMIT 1
+                """,
+                (str(aluno_id),),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
 
     def list_alunos_polo(
         self,
@@ -806,29 +825,42 @@ class PostgresPolosEscolasRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        conds = ["u.polo_id = %s"]
+        conds = ["a.polo_id = %s"]
         params: List[Any] = [str(polo_id)]
         if q:
-            conds.append("(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s)")
+            conds.append(
+                "(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s OR lower(a.numero_matricula) LIKE %s "
+                "OR regexp_replace(coalesce(u.cpf,''), '[^0-9]', '', 'g') LIKE %s)"
+            )
             like = f"%{q.lower()}%"
-            params.extend([like, like])
+            digits = "".join(filter(str.isdigit, q))
+            params.extend([like, like, like, f"%{digits}%" if digits else "no-digits"])
         if escola_id:
-            conds.append("u.escola_id = %s")
+            conds.append("a.escola_id = %s")
             params.append(str(escola_id))
         if status_filter:
-            conds.append("u.status = %s")
+            conds.append("a.status = %s")
             params.append(status_filter)
         where = "WHERE " + " AND ".join(conds)
         with get_db_cursor() as cur:
             cur.execute(
-                f"SELECT COUNT(*) as total FROM usuarios u JOIN perfis p ON p.id = u.perfil_id {where} AND lower(p.nome) = 'aluno'",
+                f"SELECT COUNT(*) AS total FROM alunos a JOIN usuarios u ON u.id = a.usuario_id {where}",
                 tuple(params),
             )
             total = int(cur.fetchone()["total"])
             cur.execute(
                 f"""
-                SELECT u.* FROM usuarios u JOIN perfis p ON p.id = u.perfil_id
-                {where} AND lower(p.nome) = 'aluno'
+                SELECT a.id, u.id AS usuario_id, u.nome, u.sobrenome, u.email, u.cpf, u.criado_em,
+                       a.polo_id, a.escola_id, a.modalidade, a.status,
+                       a.numero_matricula, a.data_nascimento,
+                       COALESCE(pr.presentes, 0) AS presentes, COALESCE(pr.total_aulas, 0) AS total_aulas
+                FROM alunos a
+                JOIN usuarios u ON u.id = a.usuario_id
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) FILTER (WHERE p.presente) AS presentes, COUNT(*) AS total_aulas
+                    FROM presencas p WHERE p.aluno_id = a.id
+                ) pr ON TRUE
+                {where}
                 ORDER BY u.nome ASC LIMIT %s OFFSET %s
                 """,
                 tuple(params + [limit, offset]),
@@ -836,24 +868,141 @@ class PostgresPolosEscolasRepository:
             return total, [dict(r) for r in cur.fetchall()]
 
     def create_aluno(self, data: Dict[str, Any]) -> str:
-        return self.create_usuario(data)
+        """Cria usuarios + alunos na mesma transação (matrícula NX-AAAA-NNNNNNN); retorna alunos.id."""
+        usuario_id = str(uuid.uuid4())
+        aluno_id = str(uuid.uuid4())
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO usuarios (
+                    id, nome, sobrenome, email, cpf, senha_hash, senha_algoritmo,
+                    perfil_id, polo_id, escola_id, status, criado_em, atualizado_em
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'ativo', now(), now())
+                """,
+                (
+                    usuario_id,
+                    data.get("nome", ""),
+                    data.get("sobrenome", ""),
+                    data.get("email"),
+                    data.get("cpf"),
+                    data.get("senha_hash"),
+                    data.get("senha_algoritmo", "argon2id"),
+                    data.get("perfil_id"),
+                    data.get("polo_id"),
+                    data.get("escola_id"),
+                ),
+            )
+            cur.execute(
+                """
+                INSERT INTO alunos (
+                    id, usuario_id, polo_id, escola_id, modalidade, numero_matricula,
+                    data_nascimento, status, ultima_movimentacao_em, criado_em, atualizado_em
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    'NX-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('seq_matricula_aluno')::text, 7, '0'),
+                    %s, 'ativo', now(), now(), now()
+                )
+                """,
+                (
+                    aluno_id,
+                    usuario_id,
+                    data.get("polo_id"),
+                    data.get("escola_id"),
+                    data.get("modalidade", "polo"),
+                    data.get("data_nascimento"),
+                ),
+            )
+        return aluno_id
+
+    def create_turma_escola(self, data: Dict[str, Any]) -> str:
+        new_id = str(uuid.uuid4())
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO turmas (id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim,
+                                    calendario_oficial_id, criado_em, atualizado_em)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                """,
+                (
+                    new_id,
+                    data.get("curso_id"),
+                    data.get("polo_id"),
+                    data["escola_id"],
+                    data["nome"],
+                    data.get("data_inicio"),
+                    data.get("data_fim"),
+                    data.get("calendario_oficial_id"),
+                ),
+            )
+        return new_id
+
+    def list_turmas_escola(self, escola_id: str, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS total FROM turmas WHERE escola_id = %s", (str(escola_id),))
+            total = int(cur.fetchone()["total"])
+            cur.execute(
+                """
+                SELECT t.*, (SELECT COUNT(*) FROM turma_alunos ta WHERE ta.turma_id = t.id) AS total_alunos
+                FROM turmas t WHERE t.escola_id = %s
+                ORDER BY t.nome ASC LIMIT %s OFFSET %s
+                """,
+                (str(escola_id), limit, offset),
+            )
+            return total, [dict(r) for r in cur.fetchall()]
+
+    def update_aluno(self, usuario_id: str, data: Dict[str, Any]) -> None:
+        usuario_cols = {k: v for k, v in data.items() if k in ("nome", "sobrenome", "email", "escola_id")}
+        aluno_cols = {k: v for k, v in data.items() if k in ("modalidade", "status", "escola_id", "data_nascimento")}
+        if usuario_cols:
+            self.update_usuario(usuario_id, usuario_cols)
+        if aluno_cols:
+            sets = ", ".join(f"{k} = %s" for k in aluno_cols)
+            with get_db_cursor() as cur:
+                cur.execute(
+                    f"UPDATE alunos SET {sets}, ultima_movimentacao_em = now(), atualizado_em = now() WHERE usuario_id = %s",
+                    tuple(list(aluno_cols.values()) + [str(usuario_id)]),
+                )
+
+    def create_password_reset(self, usuario_id: str, token_hash: str, expira_em: Any) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO password_reset (usuario_id, token_hash, expira_em, criado_em, atualizado_em)
+                VALUES (%s, %s, %s, now(), now())
+                """,
+                (str(usuario_id), token_hash, expira_em),
+            )
 
     def registrar_nota(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO notas_alunos (id, aluno_id, materia_id, valor, descricao, criado_em)
-                VALUES (%s, %s, %s, %s, %s, now())
+                INSERT INTO notas (id, aluno_id, disciplina_id, turma_id, origem, valor, lancado_por, lancado_em, criado_em, atualizado_em)
+                SELECT %s, a.id, %s, %s, 'polo', %s, %s, now(), now(), now()
+                FROM alunos a WHERE a.id::text = %s
                 """,
-                (new_id, data["aluno_id"], data["materia_id"], data["valor"], data.get("descricao")),
+                (
+                    new_id,
+                    data["materia_id"],
+                    data.get("turma_id"),
+                    data["valor"],
+                    data.get("lancado_por"),
+                    str(data["aluno_id"]),
+                ),
             )
+            if cur.rowcount == 0:
+                raise ValueError("Aluno não encontrado")
         return new_id
 
     def contar_presencas_aluno(self, aluno_id: str) -> Tuple[int, int]:
         with get_db_cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FILTER (WHERE presente) as presentes, COUNT(*) as total FROM presencas WHERE aluno_id = %s",
+                """
+                SELECT COUNT(*) FILTER (WHERE p.presente) AS presentes, COUNT(*) AS total
+                FROM presencas p JOIN alunos a ON a.id = p.aluno_id
+                WHERE a.id::text = %s
+                """,
                 (str(aluno_id),),
             )
             row = cur.fetchone()
@@ -911,10 +1060,11 @@ class PostgresPolosEscolasRepository:
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                SELECT id, nome, sobrenome, polo_id, ultimo_login_em, atualizado_em
-                FROM usuarios
-                WHERE polo_id = %s AND status = 'ativo'
-                  AND COALESCE(atualizado_em, criado_em) < now() - (%s || ' days')::interval
+                SELECT a.id, u.nome, u.sobrenome, a.polo_id, u.ultimo_login_em,
+                       COALESCE(a.ultima_movimentacao_em, a.atualizado_em) AS atualizado_em
+                FROM alunos a JOIN usuarios u ON u.id = a.usuario_id
+                WHERE a.polo_id = %s AND a.status = 'ativo'
+                  AND COALESCE(a.ultima_movimentacao_em, a.atualizado_em, a.criado_em) < now() - (%s || ' days')::interval
                 """,
                 (str(polo_id), str(dias_limite)),
             )
@@ -923,7 +1073,7 @@ class PostgresPolosEscolasRepository:
     def marcar_aluno_desistente(self, aluno_id: str) -> None:
         with get_db_cursor() as cur:
             cur.execute(
-                "UPDATE usuarios SET status = 'desistente', atualizado_em = now() WHERE id = %s",
+                "UPDATE alunos SET status = 'desistente', atualizado_em = now() WHERE id = %s",
                 (str(aluno_id),),
             )
 
@@ -1232,6 +1382,7 @@ class InMemoryPolosEscolasRepository:
 
     def __init__(self) -> None:
         self.usuarios: Dict[str, Dict[str, Any]] = {}
+        self.alunos: Dict[str, Dict[str, Any]] = {}
         self.perfis: Dict[str, str] = {
             "admin": "perfil-admin",
             "secretario_geral": "perfil-secgeral",
@@ -1369,8 +1520,20 @@ class InMemoryPolosEscolasRepository:
         e = self.escolas.get(str(escola_id))
         if not e:
             return None
-        data = e.copy()
-        secretario = self.usuarios.get(str(e.get("secretario_usuario_id")))
+        return self._with_secretario(e)
+
+    def _with_secretario(self, escola: Dict[str, Any]) -> Dict[str, Any]:
+        data = escola.copy()
+        perfis_sec = {self.perfis[n] for n in SECRETARIO_PERFIS if n in self.perfis}
+        candidatos = sorted(
+            (
+                u for u in self.usuarios.values()
+                if str(u.get("escola_id")) == str(escola["id"]) and u.get("perfil_id") in perfis_sec
+            ),
+            key=lambda u: u.get("criado_em") or _now(),
+        )
+        secretario = candidatos[0] if candidatos else None
+        data["secretario_usuario_id"] = secretario["id"] if secretario else None
         data["secretario_nome"] = (secretario or {}).get("nome")
         data["secretario_email"] = (secretario or {}).get("email")
         return data
@@ -1382,14 +1545,7 @@ class InMemoryPolosEscolasRepository:
         if polo_id:
             items = [e for e in items if str(e.get("polo_id")) == str(polo_id)]
         items.sort(key=lambda x: x["nome"])
-        result = []
-        for e in items[offset : offset + limit]:
-            data = e.copy()
-            secretario = self.usuarios.get(str(e.get("secretario_usuario_id")))
-            data["secretario_nome"] = (secretario or {}).get("nome")
-            data["secretario_email"] = (secretario or {}).get("email")
-            result.append(data)
-        return len(items), result
+        return len(items), [self._with_secretario(e) for e in items[offset : offset + limit]]
 
     # ---------- Estoque ----------
 
@@ -1597,7 +1753,20 @@ class InMemoryPolosEscolasRepository:
     # ---------- Alunos ----------
 
     def get_aluno_usuario(self, aluno_id: str) -> Optional[Dict[str, Any]]:
-        return self.get_usuario_by_id(aluno_id)
+        a = self.alunos.get(str(aluno_id))
+        u = self.usuarios.get(str(a["usuario_id"])) if a else None
+        if not a or not u:
+            return None
+        return {
+            **u,
+            "aluno_id": a["id"],
+            "numero_matricula": a["numero_matricula"],
+            "data_nascimento": a.get("data_nascimento"),
+            "modalidade": a["modalidade"],
+            "aluno_status": a["status"],
+            "polo_id": a.get("polo_id"),
+            "escola_id": a.get("escola_id"),
+        }
 
     def list_alunos_polo(
         self,
@@ -1608,22 +1777,69 @@ class InMemoryPolosEscolasRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        items = [
-            u for u in self.usuarios.values()
-            if str(u.get("polo_id")) == str(polo_id) and (u.get("perfil_id") == self.perfis.get("aluno"))
-        ]
+        items = [a for a in self.alunos.values() if str(a.get("polo_id")) == str(polo_id)]
         if q:
             ql = q.lower()
-            items = [u for u in items if ql in (u.get("nome", "") + u.get("email", "")).lower()]
+            items = [
+                a for a in items
+                if ql in (
+                    self.usuarios[a["usuario_id"]].get("nome", "")
+                    + (self.usuarios[a["usuario_id"]].get("email") or "")
+                    + a["numero_matricula"]
+                ).lower()
+            ]
         if escola_id:
-            items = [u for u in items if str(u.get("escola_id")) == str(escola_id)]
+            items = [a for a in items if str(a.get("escola_id")) == str(escola_id)]
         if status_filter:
-            items = [u for u in items if u.get("status") == status_filter]
-        items.sort(key=lambda x: x.get("nome", ""))
-        return len(items), items[offset : offset + limit]
+            items = [a for a in items if a.get("status") == status_filter]
+        rows = []
+        for a in items:
+            u = self.usuarios[a["usuario_id"]]
+            rows.append({**u, **a, "usuario_id": u["id"], "id": a["id"]})
+        rows.sort(key=lambda x: x.get("nome", ""))
+        return len(rows), rows[offset : offset + limit]
 
     def create_aluno(self, data: Dict[str, Any]) -> str:
-        return self.create_usuario(data)
+        self._seq_matricula = getattr(self, "_seq_matricula", 0) + 1
+        matricula = f"NX-{_now().year}-{self._seq_matricula:07d}"
+        usuario_id = self.create_usuario(
+            {k: v for k, v in data.items() if k not in ("modalidade", "data_nascimento")}
+        )
+        aluno_id = str(uuid.uuid4())
+        self.alunos[aluno_id] = {
+            "id": aluno_id,
+            "usuario_id": usuario_id,
+            "polo_id": data.get("polo_id"),
+            "escola_id": data.get("escola_id"),
+            "modalidade": data.get("modalidade", "polo"),
+            "data_nascimento": data.get("data_nascimento"),
+            "numero_matricula": matricula,
+            "status": "ativo",
+        }
+        return aluno_id
+
+    def create_turma_escola(self, data: Dict[str, Any]) -> str:
+        if not hasattr(self, "turmas"):
+            self.turmas: Dict[str, Dict[str, Any]] = {}
+        new_id = str(uuid.uuid4())
+        self.turmas[new_id] = {"id": new_id, "criado_em": _now(), **data}
+        return new_id
+
+    def list_turmas_escola(self, escola_id: str, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]:
+        items = [t for t in getattr(self, "turmas", {}).values() if str(t.get("escola_id")) == str(escola_id)]
+        items.sort(key=lambda t: t["nome"])
+        return len(items), [{**t, "total_alunos": 0} for t in items[offset : offset + limit]]
+
+    def update_aluno(self, usuario_id: str, data: Dict[str, Any]) -> None:
+        self.update_usuario(usuario_id, {k: v for k, v in data.items() if k in ("nome", "sobrenome", "email", "escola_id")})
+        for a in self.alunos.values():
+            if str(a["usuario_id"]) == str(usuario_id):
+                a.update({k: v for k, v in data.items() if k in ("modalidade", "status", "escola_id", "data_nascimento")})
+
+    def create_password_reset(self, usuario_id: str, token_hash: str, expira_em: Any) -> None:
+        if not hasattr(self, "password_reset"):
+            self.password_reset: Dict[str, Dict[str, Any]] = {}
+        self.password_reset[token_hash] = {"usuario_id": str(usuario_id), "expira_em": expira_em}
 
     def registrar_nota(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
@@ -1659,20 +1875,21 @@ class InMemoryPolosEscolasRepository:
     def list_alunos_desistentes(self, polo_id: str, dias_limite: int = 365) -> List[Dict[str, Any]]:
         cutoff = _now()
         result = []
-        for u in self.usuarios.values():
-            if str(u.get("polo_id")) != str(polo_id) or u.get("status") != "ativo":
+        for a in self.alunos.values():
+            if str(a.get("polo_id")) != str(polo_id) or a.get("status") != "ativo":
                 continue
-            referencia = u.get("atualizado_em") or u.get("criado_em") or cutoff
+            u = self.usuarios[a["usuario_id"]]
+            referencia = a.get("atualizado_em") or u.get("criado_em") or cutoff
             dias = (cutoff - referencia).days
             if dias >= dias_limite:
-                result.append({**u, "dias_sem_movimentacao": dias})
+                result.append({**u, "id": a["id"], "atualizado_em": referencia, "dias_sem_movimentacao": dias})
         return result
 
     def marcar_aluno_desistente(self, aluno_id: str) -> None:
-        u = self.usuarios.get(str(aluno_id))
-        if u:
-            u["status"] = "desistente"
-            u["atualizado_em"] = _now()
+        a = self.alunos.get(str(aluno_id))
+        if a:
+            a["status"] = "desistente"
+            a["atualizado_em"] = _now()
 
     # ---------- Professores ----------
 
