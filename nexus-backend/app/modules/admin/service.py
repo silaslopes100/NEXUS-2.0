@@ -1,6 +1,7 @@
 """Serviço contendo as regras de negócio do módulo administrativo."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -9,18 +10,26 @@ from fastapi import HTTPException, status
 from app.core.security import hash_password
 from app.modules.admin.repository import AdminRepositoryInterface, get_admin_repository
 from app.modules.admin.schemas import (
+    AlunoVinculoFicha,
     ConfiguracaoResponse,
     ConfiguracaoSetRequest,
     AdminDashboardMetricsResponse,
+    ConsolidadoAcessoFicha,
     EtlErroResponse,
     EtlSyncRunListResponse,
     EtlSyncRunResponse,
     LogAuditoriaListResponse,
     LogAuditoriaResponse,
+    MetricasAlunoFicha,
+    MetricasProfessorFicha,
+    MetricasUnidadeFicha,
     PerfilItemResponse,
     PermissaoItemResponse,
+    ProfessorVinculoFicha,
+    ResumoMetricasUsuarioResponse,
     UsuarioAdminResponse,
     UsuarioCreateRequest,
+    UsuarioFichaResponse,
     UsuarioListResponse,
     UsuarioPermissoesUpdateRequest,
     UsuarioUpdateRequest,
@@ -59,6 +68,8 @@ class AdminService:
             perfil_nome=user_data.get("perfil_nome"),
             polo_id=str(user_data["polo_id"]) if user_data.get("polo_id") else None,
             escola_id=str(user_data["escola_id"]) if user_data.get("escola_id") else None,
+            polo_nome=user_data.get("polo_nome"),
+            escola_nome=user_data.get("escola_nome"),
             permissoes=permissoes,
             ultimo_login_em=user_data.get("ultimo_login_em"),
             criado_em=user_data.get("criado_em"),
@@ -106,6 +117,153 @@ class AdminService:
             )
         perms = self.repo.get_user_permissions(user_id)
         return self._build_user_response(user, perms)
+
+    # ---------- Ficha cadastral & métricas ----------
+
+    def _require_user(self, user_id: str) -> Dict[str, Any]:
+        user = self.repo.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuário não encontrado",
+            )
+        return user
+
+    @staticmethod
+    def _coerce_materias(raw: Any) -> List[str]:
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            return [str(m) for m in raw]
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(m) for m in parsed]
+            except (ValueError, TypeError):
+                return [raw] if raw.strip() else []
+        return []
+
+    def get_usuario_ficha(self, user_id: str) -> UsuarioFichaResponse:
+        user = self._require_user(user_id)
+        perms = self.repo.get_user_permissions(user_id)
+        base = self._build_user_response(user, perms)
+
+        aluno_raw = self.repo.get_aluno_by_usuario_id(user_id)
+        professor_raw = self.repo.get_professor_vinculo_by_usuario_id(user_id)
+
+        aluno = None
+        if aluno_raw:
+            data_nasc = aluno_raw.get("data_nascimento")
+            if isinstance(data_nasc, datetime):
+                data_nasc = data_nasc.date()
+            aluno = AlunoVinculoFicha(
+                id=str(aluno_raw["id"]),
+                usuario_id=str(aluno_raw["usuario_id"]) if aluno_raw.get("usuario_id") else None,
+                numero_matricula=aluno_raw.get("numero_matricula"),
+                modalidade=aluno_raw.get("modalidade"),
+                status=aluno_raw.get("status"),
+                data_nascimento=data_nasc,
+                polo_id=str(aluno_raw["polo_id"]) if aluno_raw.get("polo_id") else None,
+                escola_id=str(aluno_raw["escola_id"]) if aluno_raw.get("escola_id") else None,
+            )
+
+        professor = None
+        if professor_raw:
+            data_inicio = professor_raw.get("data_inicio")
+            if isinstance(data_inicio, datetime):
+                data_inicio = data_inicio.date()
+            horas = professor_raw.get("horas_totais")
+            professor = ProfessorVinculoFicha(
+                id=str(professor_raw["id"]),
+                usuario_id=str(professor_raw["usuario_id"]) if professor_raw.get("usuario_id") else None,
+                materias=self._coerce_materias(professor_raw.get("materias")),
+                data_inicio=data_inicio,
+                quantidade_aulas=int(professor_raw.get("quantidade_aulas") or 0),
+                horas_totais=float(horas) if horas is not None else None,
+                valor_hora_aula=(
+                    float(professor_raw["valor_hora_aula"])
+                    if professor_raw.get("valor_hora_aula") is not None
+                    else None
+                ),
+                status=professor_raw.get("status"),
+                polo_id=str(professor_raw["polo_id"]) if professor_raw.get("polo_id") else None,
+                escola_id=str(professor_raw["escola_id"]) if professor_raw.get("escola_id") else None,
+            )
+
+        return UsuarioFichaResponse(
+            **base.model_dump(),
+            aluno=aluno,
+            professor=professor,
+        )
+
+    def get_resumo_metricas(self, user_id: str) -> ResumoMetricasUsuarioResponse:
+        user = self._require_user(user_id)
+        perms = self.repo.get_user_permissions(user_id)
+
+        aluno_raw = self.repo.get_aluno_by_usuario_id(user_id)
+        professor_raw = self.repo.get_professor_vinculo_by_usuario_id(user_id)
+
+        metricas_aluno = None
+        if aluno_raw:
+            m = self.repo.get_metricas_aluno(str(aluno_raw["id"]))
+            total_presencas = int(m.get("total_presencas") or 0)
+            positivas = int(m.get("presencas_positivas") or 0)
+            percentual = round(positivas / total_presencas * 100.0, 1) if total_presencas > 0 else None
+            metricas_aluno = MetricasAlunoFicha(
+                matriculas_total=int(m.get("matriculas_total") or 0),
+                total_notas=int(m.get("total_notas") or 0),
+                media_notas=float(m["media_notas"]) if m.get("media_notas") is not None else None,
+                total_presencas=total_presencas,
+                presencas_positivas=positivas,
+                percentual_presenca=percentual,
+                certificados_total=int(m.get("certificados_total") or 0),
+            )
+
+        metricas_professor = None
+        if professor_raw:
+            m = self.repo.get_metricas_professor(str(professor_raw["id"]))
+            metricas_professor = MetricasProfessorFicha(
+                aulas_registradas=int(m.get("aulas_registradas") or 0),
+                treinamentos_total=int(m.get("treinamentos_total") or 0),
+            )
+
+        polo_id = user.get("polo_id") or (aluno_raw or {}).get("polo_id") or (professor_raw or {}).get("polo_id")
+        escola_id = user.get("escola_id") or (aluno_raw or {}).get("escola_id") or (professor_raw or {}).get("escola_id")
+
+        unidade = None
+        if polo_id or escola_id:
+            c = self.repo.contagens_unidade(
+                polo_id=str(polo_id) if polo_id else None,
+                escola_id=str(escola_id) if escola_id else None,
+            )
+            unidade = MetricasUnidadeFicha(
+                escolas=int(c.get("escolas") or 0),
+                turmas=int(c.get("turmas") or 0),
+                professores=int(c.get("professores") or 0),
+                alunos=int(c.get("alunos") or 0),
+                aulas=int(c.get("aulas") or 0),
+                licencas_estoque=int(c.get("licencas_estoque") or 0),
+                licencas_atribuidas=int(c.get("licencas_atribuidas") or 0),
+                licencas_movimentacoes=int(c.get("licencas_movimentacoes") or 0),
+                pedidos_licencas=int(c.get("pedidos_licencas") or 0),
+                pedidos_livros=int(c.get("pedidos_livros") or 0),
+            )
+
+        return ResumoMetricasUsuarioResponse(
+            usuario_id=str(user_id),
+            aluno=metricas_aluno,
+            professor=metricas_professor,
+            unidade=unidade,
+            consolidado=ConsolidadoAcessoFicha(
+                status=user.get("status", "ativo"),
+                perfil_nome=user.get("perfil_nome"),
+                ultimo_login_em=user.get("ultimo_login_em"),
+                criado_em=user.get("criado_em"),
+                atualizado_em=user.get("atualizado_em"),
+                permissoes=perms,
+            ),
+        )
 
     def create_usuario(
         self,
@@ -238,9 +396,9 @@ class AdminService:
         if perfil_id is not None:
             update_dict["perfil_id"] = perfil_id
         if dados.polo_id is not None:
-            update_dict["polo_id"] = dados.polo_id
+            update_dict["polo_id"] = dados.polo_id or None
         if dados.escola_id is not None:
-            update_dict["escola_id"] = dados.escola_id
+            update_dict["escola_id"] = dados.escola_id or None
         if dados.telefone is not None:
             update_dict["telefone"] = dados.telefone
         if dados.celular is not None:

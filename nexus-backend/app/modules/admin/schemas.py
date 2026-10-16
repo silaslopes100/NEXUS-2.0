@@ -1,7 +1,7 @@
 """Schemas Pydantic para o módulo administrativo do NEXUS 2.0."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -98,6 +98,8 @@ class UsuarioAdminResponse(BaseModel):
     perfil_nome: Optional[str] = None
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
+    polo_nome: Optional[str] = None
+    escola_nome: Optional[str] = None
     permissoes: List[str] = Field(default_factory=list)
     ultimo_login_em: Optional[datetime] = None
     criado_em: Optional[datetime] = None
@@ -109,6 +111,88 @@ class UsuarioListResponse(BaseModel):
     items: List[UsuarioAdminResponse]
     limit: int
     offset: int
+
+
+# ---------- Ficha Cadastral de Usuário ----------
+
+class AlunoVinculoFicha(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    usuario_id: Optional[str] = None
+    numero_matricula: Optional[str] = None
+    modalidade: Optional[str] = None
+    status: Optional[str] = None
+    data_nascimento: Optional[date] = None
+    polo_id: Optional[str] = None
+    escola_id: Optional[str] = None
+
+
+class ProfessorVinculoFicha(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    usuario_id: Optional[str] = None
+    materias: List[str] = Field(default_factory=list)
+    data_inicio: Optional[date] = None
+    quantidade_aulas: int = 0
+    horas_totais: Optional[float] = None
+    valor_hora_aula: Optional[float] = None
+    status: Optional[str] = None
+    polo_id: Optional[str] = None
+    escola_id: Optional[str] = None
+
+
+class UsuarioFichaResponse(UsuarioAdminResponse):
+    aluno: Optional[AlunoVinculoFicha] = None
+    professor: Optional[ProfessorVinculoFicha] = None
+
+
+# ---------- Métricas da Ficha de Usuário ----------
+
+class MetricasAlunoFicha(BaseModel):
+    matriculas_total: int = 0
+    total_notas: int = 0
+    media_notas: Optional[float] = None
+    total_presencas: int = 0
+    presencas_positivas: int = 0
+    percentual_presenca: Optional[float] = None
+    certificados_total: int = 0
+
+
+class MetricasProfessorFicha(BaseModel):
+    aulas_registradas: int = 0
+    treinamentos_total: int = 0
+
+
+class MetricasUnidadeFicha(BaseModel):
+    escolas: int = 0
+    turmas: int = 0
+    professores: int = 0
+    alunos: int = 0
+    aulas: int = 0
+    licencas_estoque: int = 0
+    licencas_atribuidas: int = 0
+    licencas_movimentacoes: int = 0
+    pedidos_licencas: int = 0
+    pedidos_livros: int = 0
+
+
+class ConsolidadoAcessoFicha(BaseModel):
+    status: str = "ativo"
+    perfil_nome: Optional[str] = None
+    ultimo_login_em: Optional[datetime] = None
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
+    permissoes: List[str] = Field(default_factory=list)
+
+
+class ResumoMetricasUsuarioResponse(BaseModel):
+    usuario_id: str
+    aluno: Optional[MetricasAlunoFicha] = None
+    professor: Optional[MetricasProfessorFicha] = None
+    unidade: Optional[MetricasUnidadeFicha] = None
+    consolidado: ConsolidadoAcessoFicha
 
 
 # ---------- Logs de Auditoria ----------

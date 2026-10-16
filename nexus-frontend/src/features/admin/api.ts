@@ -1,6 +1,8 @@
 import { apiClient } from '@/api/client';
 import {
   UsuarioAdmin,
+  UsuarioFicha,
+  ResumoMetricasUsuario,
   UsuarioListResponse,
   UsuarioCreatePayload,
   UsuarioUpdatePayload,
@@ -47,6 +49,16 @@ export const adminApi = {
 
   async getUsuario(id: string): Promise<UsuarioAdmin> {
     const response = await apiClient.get<UsuarioAdmin>(`/admin/usuarios/${id}`);
+    return response.data;
+  },
+
+  async getUsuarioFicha(id: string): Promise<UsuarioFicha> {
+    const response = await apiClient.get<UsuarioFicha>(`/admin/usuarios/${id}/ficha`);
+    return response.data;
+  },
+
+  async getResumoUsuario(id: string): Promise<ResumoMetricasUsuario> {
+    const response = await apiClient.get<ResumoMetricasUsuario>(`/admin/usuarios/${id}/resumo`);
     return response.data;
   },
 

@@ -18,8 +18,10 @@ from app.modules.admin.schemas import (
     MessageResponse,
     PerfilItemResponse,
     PermissaoItemResponse,
+    ResumoMetricasUsuarioResponse,
     UsuarioAdminResponse,
     UsuarioCreateRequest,
+    UsuarioFichaResponse,
     UsuarioListResponse,
     UsuarioPermissoesUpdateRequest,
     UsuarioSenhaResetRequest,
@@ -89,6 +91,30 @@ async def get_usuario(
     service: AdminService = Depends(get_admin_service),
 ) -> UsuarioAdminResponse:
     return service.get_usuario(usuario_id)
+
+
+@router.get(
+    "/usuarios/{usuario_id}/ficha",
+    response_model=UsuarioFichaResponse,
+    summary="Obtém a ficha cadastral completa de um usuário (vínculos de aluno/professor incluídos)",
+)
+async def get_usuario_ficha(
+    usuario_id: str,
+    service: AdminService = Depends(get_admin_service),
+) -> UsuarioFichaResponse:
+    return service.get_usuario_ficha(usuario_id)
+
+
+@router.get(
+    "/usuarios/{usuario_id}/resumo",
+    response_model=ResumoMetricasUsuarioResponse,
+    summary="Obtém métricas operacionais do usuário (aluno/professor/unidade/consolidado)",
+)
+async def get_usuario_resumo(
+    usuario_id: str,
+    service: AdminService = Depends(get_admin_service),
+) -> ResumoMetricasUsuarioResponse:
+    return service.get_resumo_metricas(usuario_id)
 
 
 @router.post(

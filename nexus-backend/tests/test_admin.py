@@ -441,3 +441,202 @@ async def test_etl_execucoes_e_erros(client: AsyncClient):
     assert len(erros) == 1
     assert erros[0]["tabela_origem"] == "users"
     assert "E-mail duplicado" in erros[0]["erro"]
+
+
+# ==========================================
+# 7. Ficha Cadastral & Métricas de Usuário
+# ==========================================
+
+def _seed_aluno_com_dados(admin_repo):
+    """Cria um usuário aluno com vínculo e dados acadêmicos de exemplo."""
+    from datetime import date
+
+    admin_repo.polos["polo-1"] = {"id": "polo-1", "nome": "Polo Centro", "status": "ativo"}
+    admin_repo.escolas["esc-1"] = {"id": "esc-1", "polo_id": "polo-1", "nome": "Escola Modelo", "status": "ativo"}
+
+    admin_repo.usuarios["aluno-1"] = {
+        "id": "aluno-1",
+        "nome": "Maria",
+        "sobrenome": "Aluna",
+        "email": "maria@nexus.com.br",
+        "cpf": "55566677788",
+        "senha_hash": "x",
+        "senha_algoritmo": "argon2id",
+        "status": "ativo",
+        "perfil_id": "p-aluno",
+        "polo_id": "polo-1",
+        "escola_id": "esc-1",
+        "telefone": None,
+        "celular": "11911112222",
+        "foto_url": None,
+        "ultimo_login_em": None,
+        "criado_em": datetime.now(timezone.utc),
+        "atualizado_em": datetime.now(timezone.utc),
+    }
+    admin_repo.alunos["al-1"] = {
+        "id": "al-1",
+        "usuario_id": "aluno-1",
+        "polo_id": "polo-1",
+        "escola_id": "esc-1",
+        "modalidade": "polo",
+        "numero_matricula": "20240001",
+        "data_nascimento": date(2000, 5, 20),
+        "status": "ativo",
+    }
+    admin_repo.notas.extend([
+        {"aluno_id": "al-1", "valor": 8.5},
+        {"aluno_id": "al-1", "valor": 7.0},
+    ])
+    admin_repo.presencas.extend([
+        {"aluno_id": "al-1", "presente": True},
+        {"aluno_id": "al-1", "presente": True},
+        {"aluno_id": "al-1", "presente": False},
+    ])
+    admin_repo.matriculas_ead.append({"aluno_id": "al-1", "curso_id": "c-1"})
+    admin_repo.certificados.append({"aluno_id": "al-1", "curso_id": "c-1"})
+    return admin_repo
+
+
+@pytest.mark.asyncio
+async def test_usuario_ficha_sem_vinculos(client: AsyncClient):
+    admin_token = _get_admin_token()
+    res = await client.get("/admin/usuarios/admin-1/ficha", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["id"] == "admin-1"
+    assert data["nome"] == "Super"
+    assert data["aluno"] is None
+    assert data["professor"] is None
+    assert data["polo_nome"] is None
+    assert data["escola_nome"] is None
+
+
+@pytest.mark.asyncio
+async def test_usuario_ficha_404(client: AsyncClient):
+    admin_token = _get_admin_token()
+    res = await client.get("/admin/usuarios/nao-existe/ficha", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_usuario_ficha_com_vinculo_aluno(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    _seed_aluno_com_dados(admin_repo)
+    admin_token = _get_admin_token()
+
+    res = await client.get("/admin/usuarios/aluno-1/ficha", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["polo_nome"] == "Polo Centro"
+    assert data["escola_nome"] == "Escola Modelo"
+    assert data["aluno"] is not None
+    assert data["aluno"]["id"] == "al-1"
+    assert data["aluno"]["numero_matricula"] == "20240001"
+    assert data["aluno"]["modalidade"] == "polo"
+    assert data["aluno"]["data_nascimento"] == "2000-05-20"
+    assert data["professor"] is None
+
+
+@pytest.mark.asyncio
+async def test_usuario_resumo_metricas_aluno(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    _seed_aluno_com_dados(admin_repo)
+    admin_token = _get_admin_token()
+
+    res = await client.get("/admin/usuarios/aluno-1/resumo", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["usuario_id"] == "aluno-1"
+
+    aluno = data["aluno"]
+    assert aluno is not None
+    assert aluno["matriculas_total"] == 1
+    assert aluno["total_notas"] == 2
+    assert aluno["media_notas"] == 7.75
+    assert aluno["total_presencas"] == 3
+    assert aluno["presencas_positivas"] == 2
+    assert aluno["percentual_presenca"] == 66.7
+    assert aluno["certificados_total"] == 1
+
+    # Unidade derivada do polo do usuário
+    unidade = data["unidade"]
+    assert unidade is not None
+    assert unidade["escolas"] == 1
+    assert unidade["alunos"] == 1
+
+    assert data["consolidado"]["status"] == "ativo"
+    assert data["consolidado"]["perfil_nome"] == "aluno"
+
+
+@pytest.mark.asyncio
+async def test_usuario_ficha_e_resumo_professor(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    admin_repo.professores["prof-db-1"] = {
+        "id": "prof-db-1",
+        "usuario_id": "prof-1",
+        "polo_id": None,
+        "escola_id": None,
+        "materias": ["Matemática", "Física"],
+        "data_inicio": None,
+        "quantidade_aulas": 40,
+        "horas_totais": 60.0,
+        "valor_hora_aula": 85.5,
+        "status": "ativo",
+    }
+    admin_repo.aulas.extend([
+        {"professor_id": "prof-db-1", "polo_id": None},
+        {"professor_id": "prof-db-1", "polo_id": None},
+        {"professor_id": "outro", "polo_id": None},
+    ])
+    admin_token = _get_admin_token()
+
+    ficha_res = await client.get("/admin/usuarios/prof-1/ficha", headers={"Authorization": f"Bearer {admin_token}"})
+    assert ficha_res.status_code == 200
+    ficha = ficha_res.json()
+    assert ficha["professor"] is not None
+    assert ficha["professor"]["materias"] == ["Matemática", "Física"]
+    assert ficha["professor"]["quantidade_aulas"] == 40
+    assert ficha["aluno"] is None
+
+    resumo_res = await client.get("/admin/usuarios/prof-1/resumo", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resumo_res.status_code == 200
+    resumo = resumo_res.json()
+    assert resumo["professor"] is not None
+    assert resumo["professor"]["aulas_registradas"] == 2
+    assert resumo["professor"]["treinamentos_total"] == 0
+    assert resumo["aluno"] is None
+    assert resumo["unidade"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_usuarios_exibe_polo_nome_e_escola_nome(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    _seed_aluno_com_dados(admin_repo)
+    admin_token = _get_admin_token()
+
+    res = await client.get("/admin/usuarios?q=maria", headers={"Authorization": f"Bearer {admin_token}"})
+    assert res.status_code == 200
+    items = res.json()["items"]
+    assert len(items) == 1
+    assert items[0]["polo_nome"] == "Polo Centro"
+    assert items[0]["escola_nome"] == "Escola Modelo"
+
+
+@pytest.mark.asyncio
+async def test_update_usuario_limpa_vinculo_polo_escola_com_string_vazia(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    _seed_aluno_com_dados(admin_repo)
+    admin_token = _get_admin_token()
+
+    res = await client.put(
+        "/admin/usuarios/aluno-1",
+        json={"polo_id": "", "escola_id": ""},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["polo_id"] is None
+    assert data["escola_id"] is None
+    assert data["polo_nome"] is None
+    assert admin_repo.usuarios["aluno-1"]["polo_id"] is None
+    assert admin_repo.usuarios["aluno-1"]["escola_id"] is None

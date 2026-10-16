@@ -24,10 +24,86 @@ export interface UsuarioAdmin {
   perfil_nome?: string | null;
   polo_id?: string | null;
   escola_id?: string | null;
+  polo_nome?: string | null;
+  escola_nome?: string | null;
   permissoes: string[];
   ultimo_login_em?: string | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
+}
+
+export interface AlunoVinculoFicha {
+  id: string;
+  usuario_id?: string | null;
+  numero_matricula?: string | null;
+  modalidade?: string | null;
+  status?: string | null;
+  data_nascimento?: string | null;
+  polo_id?: string | null;
+  escola_id?: string | null;
+}
+
+export interface ProfessorVinculoFicha {
+  id: string;
+  usuario_id?: string | null;
+  materias: string[];
+  data_inicio?: string | null;
+  quantidade_aulas: number;
+  horas_totais?: number | null;
+  valor_hora_aula?: number | null;
+  status?: string | null;
+  polo_id?: string | null;
+  escola_id?: string | null;
+}
+
+export interface UsuarioFicha extends UsuarioAdmin {
+  aluno?: AlunoVinculoFicha | null;
+  professor?: ProfessorVinculoFicha | null;
+}
+
+export interface MetricasAlunoFicha {
+  matriculas_total: number;
+  total_notas: number;
+  media_notas?: number | null;
+  total_presencas: number;
+  presencas_positivas: number;
+  percentual_presenca?: number | null;
+  certificados_total: number;
+}
+
+export interface MetricasProfessorFicha {
+  aulas_registradas: number;
+  treinamentos_total: number;
+}
+
+export interface MetricasUnidadeFicha {
+  escolas: number;
+  turmas: number;
+  professores: number;
+  alunos: number;
+  aulas: number;
+  licencas_estoque: number;
+  licencas_atribuidas: number;
+  licencas_movimentacoes: number;
+  pedidos_licencas: number;
+  pedidos_livros: number;
+}
+
+export interface ConsolidadoAcessoFicha {
+  status: string;
+  perfil_nome?: string | null;
+  ultimo_login_em?: string | null;
+  criado_em?: string | null;
+  atualizado_em?: string | null;
+  permissoes: string[];
+}
+
+export interface ResumoMetricasUsuario {
+  usuario_id: string;
+  aluno?: MetricasAlunoFicha | null;
+  professor?: MetricasProfessorFicha | null;
+  unidade?: MetricasUnidadeFicha | null;
+  consolidado: ConsolidadoAcessoFicha;
 }
 
 export interface UsuarioListResponse {

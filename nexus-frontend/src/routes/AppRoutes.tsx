@@ -12,6 +12,7 @@ import { ProfessorDashboardPage } from '@/pages/dashboard/ProfessorDashboardPage
 import { AlunoDashboardPage } from '@/pages/dashboard/AlunoDashboardPage';
 import { ModulePlaceholderPage } from '@/pages/dashboard/ModulePlaceholderPage';
 import { UsuariosInternosPage } from '@/features/admin/pages/UsuariosInternosPage';
+import { UsuarioFichaPage } from '@/features/admin/pages/UsuarioFichaPage';
 import { LogsAuditoriaPage } from '@/features/admin/pages/LogsAuditoriaPage';
 import { ConfiguracoesPage } from '@/features/admin/pages/ConfiguracoesPage';
 import { ExecucoesBatchPage } from '@/features/admin/pages/ExecucoesBatchPage';
@@ -48,6 +49,7 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RequireRole roles={['admin']} />}>
           <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
           <Route path="/admin/usuarios" element={<UsuariosInternosPage />} />
+          <Route path="/admin/usuarios/:usuarioId" element={<UsuarioFichaPage />} />
           <Route path="/admin/perfis-permissoes" element={<ModulePlaceholderPage />} />
           <Route path="/admin/polos-escolas" element={<PolosEscolasPage />} />
           <Route path="/admin/professores" element={<ProfessoresPage />} />

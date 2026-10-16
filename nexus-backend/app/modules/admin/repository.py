@@ -32,6 +32,15 @@ class AdminRepositoryInterface(Protocol):
     def get_user_permissions(self, user_id: str) -> List[str]: ...
     def set_user_permissions(self, user_id: str, permission_keys: List[str]) -> None: ...
 
+    # Ficha cadastral & métricas
+    def get_aluno_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]: ...
+    def get_professor_vinculo_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]: ...
+    def get_metricas_aluno(self, aluno_id: str) -> Dict[str, Any]: ...
+    def get_metricas_professor(self, professor_id: str) -> Dict[str, Any]: ...
+    def contagens_unidade(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, int]: ...
+
     # Perfis & Permissões
     def list_perfis(self) -> List[Dict[str, Any]]: ...
     def get_perfil_by_id(self, perfil_id: str) -> Optional[Dict[str, Any]]: ...
@@ -151,9 +160,12 @@ class PostgresAdminRepository:
         data_sql = f"""
             SELECT u.id, u.nome, u.sobrenome, u.email, u.cpf, u.telefone, u.celular,
                    u.foto_url, u.status, u.ultimo_login_em, u.polo_id, u.escola_id,
-                   u.perfil_id, p.nome as perfil_nome, u.criado_em, u.atualizado_em
+                   u.perfil_id, p.nome as perfil_nome, u.criado_em, u.atualizado_em,
+                   po.nome as polo_nome, es.nome as escola_nome
             FROM usuarios u
             LEFT JOIN perfis p ON u.perfil_id = p.id
+            LEFT JOIN polos po ON u.polo_id = po.id
+            LEFT JOIN escolas es ON u.escola_id = es.id
             {where_clause}
             ORDER BY u.criado_em DESC
             LIMIT %s OFFSET %s
@@ -174,9 +186,12 @@ class PostgresAdminRepository:
                    u.telefone, u.celular, u.foto_url, u.status, u.ultimo_login_em,
                    u.polo_id, u.escola_id, u.perfil_id,
                    p.nome as perfil_nome, p.descricao as perfil_descricao,
-                   u.criado_em, u.atualizado_em
+                   u.criado_em, u.atualizado_em,
+                   po.nome as polo_nome, es.nome as escola_nome
             FROM usuarios u
             LEFT JOIN perfis p ON u.perfil_id = p.id
+            LEFT JOIN polos po ON u.polo_id = po.id
+            LEFT JOIN escolas es ON u.escola_id = es.id
             WHERE u.id = %s
             LIMIT 1
         """
@@ -315,6 +330,99 @@ class PostgresAdminRepository:
                         "INSERT INTO usuario_permissoes (usuario_id, permissao_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                         (uid, str(pid)),
                     )
+
+    # ---------- Ficha cadastral & métricas ----------
+
+    def get_aluno_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT to_regclass('alunos') IS NOT NULL AS existe")
+            if not cur.fetchone()["existe"]:
+                return None
+            cur.execute("SELECT * FROM alunos WHERE usuario_id = %s LIMIT 1", (str(user_id),))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def get_professor_vinculo_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT to_regclass('professores') IS NOT NULL AS existe")
+            if not cur.fetchone()["existe"]:
+                return None
+            cur.execute("SELECT * FROM professores WHERE usuario_id = %s LIMIT 1", (str(user_id),))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def get_metricas_aluno(self, aluno_id: str) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "matriculas_total": 0,
+            "total_notas": 0,
+            "media_notas": None,
+            "total_presencas": 0,
+            "presencas_positivas": 0,
+            "certificados_total": 0,
+        }
+        aid = str(aluno_id)
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT to_regclass('matriculas_ead') IS NOT NULL AS m, "
+                "to_regclass('notas') IS NOT NULL AS n, "
+                "to_regclass('presencas') IS NOT NULL AS p, "
+                "to_regclass('certificados') IS NOT NULL AS c"
+            )
+            guard = cur.fetchone()
+            if guard["m"]:
+                cur.execute("SELECT COUNT(*) AS total FROM matriculas_ead WHERE aluno_id = %s", (aid,))
+                result["matriculas_total"] = int(cur.fetchone()["total"] or 0)
+            if guard["n"]:
+                cur.execute(
+                    "SELECT COUNT(*) AS total, ROUND(AVG(valor), 2) AS media FROM notas WHERE aluno_id = %s",
+                    (aid,),
+                )
+                row = cur.fetchone()
+                result["total_notas"] = int(row["total"] or 0)
+                result["media_notas"] = float(row["media"]) if row["media"] is not None else None
+            if guard["p"]:
+                cur.execute(
+                    "SELECT COUNT(*) AS total, "
+                    "COUNT(*) FILTER (WHERE presente = true) AS positivas "
+                    "FROM presencas WHERE aluno_id = %s",
+                    (aid,),
+                )
+                row = cur.fetchone()
+                result["total_presencas"] = int(row["total"] or 0)
+                result["presencas_positivas"] = int(row["positivas"] or 0)
+            if guard["c"]:
+                cur.execute("SELECT COUNT(*) AS total FROM certificados WHERE aluno_id = %s", (aid,))
+                result["certificados_total"] = int(cur.fetchone()["total"] or 0)
+        return result
+
+    def get_metricas_professor(self, professor_id: str) -> Dict[str, Any]:
+        result: Dict[str, Any] = {"aulas_registradas": 0, "treinamentos_total": 0}
+        pid = str(professor_id)
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT to_regclass('aulas') IS NOT NULL AS a, "
+                "to_regclass('treinamentos_inscricoes') IS NOT NULL AS t"
+            )
+            guard = cur.fetchone()
+            if guard["a"]:
+                cur.execute("SELECT COUNT(*) AS total FROM aulas WHERE professor_id = %s", (pid,))
+                result["aulas_registradas"] = int(cur.fetchone()["total"] or 0)
+            if guard["t"]:
+                cur.execute(
+                    "SELECT COUNT(*) AS total FROM treinamentos_inscricoes WHERE professor_id = %s",
+                    (pid,),
+                )
+                result["treinamentos_total"] = int(cur.fetchone()["total"] or 0)
+        return result
+
+    def contagens_unidade(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, int]:
+        from app.modules.polos_escolas.repository import get_polos_escolas_repository
+
+        return get_polos_escolas_repository().contagens_operacionais(
+            polo_id=polo_id, escola_id=escola_id
+        )
 
     def list_perfis(self) -> List[Dict[str, Any]]:
         sql = "SELECT id, nome, descricao FROM perfis ORDER BY nome ASC"
@@ -556,6 +664,17 @@ class InMemoryAdminRepository:
         self.configuracoes: Dict[str, Dict[str, Any]] = {}  # chave -> dict
         self.etl_sync_runs: List[Dict[str, Any]] = []
         self.etl_erros: List[Dict[str, Any]] = []
+        # Dados auxiliares para a ficha cadastral / métricas (preenchidos pelos testes)
+        self.polos: Dict[str, Dict[str, Any]] = {}
+        self.escolas: Dict[str, Dict[str, Any]] = {}
+        self.alunos: Dict[str, Dict[str, Any]] = {}
+        self.professores: Dict[str, Dict[str, Any]] = {}
+        self.notas: List[Dict[str, Any]] = []
+        self.presencas: List[Dict[str, Any]] = []
+        self.matriculas_ead: List[Dict[str, Any]] = []
+        self.certificados: List[Dict[str, Any]] = []
+        self.aulas: List[Dict[str, Any]] = []
+        self.treinamentos_inscricoes: List[Dict[str, Any]] = []
         self.dashboard_metrics: Dict[str, int] = {
             "alunos_ativos": 0,
             "matriculas_total": 0,
@@ -568,6 +687,15 @@ class InMemoryAdminRepository:
 
     def get_dashboard_metrics(self) -> Dict[str, int]:
         return self.dashboard_metrics.copy()
+
+    def _resolver_unidade_nomes(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        polo_id = row.get("polo_id")
+        escola_id = row.get("escola_id")
+        if polo_id and str(polo_id) in self.polos:
+            row["polo_nome"] = self.polos[str(polo_id)].get("nome")
+        if escola_id and str(escola_id) in self.escolas:
+            row["escola_nome"] = self.escolas[str(escola_id)].get("nome")
+        return row
 
     def list_users(
         self,
@@ -615,6 +743,7 @@ class InMemoryAdminRepository:
             pid = u.get("perfil_id")
             if pid and pid in self.perfis:
                 u_copy["perfil_nome"] = self.perfis[pid]["nome"]
+            self._resolver_unidade_nomes(u_copy)
             out.append(u_copy)
 
         return total, out
@@ -628,6 +757,7 @@ class InMemoryAdminRepository:
         if pid and pid in self.perfis:
             out["perfil_nome"] = self.perfis[pid]["nome"]
             out["perfil_descricao"] = self.perfis[pid].get("descricao")
+        self._resolver_unidade_nomes(out)
         return out
 
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
@@ -715,6 +845,68 @@ class InMemoryAdminRepository:
         for pid, pdata in self.permissoes.items():
             if pdata["chave"] in clean_keys:
                 self.usuario_permissoes.append({"usuario_id": uid, "permissao_id": pid})
+
+    # ---------- Ficha cadastral & métricas ----------
+
+    def get_aluno_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        for a in self.alunos.values():
+            if str(a.get("usuario_id")) == str(user_id):
+                return a.copy()
+        return None
+
+    def get_professor_vinculo_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        for p in self.professores.values():
+            if str(p.get("usuario_id")) == str(user_id):
+                return p.copy()
+        return None
+
+    def get_metricas_aluno(self, aluno_id: str) -> Dict[str, Any]:
+        aid = str(aluno_id)
+        notas = [n for n in self.notas if str(n.get("aluno_id")) == aid]
+        presencas = [p for p in self.presencas if str(p.get("aluno_id")) == aid]
+        positivas = sum(1 for p in presencas if p.get("presente"))
+        return {
+            "matriculas_total": sum(1 for m in self.matriculas_ead if str(m.get("aluno_id")) == aid),
+            "total_notas": len(notas),
+            "media_notas": (round(sum(float(n.get("valor") or 0) for n in notas) / len(notas), 2) if notas else None),
+            "total_presencas": len(presencas),
+            "presencas_positivas": positivas,
+            "certificados_total": sum(1 for c in self.certificados if str(c.get("aluno_id")) == aid),
+        }
+
+    def get_metricas_professor(self, professor_id: str) -> Dict[str, Any]:
+        pid = str(professor_id)
+        return {
+            "aulas_registradas": sum(1 for a in self.aulas if str(a.get("professor_id")) == pid),
+            "treinamentos_total": sum(
+                1 for t in self.treinamentos_inscricoes if str(t.get("professor_id")) == pid
+            ),
+        }
+
+    def contagens_unidade(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, int]:
+        if not polo_id and not escola_id:
+            raise ValueError("polo_id ou escola_id é obrigatório")
+        escopo = "polo_id" if polo_id else "escola_id"
+        valor = str(polo_id or escola_id)
+
+        def _match(row: Dict[str, Any]) -> bool:
+            return str(row.get(escopo)) == valor
+
+        escolas_do_polo = sum(1 for e in self.escolas.values() if str(e.get("polo_id")) == valor) if polo_id else 0
+        return {
+            "escolas": escolas_do_polo,
+            "turmas": 0,
+            "professores": sum(1 for p in self.professores.values() if _match(p)),
+            "alunos": sum(1 for a in self.alunos.values() if _match(a) and a.get("status", "ativo") == "ativo"),
+            "aulas": sum(1 for a in self.aulas if _match(a)),
+            "licencas_estoque": 0,
+            "licencas_atribuidas": 0,
+            "licencas_movimentacoes": 0,
+            "pedidos_licencas": 0,
+            "pedidos_livros": 0,
+        }
 
     def list_perfis(self) -> List[Dict[str, Any]]:
         return list(self.perfis.values())
