@@ -18,6 +18,7 @@ class MessageResponse(BaseModel):
 class EnderecoSchema(BaseModel):
     logradouro: str = ""
     numero: str = ""
+    complemento: str = ""
     bairro: str = ""
     cidade: str = ""
     estado: str = ""
@@ -66,6 +67,9 @@ class PoloResponse(BaseModel):
     coordenador_id: Optional[str] = None
     coordenador_nome: Optional[str] = None
     coordenador_email: Optional[str] = None
+    responsavel_nome: Optional[str] = None
+    responsavel_cpf: Optional[str] = None
+    responsavel_email: Optional[str] = None
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
 
@@ -123,6 +127,9 @@ class EscolaResponse(BaseModel):
     secretario_id: Optional[str] = None
     secretario_nome: Optional[str] = None
     secretario_email: Optional[str] = None
+    responsavel_nome: Optional[str] = None
+    responsavel_cpf: Optional[str] = None
+    responsavel_email: Optional[str] = None
     total_turmas: int = 0
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
@@ -203,6 +210,21 @@ class DashboardPoloKpisResponse(BaseModel):
     total_nao_vendidas_polo: int
     taxa_conversao_global: float
     taxa_distribuicao: float
+
+
+class ResumoOperacionalPoloResponse(BaseModel):
+    """Contagens operacionais do Polo (tela de detalhe)."""
+
+    escolas: int
+    turmas: int
+    professores: int
+    alunos: int
+    aulas: int
+    licencas_estoque: int
+    licencas_atribuidas: int
+    licencas_movimentacoes: int
+    pedidos_licencas: int
+    pedidos_livros: int
 
 
 class FunilSerieItem(BaseModel):
@@ -369,6 +391,21 @@ class DashboardEscolaKpisResponse(BaseModel):
     licencas_nao_vendidas: int
     taxa_conversao: float
     taxa_ociosidade: float
+
+
+class ResumoOperacionalEscolaResponse(BaseModel):
+    """Contagens operacionais da Escola (drawer de detalhe)."""
+
+    alunos: int
+    aulas: int
+    licencas_estoque: int
+    licencas_alunos: int
+    licencas_atribuidas: int
+    licencas_movimentacoes: int
+    pedidos_licencas: int
+    pedidos_livros: int
+    professores: int
+    turmas: int
 
 
 class DonutResponse(BaseModel):

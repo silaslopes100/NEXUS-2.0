@@ -81,6 +81,8 @@ from app.modules.polos_escolas.schemas import (
     RelatorioDrilldownResponse,
     RequisicaoListResponse,
     RequisicaoResponse,
+    ResumoOperacionalEscolaResponse,
+    ResumoOperacionalPoloResponse,
     TopAlunoResponse,
     TreinamentoInscricaoResponse,
     TreinamentoResponse,
@@ -109,6 +111,7 @@ class PolosEscolasService:
         return EnderecoSchema(
             logradouro=data.get("logradouro", "") or "",
             numero=data.get("numero", "") or "",
+            complemento=data.get("complemento", "") or "",
             bairro=data.get("bairro", "") or "",
             cidade=data.get("cidade", "") or "",
             estado=data.get("estado") or data.get("uf") or "",
@@ -133,6 +136,9 @@ class PolosEscolasService:
             coordenador_id=str(coord_id) if coord_id else None,
             coordenador_nome=coordenador_nome,
             coordenador_email=coordenador_email,
+            responsavel_nome=coordenador.get("nome") if coordenador else polo.get("responsavel_nome"),
+            responsavel_cpf=coordenador.get("cpf") if coordenador and coordenador.get("cpf") else polo.get("responsavel_cpf"),
+            responsavel_email=coordenador.get("email") if coordenador else polo.get("responsavel_email"),
             criado_em=polo.get("criado_em"),
             atualizado_em=polo.get("atualizado_em"),
         )
@@ -146,6 +152,7 @@ class PolosEscolasService:
 
         secretario_nome = escola.get("secretario_nome") or (secretario.get("nome") if secretario else None)
         secretario_email = escola.get("secretario_email") or (secretario.get("email") if secretario else None)
+        secretario_cpf = escola.get("secretario_cpf") or (secretario.get("cpf") if secretario else None)
 
         return EscolaResponse(
             id=str(escola["id"]),
@@ -156,6 +163,9 @@ class PolosEscolasService:
             secretario_id=str(sec_id) if sec_id else None,
             secretario_nome=secretario_nome,
             secretario_email=secretario_email,
+            responsavel_nome=secretario_nome or escola.get("responsavel_nome"),
+            responsavel_cpf=secretario_cpf or escola.get("responsavel_cpf"),
+            responsavel_email=secretario_email or escola.get("responsavel_email"),
             total_turmas=int(escola.get("total_turmas") or 0),
             criado_em=escola.get("criado_em"),
             atualizado_em=escola.get("atualizado_em"),
@@ -190,10 +200,14 @@ class PolosEscolasService:
                 "nome": dados.nome,
                 "logradouro": endereco.logradouro,
                 "numero": endereco.numero,
+                "complemento": endereco.complemento,
                 "bairro": endereco.bairro,
                 "cidade": endereco.cidade,
                 "estado": endereco.estado,
                 "cep": endereco.cep,
+                "responsavel_nome": dados.coordenador_nome,
+                "responsavel_cpf": dados.coordenador_cpf,
+                "responsavel_email": dados.coordenador_email,
             }
         )
 
@@ -234,6 +248,14 @@ class PolosEscolasService:
             update_dict.update(dados.endereco.model_dump())
         if dados.status is not None:
             update_dict["status"] = dados.status
+
+        # Sincroniza colunas responsavel_* (tabela polos) com os dados do coordenador
+        if dados.coordenador_nome is not None:
+            update_dict["responsavel_nome"] = dados.coordenador_nome
+        if dados.coordenador_cpf is not None:
+            update_dict["responsavel_cpf"] = dados.coordenador_cpf
+        if dados.coordenador_email is not None:
+            update_dict["responsavel_email"] = dados.coordenador_email
 
         # NOVO: trocar/vincular usuário coordenador
         if dados.coordenador_usuario_id:
@@ -335,10 +357,14 @@ class PolosEscolasService:
                 "nome": dados.nome,
                 "logradouro": endereco.logradouro,
                 "numero": endereco.numero,
+                "complemento": endereco.complemento,
                 "bairro": endereco.bairro,
                 "cidade": endereco.cidade,
                 "estado": endereco.estado,
                 "cep": endereco.cep,
+                "responsavel_nome": dados.secretario_nome,
+                "responsavel_cpf": dados.secretario_cpf,
+                "responsavel_email": dados.secretario_email,
             }
         )
 
@@ -379,6 +405,14 @@ class PolosEscolasService:
             update_dict.update(dados.endereco.model_dump())
         if dados.status is not None:
             update_dict["status"] = dados.status
+
+        # Sincroniza colunas responsavel_* (tabela escolas) com os dados do secretário
+        if dados.secretario_nome is not None:
+            update_dict["responsavel_nome"] = dados.secretario_nome
+        if dados.secretario_cpf is not None:
+            update_dict["responsavel_cpf"] = dados.secretario_cpf
+        if dados.secretario_email is not None:
+            update_dict["responsavel_email"] = dados.secretario_email
 
         # NOVO: mover escola para outro polo
         if dados.polo_id is not None:
@@ -523,6 +557,11 @@ class PolosEscolasService:
         itens = dash.calcular_alertas_polo(self.repo, polo_id)
         return AlertaListResponse(total=len(itens), items=itens)
 
+    def resumo_operacional_polo(self, polo_id: str) -> ResumoOperacionalPoloResponse:
+        """Contagens operacionais agregadas do Polo (tela de detalhe)."""
+        self.get_polo(polo_id)
+        return dash.calcular_resumo_operacional_polo(self.repo, polo_id)
+
     def relatorio_drilldown(self, polo_id: str) -> RelatorioDrilldownResponse:
         self.get_polo(polo_id)
         return dash.gerar_relatorio_drilldown(self.repo, polo_id)
@@ -626,6 +665,11 @@ class PolosEscolasService:
     def dashboard_kpis_escola(self, escola_id: str) -> DashboardEscolaKpisResponse:
         self.get_escola(escola_id)
         return dash.calcular_kpis_escola(self.repo, escola_id)
+
+    def resumo_operacional_escola(self, escola_id: str) -> ResumoOperacionalEscolaResponse:
+        """Contagens operacionais agregadas da Escola (drawer de detalhe)."""
+        self.get_escola(escola_id)
+        return dash.calcular_resumo_operacional_escola(self.repo, escola_id)
 
     def dashboard_donut(self, escola_id: str) -> DonutResponse:
         kpis = self.dashboard_kpis_escola(escola_id)

@@ -1,6 +1,7 @@
 export interface EnderecoCompleto {
   logradouro?: string;
   numero?: string;
+  complemento?: string;
   bairro?: string;
   cidade?: string;
   estado?: string;
@@ -11,6 +12,8 @@ export interface PoloItem {
   id: string;
   nome: string;
   responsavel_nome?: string;
+  responsavel_cpf?: string;
+  responsavel_email?: string;
   coordenador_id?: string;
   coordenador_nome?: string;
   coordenador_email?: string;
@@ -27,8 +30,12 @@ export interface EscolaItem {
   secretario_id?: string;
   secretario_nome?: string;
   secretario_email?: string;
+  responsavel_nome?: string;
+  responsavel_cpf?: string;
+  responsavel_email?: string;
   endereco: EnderecoCompleto;
   status: string;
+  total_turmas?: number;
   criado_em?: string;
   atualizado_em?: string;
 }
@@ -79,6 +86,34 @@ export interface DashboardPoloKpis {
   total_nao_vendidas_polo: number;
   taxa_conversao_global: number;
   taxa_distribuicao: number;
+}
+
+// Contagens operacionais do Polo (tela de detalhe)
+export interface ResumoOperacionalPolo {
+  escolas: number;
+  turmas: number;
+  professores: number;
+  alunos: number;
+  aulas: number;
+  licencas_estoque: number;
+  licencas_atribuidas: number;
+  licencas_movimentacoes: number;
+  pedidos_licencas: number;
+  pedidos_livros: number;
+}
+
+// Contagens operacionais da Escola (drawer de detalhe)
+export interface ResumoOperacionalEscola {
+  alunos: number;
+  aulas: number;
+  licencas_estoque: number;
+  licencas_alunos: number;
+  licencas_atribuidas: number;
+  licencas_movimentacoes: number;
+  pedidos_licencas: number;
+  pedidos_livros: number;
+  professores: number;
+  turmas: number;
 }
 
 export interface DashboardEscolaKpis {

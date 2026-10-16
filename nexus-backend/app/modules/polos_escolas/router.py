@@ -71,6 +71,8 @@ from app.modules.polos_escolas.schemas import (
     RelatorioDrilldownResponse,
     RequisicaoListResponse,
     RequisicaoResponse,
+    ResumoOperacionalEscolaResponse,
+    ResumoOperacionalPoloResponse,
     TopAlunoResponse,
     TreinamentoInscricaoResponse,
     TreinamentoResponse,
@@ -288,6 +290,15 @@ async def dashboard_alertas_polo(
     return service.dashboard_alertas(polo_id)
 
 
+@router.get("/polos/{polo_id}/dashboard/resumo", response_model=ResumoOperacionalPoloResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+async def dashboard_resumo_polo(
+    polo_id: str, current_user: UserResponse = Depends(get_current_user), service: PolosEscolasService = Depends(get_polos_escolas_service)
+):
+    """Contagens operacionais do Polo (escolas, turmas, professores, alunos, aulas, licenças e pedidos)."""
+    check_polo_scope(current_user, polo_id)
+    return service.resumo_operacional_polo(polo_id)
+
+
 # =========================================================================
 # 4. Relatório Dinâmico Hierárquico
 # =========================================================================
@@ -444,6 +455,15 @@ async def dashboard_alertas_escola(
 ):
     check_escola_scope(current_user, escola_id)
     return service.alertas_escola(escola_id)
+
+
+@router.get("/escolas/{escola_id}/dashboard/resumo", response_model=ResumoOperacionalEscolaResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def dashboard_resumo_escola(
+    escola_id: str, current_user: UserResponse = Depends(get_current_user), service: PolosEscolasService = Depends(get_polos_escolas_service)
+):
+    """Contagens operacionais da Escola (alunos, aulas, licenças, pedidos, professores, turmas)."""
+    check_escola_scope(current_user, escola_id)
+    return service.resumo_operacional_escola(escola_id)
 
 
 # =========================================================================

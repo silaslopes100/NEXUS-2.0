@@ -383,3 +383,125 @@ async def test_rn02_fluxo_completo_de_licencas(client: AsyncClient, repos):
     ).json()
     assert kpis_finais["total_nao_vendidas_polo"] == 100
     assert kpis_finais["total_licencas_vendidas_alunos"] == 0
+
+
+@pytest.mark.asyncio
+async def test_resumo_operacional_polo_e_escola(client: AsyncClient, repos):
+    admin_token = _token("admin-1")
+
+    polo = (
+        await client.post("/polos", json=_polo_payload(), headers={"Authorization": f"Bearer {admin_token}"})
+    ).json()
+    escola = (
+        await client.post(
+            f"/polos/{polo['id']}/escolas",
+            json={
+                "nome": "Escola Alfa",
+                "endereco": {"logradouro": "Rua B", "numero": "20", "complemento": "Sala 2", "cidade": "Sao Paulo", "estado": "SP"},
+                "secretario_nome": "Diretora Ana",
+                "secretario_cpf": "22233344455",
+                "secretario_email": "secretaria@escola.com",
+                "secretario_senha": "senha_segura_456",
+            },
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    ).json()
+
+    await client.post(
+        f"/polos/{polo['id']}/licencas/compra",
+        json={"quantidade": 50, "fornecedor": "Editora XPTO", "valor_unitario": 40.0, "data": str(date.today())},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    await client.post(
+        f"/polos/{polo['id']}/licencas/distribuir",
+        json={"escola_id": escola["id"], "quantidade": 20},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    aluno = (
+        await client.post(
+            f"/polos/{polo['id']}/alunos",
+            json={
+                "nome": "Joao",
+                "cpf": "529.982.247-25",
+                "email": "aluno@nexus.com.br",
+                "data_nascimento": "2000-01-01",
+                "escola_id": escola["id"],
+                "modalidade": "escola",
+            },
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    ).json()
+    await client.post(
+        f"/escolas/{escola['id']}/licencas/vender",
+        json={"aluno_id": aluno["id"], "quantidade": 1},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    await client.post(
+        f"/escolas/{escola['id']}/turmas",
+        json={"nome": "Turma 2026-A"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    resumo_polo = (
+        await client.get(f"/polos/{polo['id']}/dashboard/resumo", headers={"Authorization": f"Bearer {admin_token}"})
+    )
+    assert resumo_polo.status_code == 200, resumo_polo.text
+    rp = resumo_polo.json()
+    assert rp["escolas"] == 1
+    assert rp["turmas"] == 1
+    assert rp["alunos"] == 1
+    assert rp["professores"] == 0
+    assert rp["aulas"] == 0
+    assert rp["licencas_estoque"] == 30  # 50 compradas - 20 distribuidas
+    assert rp["licencas_atribuidas"] == 1  # 1 ativa (vendida)
+    assert rp["licencas_movimentacoes"] >= 2  # compra + distribuicao + venda
+    assert rp["pedidos_licencas"] == 0
+    assert rp["pedidos_livros"] == 0
+
+    resumo_escola = (
+        await client.get(f"/escolas/{escola['id']}/dashboard/resumo", headers={"Authorization": f"Bearer {admin_token}"})
+    )
+    assert resumo_escola.status_code == 200, resumo_escola.text
+    re = resumo_escola.json()
+    assert re["alunos"] == 1
+    assert re["turmas"] == 1
+    assert re["aulas"] == 0
+    assert re["professores"] == 0
+    assert re["licencas_estoque"] == 19  # 20 distribuidas - 1 vendida
+    assert re["licencas_alunos"] == 1
+    assert re["licencas_atribuidas"] == 1
+    assert re["licencas_movimentacoes"] >= 2
+    assert re["pedidos_licencas"] == 0
+    assert re["pedidos_livros"] == 0
+
+
+@pytest.mark.asyncio
+async def test_polo_e_escola_expoe_complemento_e_responsavel_cpf(client: AsyncClient, repos):
+    admin_token = _token("admin-1")
+
+    polo_payload = _polo_payload()
+    polo_payload["endereco"]["complemento"] = "Sala 402"
+    polo = (await client.post("/polos", json=polo_payload, headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert polo["endereco"]["complemento"] == "Sala 402"
+    assert polo["responsavel_nome"] == "Carlos Coordenador"
+    assert polo["responsavel_cpf"] == "12345678900"
+    assert polo["responsavel_email"] == "coordenador@polo.com"
+
+    escola = (
+        await client.post(
+            f"/polos/{polo['id']}/escolas",
+            json={
+                "nome": "Escola Alfa",
+                "endereco": {"logradouro": "Rua B", "numero": "20", "complemento": "Fundos", "cidade": "Sao Paulo", "estado": "SP"},
+                "secretario_nome": "Diretora Ana",
+                "secretario_cpf": "22233344455",
+                "secretario_email": "secretaria@escola.com",
+                "secretario_senha": "senha_segura_456",
+            },
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    ).json()
+    assert escola["endereco"]["complemento"] == "Fundos"
+    assert escola["responsavel_nome"] == "Diretora Ana"
+    assert escola["responsavel_cpf"] == "22233344455"
+    assert escola["responsavel_email"] == "secretaria@escola.com"

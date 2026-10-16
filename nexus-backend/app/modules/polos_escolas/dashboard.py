@@ -18,6 +18,8 @@ from app.modules.polos_escolas.schemas import (
     RelatorioDrilldownLinha,
     RelatorioDrilldownResponse,
     RelatorioDrilldownTotais,
+    ResumoOperacionalEscolaResponse,
+    ResumoOperacionalPoloResponse,
     TreemapNode,
 )
 
@@ -225,6 +227,20 @@ def calcular_kpis_escola(
         taxa_conversao=_pct(vendidas, recebidas),
         taxa_ociosidade=_pct(estoque, recebidas),
     )
+
+
+def calcular_resumo_operacional_polo(
+    repo: PolosEscolasRepositoryInterface, polo_id: str
+) -> ResumoOperacionalPoloResponse:
+    """Contagens operacionais agregadas do Polo (tela de detalhe)."""
+    return ResumoOperacionalPoloResponse(**repo.contagens_operacionais(polo_id=polo_id))
+
+
+def calcular_resumo_operacional_escola(
+    repo: PolosEscolasRepositoryInterface, escola_id: str
+) -> ResumoOperacionalEscolaResponse:
+    """Contagens operacionais agregadas da Escola (drawer de detalhe)."""
+    return ResumoOperacionalEscolaResponse(**repo.contagens_operacionais(escola_id=escola_id))
 
 
 def calcular_alertas_escola(repo: PolosEscolasRepositoryInterface, escola_id: str) -> List[AlertaResponse]:

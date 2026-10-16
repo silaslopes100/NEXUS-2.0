@@ -5,6 +5,7 @@ import { polosEscolasApi } from '@/features/polos_escolas/api';
 interface EnderecoSchema {
   logradouro?: string;
   numero?: string;
+  complemento?: string;
   bairro?: string;
   cidade?: string;
   estado?: string;
@@ -45,6 +46,7 @@ interface EscolaEditModalProps {
 const emptyAddress: EnderecoSchema = {
   logradouro: '',
   numero: '',
+  complemento: '',
   bairro: '',
   cidade: '',
   estado: '',
@@ -178,7 +180,7 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {(['logradouro', 'numero', 'bairro', 'cidade', 'estado', 'cep'] as const).map((key) => (
+            {(['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'cep'] as const).map((key) => (
               <div key={key}>
                 <label className="mb-1 block text-sm font-medium text-slate-300 capitalize">{key}</label>
                 <input
