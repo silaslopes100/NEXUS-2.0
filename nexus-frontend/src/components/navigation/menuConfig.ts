@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   Users,
-  Shield,
   Building2,
   GraduationCap,
   BookOpen,
@@ -63,12 +62,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Users,
         },
         {
-          title: 'Perfis & Permissões',
-          path: '/admin/perfis-permissoes',
-          icon: Shield,
-          isPlaceholder: true,
-        },
-        {
           title: 'Polos & Escolas',
           path: '/admin/polos-escolas',
           icon: Building2,
@@ -78,7 +71,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Professores & Docentes',
           path: '/admin/professores',
           icon: GraduationCap,
-          isPlaceholder: true,
         },
       ],
     },

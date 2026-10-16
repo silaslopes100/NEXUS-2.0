@@ -17,11 +17,12 @@ from app.modules.ead import router as ead_router
 from app.modules.notas_historico import router as notas_historico_router
 from app.modules.pedidos_livros import router as pedidos_livros_router
 from app.modules.polos_escolas import router as polos_escolas_router
+from app.modules.professores import router as professores_router
 from app.modules.transferencias import router as transferencias_router
 from app.modules.turmas import router as turmas_router
 
-# Nota: os módulos legados `alunos`, `licencas`, `financeiro`, `professores` e
-# `presencas` foram absorvidos pelo módulo `polos_escolas` (ver
+# Nota: os módulos legados `alunos`, `licencas`, `financeiro` e `presencas`
+# foram absorvidos pelo módulo `polos_escolas` (ver
 # docs/Requisitos_Nexus2.0(Polo_Escola).md) e não são mais registrados aqui.
 
 
@@ -50,6 +51,10 @@ app.add_middleware(
 # Inclusão dos Módulos do Sistema
 app.include_router(auth_router)
 app.include_router(admin_router)
+# `professores` precisa ser registrado antes de `polos_escolas` para que o
+# PUT /professores/{id} completo (retorno com dados do docente) tenha
+# precedência sobre a rota homônima legada de polos_escolas.
+app.include_router(professores_router)
 app.include_router(polos_escolas_router)
 app.include_router(cursos_disciplinas_router)
 app.include_router(turmas_router)

@@ -19,6 +19,7 @@ import { LicencasPage } from '@/features/licencas/pages/LicencasPage';
 import { PolosEscolasPage } from '@/features/polos_escolas/pages/PolosEscolasPage';
 import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
 import { TurmasEscolaPage } from '@/features/alunos/pages/TurmasEscolaPage';
+import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -49,7 +50,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/usuarios" element={<UsuariosInternosPage />} />
           <Route path="/admin/perfis-permissoes" element={<ModulePlaceholderPage />} />
           <Route path="/admin/polos-escolas" element={<PolosEscolasPage />} />
-          <Route path="/admin/professores" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/professores" element={<ProfessoresPage />} />
           <Route path="/admin/cursos" element={<ModulePlaceholderPage />} />
           <Route path="/admin/disciplinas" element={<ModulePlaceholderPage />} />
           <Route path="/admin/turmas-calendarios" element={<ModulePlaceholderPage />} />
