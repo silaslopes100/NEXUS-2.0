@@ -57,7 +57,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
       groupTitle: 'Gestão de Acesso & Rede',
       items: [
         {
-          title: 'Usuários & Staff',
+          title: 'Usuários',
           path: '/admin/usuarios',
           icon: Users,
         },
@@ -68,7 +68,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'Professores & Docentes',
+          title: 'Corpo Docentes',
           path: '/admin/professores',
           icon: GraduationCap,
         },
