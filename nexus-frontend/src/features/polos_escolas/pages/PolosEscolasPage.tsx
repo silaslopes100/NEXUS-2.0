@@ -1,6 +1,6 @@
 import { PoloEditModal } from '@/features/polos_escolas/components/PoloEditModal';
 import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -130,8 +130,41 @@ export const PolosEscolasPage: React.FC = () => {
   const [editPolo, setEditPolo] = useState<PoloItem | null>(null);
   const [editEscola, setEditEscola] = useState<EscolaItem | null>(null);
   const [modal, setModal] = useState<'polo' | 'escola' | null>(null);
-  const [poloForm, setPoloForm] = useState<PoloCreatePayload>({ nome: '', endereco: emptyAddress, coordenador_nome: '', coordenador_cpf: '', coordenador_email: '', coordenador_senha: '' });
+  const [poloForm, setPoloForm] = useState<PoloCreatePayload>({ nome: '', endereco: emptyAddress, coordenador_usuario_id: '' });
   const [escolaForm, setEscolaForm] = useState<EscolaCreatePayload>({ polo_id: user?.polo_id || '', nome: '', endereco: emptyAddress, secretario_nome: '', secretario_cpf: '', secretario_email: '', secretario_senha: '' });
+  const [usuariosDisponiveis, setUsuariosDisponiveis] = useState<Array<{ id: string; nome: string; email?: string; cpf?: string; perfil_nome?: string }>>([]);
+  const [buscaUsuario, setBuscaUsuario] = useState('');
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+
+  // Carrega usuários quando abre o modal de polo
+  useEffect(() => {
+    if (modal === 'polo') {
+      carregarUsuarios();
+    }
+  }, [modal]);
+
+  const carregarUsuarios = async () => {
+    setLoadingUsuarios(true);
+    try {
+      const resp = await polosEscolasApi.listarUsuariosVinculaveis({ limit: 500 });
+      setUsuariosDisponiveis(resp.items || []);
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error);
+    } finally {
+      setLoadingUsuarios(false);
+    }
+  };
+
+  const usuariosFiltrados = useMemo(() => {
+    if (!buscaUsuario.trim()) return usuariosDisponiveis;
+    const termo = buscaUsuario.toLowerCase();
+    return usuariosDisponiveis.filter(u =>
+      u.nome.toLowerCase().includes(termo) ||
+      (u.email || '').toLowerCase().includes(termo) ||
+      (u.perfil_nome || '').toLowerCase().includes(termo) ||
+      (u.cpf || '').includes(termo)
+    );
+  }, [usuariosDisponiveis, buscaUsuario]);
 
   const loadPolos = useCallback(async (searchQuery = '') => {
     if (!searchTriggeredRef.current) return;
@@ -252,7 +285,7 @@ export const PolosEscolasPage: React.FC = () => {
     return escolas.filter((escola) =>
       escola.nome.toLowerCase().includes(term)
       || (escola.endereco?.cidade || '').toLowerCase().includes(term)
-      || (escola.responsavel_nome || escola.secretario_nome || '').toLowerCase().includes(term)
+      || (escola.secretario_nome || '').toLowerCase().includes(term)
     );
   }, [escolas, escolaFilter]);
 
@@ -310,7 +343,7 @@ export const PolosEscolasPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <p className="mt-5 border-t border-slate-800 pt-4 text-sm text-slate-300">Coordenador: <b className="text-white">{polo.responsavel_nome || polo.coordenador_nome || 'Não informado'}</b></p>
+                <p className="mt-5 border-t border-slate-800 pt-4 text-sm text-slate-300">Coordenador: <b className="text-white">{polo.coordenador_nome || 'Não informado'}</b></p>
                 <button type="button" onClick={(e) => { e.stopPropagation(); setEditPolo(polo); }} className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Polo"> <Edit2 size={16} /></button>
                 <button onClick={() => void abrirPolo(polo.id)} className="mt-4 text-sm font-semibold text-blue-400 hover:text-blue-300">Ver detalhes, indicadores e escolas →</button>
               </article>)}
@@ -361,9 +394,9 @@ export const PolosEscolasPage: React.FC = () => {
                   <h3 className="text-base font-bold text-white">Coordenador Responsável</h3>
                 </div>
                 <div className="space-y-4">
-                  <InfoField label="Nome" value={selectedPolo.responsavel_nome || selectedPolo.coordenador_nome} />
-                  <InfoField label="CPF" value={selectedPolo.responsavel_cpf} />
-                  <InfoField label="E-mail" value={selectedPolo.responsavel_email || selectedPolo.coordenador_email} />
+                  <InfoField label="Nome" value={selectedPolo.coordenador_nome} />
+                  <InfoField label="CPF" value={selectedPolo.coordenador_cpf} />
+                  <InfoField label="E-mail" value={selectedPolo.coordenador_email} />
                 </div>
               </div>
             </div>
@@ -425,7 +458,7 @@ export const PolosEscolasPage: React.FC = () => {
                       <td className="p-4 font-semibold text-white"><School className="mr-2 inline text-indigo-400" size={16} />{escola.nome}</td>
                       <td className="p-4"><StatusBadge status={escola.status} /></td>
                       <td className="p-4">{escola.endereco?.cidade || '—'} / {escola.endereco?.estado || '--'}</td>
-                      <td className="p-4">{escola.responsavel_nome || escola.secretario_nome || 'Não informado'}</td>
+                      <td className="p-4">{escola.secretario_nome || 'Não informado'}</td>
                       <td className="p-4 text-right">
                         <button type="button" onClick={(event) => { event.stopPropagation(); abrirEscola(escola); }} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500">Detalhes</button>
                         <button type="button" onClick={(event) => { event.stopPropagation(); setEditEscola(escola); }} className="ml-2 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Escola"><Edit2 size={15} /></button>
@@ -481,9 +514,9 @@ export const PolosEscolasPage: React.FC = () => {
             <section>
               <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><UserCheck size={16} className="text-indigo-400" /> Responsável</h4>
               <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-800 bg-slate-950/50 p-4 sm:grid-cols-3">
-                <InfoField label="Nome" value={escolaSelecionada.responsavel_nome || escolaSelecionada.secretario_nome} />
-                <InfoField label="CPF" value={escolaSelecionada.responsavel_cpf} />
-                <InfoField label="E-mail" value={escolaSelecionada.responsavel_email || escolaSelecionada.secretario_email} />
+                <InfoField label="Nome" value={escolaSelecionada.secretario_nome} />
+                <InfoField label="CPF" value={escolaSelecionada.secretario_cpf} />
+                <InfoField label="E-mail" value={escolaSelecionada.secretario_email} />
               </div>
             </section>
 
@@ -531,13 +564,44 @@ export const PolosEscolasPage: React.FC = () => {
           {(['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'cep'] as const).map((key) => <input key={key} className={inputClass} required={key === 'cidade' || key === 'estado'} placeholder={key[0].toUpperCase() + key.slice(1)} value={(modal === 'polo' ? poloForm.endereco?.[key] : escolaForm.endereco?.[key]) || ''} onChange={(event) => updateAddress(modal, key, event.target.value)} />)}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {(['nome', 'cpf', 'email', 'senha'] as const).map((key) => {
-            const prefix = modal === 'polo' ? 'coordenador' : 'secretario';
-            const field = `${prefix}_${key}` as Exclude<keyof PoloCreatePayload, 'endereco'> & Exclude<keyof EscolaCreatePayload, 'endereco'>;
-            const form = modal === 'polo' ? poloForm : escolaForm;
-            return <input key={key} className={inputClass} required minLength={key === 'senha' ? 8 : undefined} type={key === 'senha' ? 'password' : 'text'} placeholder={key[0].toUpperCase() + key.slice(1)} value={form[field] || ''} onChange={(event) => modal === 'polo' ? setPoloForm({ ...poloForm, [field]: event.target.value }) : setEscolaForm({ ...escolaForm, [field]: event.target.value })} />
+          {modal === 'escola' && (['nome', 'cpf', 'email', 'senha'] as const).map((key) => {
+            const prefix = 'secretario';
+            const field = `${prefix}_${key}` as Exclude<keyof EscolaCreatePayload, 'endereco'>;
+            return <input key={key} className={inputClass} required minLength={key === 'senha' ? 8 : undefined} type={key === 'senha' ? 'password' : 'text'} placeholder={key[0].toUpperCase() + key.slice(1)} value={escolaForm[field] || ''} onChange={(event) => setEscolaForm({ ...escolaForm, [field]: event.target.value })} />;
           })}
         </div>
+        {modal === 'polo' && (
+          <div className="border-t border-slate-800 pt-4">
+            <label className="mb-1 block text-sm font-medium text-slate-300">Vincular Usuário Coordenador</label>
+            <input
+              className={inputClass}
+              placeholder="Buscar por nome, e-mail ou CPF..."
+              value={buscaUsuario}
+              onChange={(event) => setBuscaUsuario(event.target.value)}
+              disabled={loadingUsuarios}
+            />
+            <select
+              className={`${inputClass} mt-2`}
+              required
+              value={poloForm.coordenador_usuario_id || ''}
+              onChange={(event) => setPoloForm({ ...poloForm, coordenador_usuario_id: event.target.value })}
+              disabled={loadingUsuarios}
+              size={Math.min(usuariosFiltrados.length + 1, 8)}
+            >
+              <option value="">
+                {loadingUsuarios ? 'Carregando usuários...' : 'Selecione um usuário'}
+              </option>
+              {usuariosFiltrados.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nome} — {u.email || 'sem e-mail'}{u.perfil_nome ? ` (${u.perfil_nome})` : ''}
+                </option>
+              ))}
+            </select>
+            {buscaUsuario && usuariosFiltrados.length === 0 && !loadingUsuarios && (
+              <p className="mt-2 text-xs text-slate-500">Nenhum usuário encontrado para "{buscaUsuario}".</p>
+            )}
+          </div>
+        )}
         <div className="flex justify-end gap-2 pt-4">
           <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800">Cancelar</button>
           <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar'}</button>

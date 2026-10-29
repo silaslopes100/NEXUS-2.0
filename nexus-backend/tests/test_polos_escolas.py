@@ -196,20 +196,22 @@ async def test_list_polos_e_escolas_usam_carregamento_em_lote_de_usuarios(client
 
 
 @pytest.mark.asyncio
-async def test_polo_usa_responsavel_nome_quando_nao_ha_usuario_coordenador(client: AsyncClient, repos):
+async def test_polo_sem_coordenador_vinculado_expoe_coordenador_nulo(client: AsyncClient, repos):
     admin_token = _token("admin-1")
     _, polos_repo = repos
 
     polo_id = polos_repo.create_polo({
         "nome": "Polo Legacy",
-        "responsavel_nome": "Responsável Legacy",
-        "responsavel_email": "responsavel@legacy.com",
         "status": "ativo",
     })
 
     response = await client.get(f"/polos/{polo_id}", headers={"Authorization": f"Bearer {admin_token}"})
     assert response.status_code == 200, response.text
-    assert response.json()["coordenador_nome"] == "Responsável Legacy"
+    body = response.json()
+    assert body["coordenador_id"] is None
+    assert body["coordenador_nome"] is None
+    assert body["coordenador_cpf"] is None
+    assert body["coordenador_email"] is None
 
 
 @pytest.mark.asyncio
@@ -476,16 +478,16 @@ async def test_resumo_operacional_polo_e_escola(client: AsyncClient, repos):
 
 
 @pytest.mark.asyncio
-async def test_polo_e_escola_expoe_complemento_e_responsavel_cpf(client: AsyncClient, repos):
+async def test_polo_e_escola_expoe_complemento_e_dados_coordenador(client: AsyncClient, repos):
     admin_token = _token("admin-1")
 
     polo_payload = _polo_payload()
     polo_payload["endereco"]["complemento"] = "Sala 402"
     polo = (await client.post("/polos", json=polo_payload, headers={"Authorization": f"Bearer {admin_token}"})).json()
     assert polo["endereco"]["complemento"] == "Sala 402"
-    assert polo["responsavel_nome"] == "Carlos Coordenador"
-    assert polo["responsavel_cpf"] == "12345678900"
-    assert polo["responsavel_email"] == "coordenador@polo.com"
+    assert polo["coordenador_nome"] == "Carlos Coordenador"
+    assert polo["coordenador_cpf"] == "12345678900"
+    assert polo["coordenador_email"] == "coordenador@polo.com"
 
     escola = (
         await client.post(
@@ -502,6 +504,6 @@ async def test_polo_e_escola_expoe_complemento_e_responsavel_cpf(client: AsyncCl
         )
     ).json()
     assert escola["endereco"]["complemento"] == "Fundos"
-    assert escola["responsavel_nome"] == "Diretora Ana"
-    assert escola["responsavel_cpf"] == "22233344455"
-    assert escola["responsavel_email"] == "secretaria@escola.com"
+    assert escola["secretario_nome"] == "Diretora Ana"
+    assert escola["secretario_cpf"] == "22233344455"
+    assert escola["secretario_email"] == "secretaria@escola.com"

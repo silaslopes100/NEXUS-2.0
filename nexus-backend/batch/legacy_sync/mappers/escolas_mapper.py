@@ -39,15 +39,10 @@ class EscolaMapper(BaseMapper):
         return int(row["escola"])
 
     def map(self, row: dict) -> dict | None:
-        responsavel = " ".join(
-            p for p in (self.str_clean(row.get("first_name")), self.str_clean(row.get("last_name"))) if p
-        )
+        polo_id = self.registry.resolve("polos", "users", row.get("polo")) if self.registry else None
         return {
-            "polo_id": self.registry.resolve("polos", "users", row.get("polo")) if self.registry else None,
+            "polo_id": polo_id,
             "nome": self.str_clean(row.get("nome_escola")) or f"Escola {row['escola']}",
-            "responsavel_nome": responsavel or None,
-            "responsavel_cpf": self.str_clean(row.get("cpf"), 20),
-            "responsavel_email": self.str_clean(row.get("email"), 255),
             "cep": self.str_clean(row.get("cep"), 16),
             "logradouro": self.str_clean(row.get("logradouro"), 255),
             "numero": self.str_clean(row.get("numero"), 32),

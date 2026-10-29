@@ -98,7 +98,7 @@ _PERFIS_PROFESSOR = _PERFIS_ESCOLA + ["professor"]
     dependencies=[Depends(require_role(["admin", "secretario_geral", "coordenador_polo"]))],
 )
 async def list_usuarios_vinculaveis(
-    perfil: str = Query(..., description="Perfil do usuário (coordenador_polo, secretario_escola)"),
+    perfil: Optional[str] = Query(None, description="Perfil do usuário (opcional; ex: coordenador_polo, secretario_escola). Se omitido, lista todos."),
     q: Optional[str] = Query(None, description="Busca por nome, sobrenome, e-mail ou CPF"),
     polo_id: Optional[str] = Query(None, description="Filtra por polo atualmente vinculado"),
     escola_id: Optional[str] = Query(None, description="Filtra por escola atualmente vinculada"),

@@ -11,11 +11,9 @@ export interface EnderecoCompleto {
 export interface PoloItem {
   id: string;
   nome: string;
-  responsavel_nome?: string;
-  responsavel_cpf?: string;
-  responsavel_email?: string;
   coordenador_id?: string;
   coordenador_nome?: string;
+  coordenador_cpf?: string;
   coordenador_email?: string;
   endereco: EnderecoCompleto;
   status: string;
@@ -29,10 +27,8 @@ export interface EscolaItem {
   nome: string;
   secretario_id?: string;
   secretario_nome?: string;
+  secretario_cpf?: string;
   secretario_email?: string;
-  responsavel_nome?: string;
-  responsavel_cpf?: string;
-  responsavel_email?: string;
   endereco: EnderecoCompleto;
   status: string;
   total_turmas?: number;
@@ -50,10 +46,7 @@ export interface PaginacaoResponse<T> {
 export interface PoloCreatePayload {
   nome: string;
   endereco?: EnderecoCompleto;
-  coordenador_nome: string;
-  coordenador_cpf: string;
-  coordenador_email: string;
-  coordenador_senha: string;
+  coordenador_usuario_id?: string; // Usuário existente a ser vinculado como coordenador
 }
 
 export interface EscolaCreatePayload {

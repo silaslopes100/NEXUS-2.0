@@ -19,6 +19,7 @@ export interface PoloItem {
   status: string;
   coordenador_id?: string | null;
   coordenador_nome?: string | null;
+  coordenador_cpf?: string | null;
   coordenador_email?: string | null;
 }
 
@@ -53,24 +54,31 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
     endereco: polo.endereco || emptyAddress,
     status: polo.status || 'ativo',
     coordenador_usuario_id: polo.coordenador_id || '',
-    coordenador_nome: polo.coordenador_nome || '',
-    coordenador_email: polo.coordenador_email || '',
-    coordenador_cpf: '',
-    coordenador_senha: '',
   });
 
   const [usuarios, setUsuarios] = useState<UsuarioVinculavel[]>([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [buscaUsuario, setBuscaUsuario] = useState('');
+
+  const usuariosFiltrados = React.useMemo(() => {
+    if (!buscaUsuario.trim()) return usuarios;
+    const termo = buscaUsuario.toLowerCase();
+    return usuarios.filter(u =>
+      u.nome.toLowerCase().includes(termo) ||
+      (u.sobrenome || '').toLowerCase().includes(termo) ||
+      (u.email || '').toLowerCase().includes(termo) ||
+      (u.cpf || '').includes(termo)
+    );
+  }, [usuarios, buscaUsuario]);
 
   useEffect(() => {
     const fetchUsuarios = async () => {
       setLoadingUsuarios(true);
       try {
         const resp = await polosEscolasApi.listarUsuariosVinculaveis({
-          perfil: 'coordenador_polo',
-          limit: 200,
+          limit: 500,
         });
         setUsuarios(resp.items || []);
       } catch (err) {
@@ -106,10 +114,6 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
       if (form.coordenador_usuario_id) {
         payload.coordenador_usuario_id = form.coordenador_usuario_id;
       }
-      if (form.coordenador_nome) payload.coordenador_nome = form.coordenador_nome;
-      if (form.coordenador_email) payload.coordenador_email = form.coordenador_email;
-      if (form.coordenador_cpf) payload.coordenador_cpf = form.coordenador_cpf;
-      if (form.coordenador_senha) payload.coordenador_senha = form.coordenador_senha;
 
       await polosEscolasApi.atualizarPolo(polo.id, payload);
       onSuccess();
@@ -179,72 +183,39 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
 
           <div className="border-t border-slate-800 pt-4">
             <h3 className="mb-3 text-sm font-semibold text-slate-300">Coordenador Responsável</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-300">
-                  Vincular Usuário Existente
-                </label>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-300">Vincular Usuário Existente</label>
+                <input
+                  type="text"
+                  placeholder="Buscar por nome, e-mail ou CPF..."
+                  value={buscaUsuario}
+                  onChange={(e) => setBuscaUsuario(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                  disabled={loadingUsuarios}
+                />
                 <select
                   value={form.coordenador_usuario_id}
                   onChange={(e) => {
                     const userId = e.target.value;
-                    const user = usuarios.find((u) => u.id === userId);
-                    setForm((prev) => ({
-                      ...prev,
-                      coordenador_usuario_id: userId,
-                      coordenador_nome: user?.nome || prev.coordenador_nome,
-                      coordenador_email: user?.email || prev.coordenador_email,
-                    }));
+                    setForm((prev) => ({ ...prev, coordenador_usuario_id: userId }));
                   }}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   disabled={loadingUsuarios}
+                  size={Math.min(usuariosFiltrados.length + 1, 8)}
                 >
-                  <option value="">Selecione um usuário (coordenador_polo)</option>
-                  {usuarios.map((user) => (
+                  <option value="">
+                    {loadingUsuarios ? 'Carregando usuários...' : 'Selecione um usuário'}
+                  </option>
+                  {usuariosFiltrados.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.nome} {user.sobrenome} ({user.email})
+                      {user.nome} {user.sobrenome} — {user.email || 'sem e-mail'}{user.perfil_nome ? ` (${user.perfil_nome})` : ''}
                     </option>
                   ))}
                 </select>
-                {loadingUsuarios && <p className="mt-1 text-xs text-slate-500">Carregando usuários...</p>}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">Nome do Coordenador</label>
-                <input
-                  type="text"
-                  value={form.coordenador_nome}
-                  onChange={(e) => handleChange('coordenador_nome', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">E-mail do Coordenador</label>
-                <input
-                  type="email"
-                  value={form.coordenador_email}
-                  onChange={(e) => handleChange('coordenador_email', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">CPF do Coordenador</label>
-                <input
-                  type="text"
-                  value={form.coordenador_cpf}
-                  onChange={(e) => handleChange('coordenador_cpf', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">Nova Senha (opcional)</label>
-                <input
-                  type="password"
-                  value={form.coordenador_senha}
-                  onChange={(e) => handleChange('coordenador_senha', e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
-                  placeholder="Deixe em branco para manter"
-                />
+                {buscaUsuario && usuariosFiltrados.length === 0 && !loadingUsuarios && (
+                  <p className="mt-2 text-xs text-slate-500">Nenhum usuário encontrado para "{buscaUsuario}".</p>
+                )}
               </div>
             </div>
           </div>

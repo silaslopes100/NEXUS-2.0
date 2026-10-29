@@ -38,7 +38,7 @@ class PolosEscolasRepositoryInterface(Protocol):
     # NOVO: lista usuários de um perfil específico para vincular a Polos/Escolas
     def list_usuarios_por_perfil(
         self,
-        perfil_nome: str,
+        perfil_nome: Optional[str] = None,
         q: Optional[str] = None,
         polo_id: Optional[str] = None,
         escola_id: Optional[str] = None,
@@ -284,29 +284,32 @@ class PostgresPolosEscolasRepository:
                 tuple(params),
             )
 
-    # NOVO: lista usuários de um perfil para vinculação
+    # NOVO: lista usuários para vinculação (perfil opcional - quando None, lista todos)
     def list_usuarios_por_perfil(
         self,
-        perfil_nome: str,
+        perfil_nome: Optional[str] = None,
         q: Optional[str] = None,
         polo_id: Optional[str] = None,
         escola_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        conds = ["lower(p.nome) = lower(%s)"]
-        params: List[Any] = [perfil_nome]
+        conds: List[str] = []
+        params: List[Any] = []
+        if perfil_nome:
+            conds.append("lower(p.nome) = lower(%s)")
+            params.append(perfil_nome)
         if q:
-            conds.append("(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s)")
+            conds.append("(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s OR lower(u.cpf) LIKE %s)")
             like = f"%{q.lower()}%"
-            params.extend([like, like])
+            params.extend([like, like, like])
         if polo_id:
             conds.append("u.polo_id = %s")
             params.append(str(polo_id))
         if escola_id:
             conds.append("u.escola_id = %s")
             params.append(str(escola_id))
-        where = "WHERE " + " AND ".join(conds)
+        where = "WHERE " + " AND ".join(conds) if conds else ""
         with get_db_cursor() as cur:
             cur.execute(
                 f"""
@@ -340,9 +343,8 @@ class PostgresPolosEscolasRepository:
                 """
                 INSERT INTO polos (
                     id, nome, logradouro, numero, complemento, bairro, cidade, uf, cep,
-                    responsavel_nome, responsavel_cpf, responsavel_email,
                     coordenador_usuario_id, status, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
@@ -354,9 +356,6 @@ class PostgresPolosEscolasRepository:
                     data.get("cidade", ""),
                     data.get("estado", ""),
                     data.get("cep", ""),
-                    data.get("responsavel_nome"),
-                    data.get("responsavel_cpf"),
-                    data.get("responsavel_email"),
                     data.get("coordenador_usuario_id"),
                     data.get("status", "ativo"),
                 ),
@@ -409,9 +408,8 @@ class PostgresPolosEscolasRepository:
                 """
                 INSERT INTO escolas (
                     id, polo_id, nome, logradouro, numero, complemento, bairro, cidade, uf, cep,
-                    responsavel_nome, responsavel_cpf, responsavel_email,
                     status, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
@@ -424,9 +422,6 @@ class PostgresPolosEscolasRepository:
                     data.get("cidade", ""),
                     data.get("estado", ""),
                     data.get("cep", ""),
-                    data.get("responsavel_nome"),
-                    data.get("responsavel_cpf"),
-                    data.get("responsavel_email"),
                     data.get("status", "ativo"),
                 ),
             )
@@ -1533,18 +1528,20 @@ class InMemoryPolosEscolasRepository:
     # NOVO: lista usuários de um perfil para vinculação
     def list_usuarios_por_perfil(
         self,
-        perfil_nome: str,
+        perfil_nome: Optional[str] = None,
         q: Optional[str] = None,
         polo_id: Optional[str] = None,
         escola_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        perfil_id = self.perfis.get(perfil_nome.lower().strip())
-        items = [u for u in self.usuarios.values() if u.get("perfil_id") == perfil_id]
+        items = list(self.usuarios.values())
+        if perfil_nome:
+            perfil_id = self.perfis.get(perfil_nome.lower().strip())
+            items = [u for u in items if u.get("perfil_id") == perfil_id]
         if q:
             ql = q.lower()
-            items = [u for u in items if ql in (u.get("nome", "") + u.get("email", "")).lower()]
+            items = [u for u in items if ql in (u.get("nome", "") + u.get("email", "") + (u.get("cpf") or "")).lower()]
         if polo_id:
             items = [u for u in items if str(u.get("polo_id")) == str(polo_id)]
         if escola_id:

@@ -68,29 +68,55 @@ FULL_LOAD_ORDER = [
 POST_STEPS = [("historico_unificado (maior nota)", compute_historico)]
 
 
-def link_polo_coordenadores(target) -> None:
+def link_polo_coordenadores(source, target) -> None:
     """Vincula cada polo ao usuario legado role 2 com o mesmo CPF.
 
-    O passo roda depois de `UsuarioMapper`, quando o id legado do coordenador
-    já foi convertido para UUID no destino. O UPDATE é idempotente.
+    O CPF do coordenador vem da origem MySQL (`users` role_id=3, cuja linha
+    originou o polo; mapeado via `polos.legacy_id`). O usuario migrado com
+    perfil legado role 2 e vinculado quando os CPFs coincidem. Idempotente.
     """
-    target.execute(
-        """
-        UPDATE polos AS p
-        SET coordenador_usuario_id = u.id,
-            atualizado_em = now()
-        FROM usuarios AS u
-        JOIN perfis AS perfil ON perfil.id = u.perfil_id
-        WHERE p.responsavel_cpf IS NOT NULL
-          AND u.cpf = p.responsavel_cpf
-          AND perfil.legacy_table = 'role'
-          AND perfil.legacy_id = 2
-        """
-    )
+    # 1. CPF dos coordenadores legados (origem MySQL, users role_id = 3)
+    cpf_por_polo: dict[int, str] = {}
+    for u3 in source.stream("users", ["id", "cpf"], where="role_id = 3"):
+        cpf = (u3.get("cpf") or "").strip()
+        if cpf:
+            cpf_por_polo[int(u3["id"])] = cpf
+    if not cpf_por_polo:
+        logger.warning("Nenhum CPF de coordenador na origem; pulando vinculo polo/coordenador")
+        return
+
+    # 2. Mapa CPF -> usuario migrado (perfil legado role 2 = coordenador)
+    with target.conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT u.cpf, u.id
+            FROM usuarios u
+            JOIN perfis perfil ON perfil.id = u.perfil_id
+            WHERE u.cpf IS NOT NULL
+              AND perfil.legacy_table = 'role'
+              AND perfil.legacy_id = 2
+            """
+        )
+        usuarios_por_cpf = {r[0]: r[1] for r in cur.fetchall() if r[0]}
+
+    # 3. Vincula os polos cujo legado tem coordenador com CPF correspondente
+    updates = 0
+    with target.conn.cursor() as cur:
+        cur.execute("SELECT legacy_id, id FROM polos WHERE legacy_id IS NOT NULL")
+        for legacy_id, polo_id in cur.fetchall():
+            cpf = cpf_por_polo.get(int(legacy_id))
+            if not cpf:
+                continue
+            coord_id = usuarios_por_cpf.get(cpf)
+            if not coord_id:
+                continue
+            cur.execute(
+                "UPDATE polos SET coordenador_usuario_id = %s, atualizado_em = now() WHERE id = %s",
+                (coord_id, polo_id),
+            )
+            updates += cur.rowcount
     target.commit()
-
-
-POST_STEPS.insert(0, ("vinculo polo/coordenador por CPF", link_polo_coordenadores))
+    logger.info("coordenador vinculado em %d polos", updates)
 
 
 def update_escolas_polo_id(source, target) -> None:
@@ -152,6 +178,10 @@ def run_full_load(source, target, registry, run_log, runner, only: str | None = 
     for nome, step in POST_STEPS:
         logger.info("Passo pos-migracao: %s", nome)
         step(target)
+
+    # Passos que precisam do source MySQL
+    if not only or "PoloMapper".lower() == only.lower():
+        link_polo_coordenadores(source, target)
 
     # Passo extra: atualiza polo_id das escolas (precisa do source MySQL)
     if not only or "EscolaLegacyMapper".lower() == only.lower():

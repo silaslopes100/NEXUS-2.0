@@ -78,7 +78,7 @@ export const polosEscolasApi = {
 
   // ---------- Vinculação de usuários (NOVO) ----------
   listarUsuariosVinculaveis: async (params: {
-    perfil: 'coordenador_polo' | 'secretario_escola';
+    perfil?: string; // Opcional: quando omitido, lista todos os usuários
     q?: string;
     polo_id?: string;
     escola_id?: string;

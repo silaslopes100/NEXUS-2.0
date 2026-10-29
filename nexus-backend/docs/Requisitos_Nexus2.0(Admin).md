@@ -41,25 +41,25 @@ Permissões granulares (chaves): `p_dashboard`, `p_alunos`, `p_polos`, `p_escola
 Os dados de cadastro do **Responsável do Polo** devem ser **os mesmos** do **Coordenador do Polo**. **NÃO** deve existir cadastro separado na sessão "Usuários e Staff". Isso evita confusão e duplicidade para o usuário.
 
 **Implicações:**
-- Ao criar um Polo, os campos `responsavel`, `cpf`, `email`, `endereco` e `senha` cadastrados são automaticamente usados para criar o **usuário coordenador** com perfil `coordenador_polo`.
+- Ao criar um Polo, os campos `coordenador_nome`, `coordenador_cpf`, `coordenador_email`, `endereco` e `coordenador_senha` cadastrados são automaticamente usados para criar o **usuário coordenador** com perfil `coordenador_polo`.
 - O usuário coordenador aparece em "Usuários e Staff" apenas como **reflexo** (read-only ou com edição controlada), nunca como um cadastro independente.
-- Ao editar o Polo, os dados do responsável/coordenador são sincronizados automaticamente (nome, CPF, e-mail, senha).
+- Ao editar o Polo, os dados do responsável/coordenador são sincronizados automaticamente (nome, CPF, e-mail, senha). O **usuário coordenador vinculado** (`polos.coordenador_usuario_id`) é a fonte de verdade desses dados — a tabela `polos` não possui mais colunas `responsavel_*`.
 - Ao excluir o Polo, o usuário coordenador vinculado também é desativado/excluído.
 - A sessão "Usuários e Staff" deve **ocultar** usuários cujo perfil seja `coordenador_polo` e que já tenham vínculo com um polo, OU exibi-los com aviso "Gerenciado via cadastro do Polo".
-- **O mesmo raciocínio se aplica ao Secretário de Escola:** os dados de cadastro da Escola (responsável, CPF, e-mail, endereço, senha) criam automaticamente o usuário `secretario_escola`. Não deve haver cadastro duplicado em "Usuários e Staff".
+- **O mesmo raciocínio se aplica ao Secretário de Escola:** os dados de cadastro da Escola (`secretario_nome`, `secretario_cpf`, `secretario_email`, endereço, `secretario_senha`) criam automaticamente o usuário `secretario_escola`, vinculado via `usuarios.escola_id`. Não deve haver cadastro duplicado em "Usuários e Staff".
 
 **Exemplo prático:**
-POST /admin/polos
+POST /polos
 {
 "nome": "Polo São Paulo Centro",
-"responsavel": "João Silva",
-"cpf": "123.456.789-00",
-"email": "joao@polosp.com.br",
-"endereco": "Rua X, 123 - SP",
-"senha": "senhaSegura123"
+"coordenador_nome": "João Silva",
+"coordenador_cpf": "12345678900",
+"coordenador_email": "joao@polosp.com.br",
+"endereco": {"logradouro": "Rua X", "numero": "123", "estado": "SP"},
+"coordenador_senha": "senhaSegura123"
 }
-→ Cria registro em polos
-→ Cria usuário em usuarios com perfil coordenador_polo, vinculado ao polo
+→ Cria registro em polos (sem dados do responsável; tudo vem do usuário vinculado)
+→ Cria usuário em usuarios com perfil coordenador_polo, vinculado ao polo via polos.coordenador_usuario_id
 → NÃO é necessário chamar POST /admin/usuarios
 
 

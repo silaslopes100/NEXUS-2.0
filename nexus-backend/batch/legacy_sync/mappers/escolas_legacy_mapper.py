@@ -15,7 +15,6 @@ class EscolaLegacyMapper(BaseMapper):
     source_table: ClassVar[str] = "users"
     source_columns: ClassVar[list[str]] = [
         "id", "role_id", "escolas", "nome_escola", "polo",
-        "first_name", "last_name", "email", "cpf",
         "cep", "logradouro", "numero", "bairro", "cidade", "uf", "complemento",
     ]
     target_table: ClassVar[str] = "escolas"
@@ -48,8 +47,8 @@ class EscolaLegacyMapper(BaseMapper):
 
             placeholders = ",".join(["%s"] * len(escola_ids))
             sql = f"""
-                SELECT u4.escola_old, u4.nome_escola, u4.first_name, u4.last_name,
-                       u4.email, u4.cpf, u4.cep, u4.logradouro, u4.numero,
+                SELECT u4.escola_old, u4.nome_escola,
+                       u4.cep, u4.logradouro, u4.numero,
                        u4.bairro, u4.cidade, u4.uf, u4.complemento
                 FROM `users` u4
                 WHERE u4.role_id = 4
@@ -71,10 +70,6 @@ class EscolaLegacyMapper(BaseMapper):
                     "escolas": u3["escolas"],
                     "nome_escola": u4["nome_escola"],
                     "polo": u3["polo"],
-                    "first_name": u4["first_name"],
-                    "last_name": u4["last_name"],
-                    "email": u4["email"],
-                    "cpf": u4["cpf"],
                     "cep": u4["cep"],
                     "logradouro": u4["logradouro"],
                     "numero": u4["numero"],
@@ -83,10 +78,6 @@ class EscolaLegacyMapper(BaseMapper):
                     "uf": u4["uf"],
                     "complemento": u4["complemento"],
                     "escola_old": u4["escola_old"],
-                    "_u3_first_name": u3["first_name"],
-                    "_u3_last_name": u3["last_name"],
-                    "_u3_cpf": u3["cpf"],
-                    "_u3_email": u3["email"],
                     "_u3_cep": u3["cep"],
                     "_u3_logradouro": u3["logradouro"],
                     "_u3_numero": u3["numero"],
@@ -100,21 +91,6 @@ class EscolaLegacyMapper(BaseMapper):
     def map(self, row: dict) -> dict | None:
         polo_id = self.registry.resolve("polos", "teo-eadetademp.users", row["id"]) if self.registry else None
 
-        u4_fn = self.str_clean(row.get("first_name"))
-        u4_ln = self.str_clean(row.get("last_name"))
-        is_generic = (u4_fn == "Escola" and u4_ln == "Gestor")
-
-        if is_generic:
-            responsavel_nome = " ".join(
-                p for p in (self.str_clean(row.get("_u3_first_name")), self.str_clean(row.get("_u3_last_name"))) if p
-            )
-            responsavel_cpf = self.str_clean(row.get("_u3_cpf"), 20)
-            responsavel_email = self.str_clean(row.get("_u3_email"), 255)
-        else:
-            responsavel_nome = " ".join(p for p in (u4_fn, u4_ln) if p)
-            responsavel_cpf = self.str_clean(row.get("cpf"), 20)
-            responsavel_email = self.str_clean(row.get("email"), 255)
-
         def pick(u4_key: str, u3_key: str) -> str | None:
             val = self.str_clean(row.get(u4_key))
             if val:
@@ -124,9 +100,6 @@ class EscolaLegacyMapper(BaseMapper):
         return {
             "polo_id": polo_id,
             "nome": self.str_clean(row.get("nome_escola")) or f"Escola {row['escola_old']}",
-            "responsavel_nome": responsavel_nome or None,
-            "responsavel_cpf": responsavel_cpf,
-            "responsavel_email": responsavel_email,
             "cep": pick("cep", "_u3_cep"),
             "logradouro": pick("logradouro", "_u3_logradouro"),
             "numero": pick("numero", "_u3_numero"),

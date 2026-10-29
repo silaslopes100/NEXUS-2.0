@@ -11,7 +11,7 @@ from typing import ClassVar
 from .base import BaseMapper
 
 USERS_POLO_COLS = [
-    "id", "role_id", "polo", "nome_polo", "first_name", "last_name", "email", "cpf",
+    "id", "role_id", "polo", "nome_polo",
     "cep", "logradouro", "numero", "bairro", "cidade", "uf", "complemento",
     "telefone", "status",
 ]
@@ -33,9 +33,6 @@ class PoloMapper(BaseMapper):
     def map(self, row: dict) -> dict | None:
         return {
             "nome": self.str_clean(row.get("nome_polo")) or f"Polo {row['id']}",
-            "responsavel_nome": self.str_clean(row.get("first_name"), 255),
-            "responsavel_cpf": self.str_clean(row.get("cpf"), 20),
-            "responsavel_email": self.str_clean(row.get("email"), 255),
             "cep": self.str_clean(row.get("cep"), 16),
             "logradouro": self.str_clean(row.get("logradouro"), 255),
             "numero": self.str_clean(row.get("numero"), 32),

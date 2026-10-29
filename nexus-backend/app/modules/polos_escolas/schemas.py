@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 # =========================================================================
@@ -30,14 +30,30 @@ class EnderecoSchema(BaseModel):
 # =========================================================================
 
 class PoloCreateRequest(BaseModel):
-    """Cria o Polo e, na mesma transação, o usuário coordenador (RN-01)."""
+    """Cria o Polo. O coordenador pode ser um usuário existente (coordenador_usuario_id)
+    ou criado automaticamente a partir dos campos manuais (coordenador_*)."""
 
     nome: str = Field(min_length=2)
     endereco: Optional[EnderecoSchema] = None
-    coordenador_nome: str = Field(min_length=1)
-    coordenador_cpf: str = Field(min_length=11, max_length=14)
-    coordenador_email: EmailStr
-    coordenador_senha: str = Field(min_length=8)
+
+    # Opção 1: vincular usuário existente (promovido a coordenador_polo se necessário)
+    coordenador_usuario_id: Optional[str] = None
+
+    # Opção 2: criar novo usuário coordenador (campos manuais)
+    coordenador_nome: Optional[str] = None
+    coordenador_cpf: Optional[str] = None
+    coordenador_email: Optional[EmailStr] = None
+    coordenador_senha: Optional[str] = Field(default=None, min_length=8)
+
+    @model_validator(mode="after")
+    def _validar_coordenador(self):
+        # Normaliza strings vazias vindas do frontend para None
+        if self.coordenador_usuario_id is not None and not self.coordenador_usuario_id.strip():
+            self.coordenador_usuario_id = None
+        if not self.coordenador_usuario_id:
+            if not (self.coordenador_nome and self.coordenador_cpf and self.coordenador_email and self.coordenador_senha):
+                raise ValueError("Informe 'coordenador_usuario_id' OU os campos 'coordenador_nome', 'coordenador_cpf', 'coordenador_email' e 'coordenador_senha'")
+        return self
 
 
 class PoloUpdateRequest(BaseModel):
@@ -66,10 +82,8 @@ class PoloResponse(BaseModel):
     status: str = "ativo"
     coordenador_id: Optional[str] = None
     coordenador_nome: Optional[str] = None
+    coordenador_cpf: Optional[str] = None
     coordenador_email: Optional[str] = None
-    responsavel_nome: Optional[str] = None
-    responsavel_cpf: Optional[str] = None
-    responsavel_email: Optional[str] = None
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
 
@@ -126,10 +140,8 @@ class EscolaResponse(BaseModel):
     status: str = "ativo"
     secretario_id: Optional[str] = None
     secretario_nome: Optional[str] = None
+    secretario_cpf: Optional[str] = None
     secretario_email: Optional[str] = None
-    responsavel_nome: Optional[str] = None
-    responsavel_cpf: Optional[str] = None
-    responsavel_email: Optional[str] = None
     total_turmas: int = 0
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None

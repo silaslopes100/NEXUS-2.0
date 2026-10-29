@@ -20,6 +20,7 @@ export interface EscolaItem {
   status: string;
   secretario_id?: string | null;
   secretario_nome?: string | null;
+  secretario_cpf?: string | null;
   secretario_email?: string | null;
 }
 
@@ -67,7 +68,7 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
     secretario_usuario_id: escola.secretario_id || '',
     secretario_nome: escola.secretario_nome || '',
     secretario_email: escola.secretario_email || '',
-    secretario_cpf: '',
+    secretario_cpf: escola.secretario_cpf || '',
     secretario_senha: '',
   });
 

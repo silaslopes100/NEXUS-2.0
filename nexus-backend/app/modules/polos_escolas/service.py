@@ -124,9 +124,9 @@ class PolosEscolasService:
         if coord_id:
             usuarios_por_id = usuarios_por_id or {}
             coordenador = usuarios_por_id.get(str(coord_id))
-
-        coordenador_nome = polo.get("responsavel_nome") or (coordenador.get("nome") if coordenador else None)
-        coordenador_email = (coordenador.get("email") if coordenador else None) or polo.get("responsavel_email")
+            if coordenador is None:
+                # get_polo (sem mapa em lote) carrega o coordenador sob demanda
+                coordenador = self.repo.get_usuario_by_id(str(coord_id))
 
         return PoloResponse(
             id=str(polo["id"]),
@@ -134,11 +134,9 @@ class PolosEscolasService:
             endereco=self._endereco_from(polo),
             status=polo.get("status", "ativo"),
             coordenador_id=str(coord_id) if coord_id else None,
-            coordenador_nome=coordenador_nome,
-            coordenador_email=coordenador_email,
-            responsavel_nome=coordenador.get("nome") if coordenador else polo.get("responsavel_nome"),
-            responsavel_cpf=coordenador.get("cpf") if coordenador and coordenador.get("cpf") else polo.get("responsavel_cpf"),
-            responsavel_email=coordenador.get("email") if coordenador else polo.get("responsavel_email"),
+            coordenador_nome=coordenador.get("nome") if coordenador else None,
+            coordenador_cpf=coordenador.get("cpf") if coordenador else None,
+            coordenador_email=coordenador.get("email") if coordenador else None,
             criado_em=polo.get("criado_em"),
             atualizado_em=polo.get("atualizado_em"),
         )
@@ -162,10 +160,8 @@ class PolosEscolasService:
             status=escola.get("status", "ativo"),
             secretario_id=str(sec_id) if sec_id else None,
             secretario_nome=secretario_nome,
+            secretario_cpf=secretario_cpf,
             secretario_email=secretario_email,
-            responsavel_nome=secretario_nome or escola.get("responsavel_nome"),
-            responsavel_cpf=secretario_cpf or escola.get("responsavel_cpf"),
-            responsavel_email=secretario_email or escola.get("responsavel_email"),
             total_turmas=int(escola.get("total_turmas") or 0),
             criado_em=escola.get("criado_em"),
             atualizado_em=escola.get("atualizado_em"),
@@ -188,8 +184,6 @@ class PolosEscolasService:
     # ------------------------------------------------------------------
 
     def create_polo(self, dados: PoloCreateRequest, actor_id: Optional[str], ip: Optional[str]) -> PoloResponse:
-        self._validar_email_cpf_unicos(dados.coordenador_email, dados.coordenador_cpf)
-
         perfil_id = self.repo.get_perfil_id_by_nome("coordenador_polo")
         if not perfil_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Perfil 'coordenador_polo' não configurado")
@@ -205,24 +199,49 @@ class PolosEscolasService:
                 "cidade": endereco.cidade,
                 "estado": endereco.estado,
                 "cep": endereco.cep,
-                "responsavel_nome": dados.coordenador_nome,
-                "responsavel_cpf": dados.coordenador_cpf,
-                "responsavel_email": dados.coordenador_email,
             }
         )
 
-        coordenador_id = self.repo.create_usuario(
-            {
-                "nome": dados.coordenador_nome,
-                "email": dados.coordenador_email,
-                "cpf": dados.coordenador_cpf,
-                "senha_hash": hash_password(dados.coordenador_senha),
-                "senha_algoritmo": "argon2id",
-                "perfil_id": perfil_id,
-                "polo_id": polo_id,
-            }
-        )
-        self.repo.update_polo(polo_id, {"coordenador_usuario_id": coordenador_id})
+        coordenador_id: Optional[str] = None
+
+        if dados.coordenador_usuario_id:
+            # Vincula usuário existente; promove ao perfil coordenador_polo se necessário
+            coord = self.repo.get_usuario_by_id(dados.coordenador_usuario_id)
+            if not coord:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail="Usuário coordenador informado não encontrado",
+                )
+            # Bloqueia apenas se o usuário já for COORDENADOR de outro polo.
+            # (Ter polo_id comum — aluno, professor — não impede a promoção.)
+            ja_eh_coordenador = coord.get("perfil_id") == perfil_id
+            if ja_eh_coordenador and coord.get("polo_id") and str(coord["polo_id"]) != str(polo_id):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail="Usuário já é coordenador de outro polo",
+                )
+            # Promove ao perfil coordenador_polo se ainda não tiver
+            if coord.get("perfil_id") != perfil_id:
+                self.repo.update_usuario(str(coord["id"]), {"perfil_id": perfil_id})
+            # Vincula o usuário ao polo
+            self.repo.update_usuario(str(coord["id"]), {"polo_id": polo_id})
+            self.repo.update_polo(polo_id, {"coordenador_usuario_id": str(coord["id"])})
+            coordenador_id = str(coord["id"])
+        else:
+            # Cria novo usuário coordenador a partir dos campos manuais
+            self._validar_email_cpf_unicos(dados.coordenador_email, dados.coordenador_cpf)
+            coordenador_id = self.repo.create_usuario(
+                {
+                    "nome": dados.coordenador_nome,
+                    "email": dados.coordenador_email,
+                    "cpf": dados.coordenador_cpf,
+                    "senha_hash": hash_password(dados.coordenador_senha),
+                    "senha_algoritmo": "argon2id",
+                    "perfil_id": perfil_id,
+                    "polo_id": polo_id,
+                }
+            )
+            self.repo.update_polo(polo_id, {"coordenador_usuario_id": coordenador_id})
 
         self.repo.record_audit_log(
             usuario_id=actor_id,
@@ -249,14 +268,6 @@ class PolosEscolasService:
         if dados.status is not None:
             update_dict["status"] = dados.status
 
-        # Sincroniza colunas responsavel_* (tabela polos) com os dados do coordenador
-        if dados.coordenador_nome is not None:
-            update_dict["responsavel_nome"] = dados.coordenador_nome
-        if dados.coordenador_cpf is not None:
-            update_dict["responsavel_cpf"] = dados.coordenador_cpf
-        if dados.coordenador_email is not None:
-            update_dict["responsavel_email"] = dados.coordenador_email
-
         # NOVO: trocar/vincular usuário coordenador
         if dados.coordenador_usuario_id:
             novo_coord = self.repo.get_usuario_by_id(dados.coordenador_usuario_id)
@@ -266,6 +277,10 @@ class PolosEscolasService:
                     detail="Usuário coordenador informado não encontrado",
                 )
             update_dict["coordenador_usuario_id"] = dados.coordenador_usuario_id
+            # Promove ao perfil coordenador_polo se necessário
+            perfil_id = self.repo.get_perfil_id_by_nome("coordenador_polo")
+            if perfil_id and novo_coord.get("perfil_id") != perfil_id:
+                self.repo.update_usuario(str(novo_coord["id"]), {"perfil_id": perfil_id})
 
         if update_dict:
             self.repo.update_polo(polo_id, update_dict)
@@ -362,9 +377,6 @@ class PolosEscolasService:
                 "cidade": endereco.cidade,
                 "estado": endereco.estado,
                 "cep": endereco.cep,
-                "responsavel_nome": dados.secretario_nome,
-                "responsavel_cpf": dados.secretario_cpf,
-                "responsavel_email": dados.secretario_email,
             }
         )
 
@@ -405,14 +417,6 @@ class PolosEscolasService:
             update_dict.update(dados.endereco.model_dump())
         if dados.status is not None:
             update_dict["status"] = dados.status
-
-        # Sincroniza colunas responsavel_* (tabela escolas) com os dados do secretário
-        if dados.secretario_nome is not None:
-            update_dict["responsavel_nome"] = dados.secretario_nome
-        if dados.secretario_cpf is not None:
-            update_dict["responsavel_cpf"] = dados.secretario_cpf
-        if dados.secretario_email is not None:
-            update_dict["responsavel_email"] = dados.secretario_email
 
         # NOVO: mover escola para outro polo
         if dados.polo_id is not None:
@@ -497,7 +501,7 @@ class PolosEscolasService:
 
     def list_usuarios_vinculaveis(
         self,
-        perfil_nome: str,
+        perfil_nome: Optional[str] = None,
         q: Optional[str] = None,
         polo_id: Optional[str] = None,
         escola_id: Optional[str] = None,
