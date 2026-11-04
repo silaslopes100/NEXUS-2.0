@@ -81,7 +81,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Cursos & Matrizes',
           path: '/admin/cursos',
           icon: BookOpen,
-          isPlaceholder: true,
         },
         {
           title: 'Disciplinas & AVA',
@@ -219,6 +218,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Building2,
           isPlaceholder: true,
         },
+        {
+          title: 'Cursos',
+          path: '/polo/cursos',
+          icon: BookOpen,
+        },
       ],
     },
     {
@@ -300,6 +304,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Dashboard da Escola',
           path: '/escola/dashboard',
           icon: LayoutDashboard,
+        },
+        {
+          title: 'Cursos',
+          path: '/escola/cursos',
+          icon: BookOpen,
         },
         {
           title: 'Meus Alunos',

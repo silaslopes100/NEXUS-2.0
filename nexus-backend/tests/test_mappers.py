@@ -7,8 +7,16 @@ from batch.legacy_sync.mappers.matriculas_mapper import MatriculaMapper, _first_
 from batch.legacy_sync.mappers.mensagens_mapper import ConversaMapper, MensagemMapper
 from batch.legacy_sync.mappers.notas_mapper import NotaMapper
 from batch.legacy_sync.mappers.pagamentos_mapper import PagseguroMapper
+from batch.legacy_sync import schema
 
 from conftest import FakeRegistry
+
+
+def test_cursos_schema_nao_tem_colunas_de_rastreio_do_etl():
+    cursos_ddl = next(stmt for stmt in schema.DDL if "CREATE TABLE IF NOT EXISTS cursos" in stmt)
+    assert "nivel_academico VARCHAR(32)" in cursos_ddl
+    assert "legacy_table" not in cursos_ddl
+    assert "legacy_id" not in cursos_ddl
 
 
 def test_normalize_modalidade():

@@ -6,6 +6,7 @@ tabela (SELECT) e alimentado a cada novo upsert (RETURNING id).
 """
 from __future__ import annotations
 
+from . import schema
 from .target_postgres import PostgresTarget
 
 
@@ -18,6 +19,9 @@ class IdRegistry:
         """Carrega (legacy_table, legacy_id) -> uuid para uma tabela destino."""
         key = target_table
         if key in self._cache:
+            return
+        if target_table in schema.UNTRACKED_TABLES:
+            self._cache[key] = {}
             return
         mapping: dict[tuple[str, int], str] = {}
         sql = (

@@ -11,8 +11,6 @@ from .mappers.alunos_mapper import AlunoMapper
 from .mappers.certificados_mapper import CertificadoMapper
 from .mappers.cupons_mapper import CupomMapper
 from .mappers.configuracoes_mapper import ConfigMapper, CustomizeMapper, FrontendSettingsMapper
-from .mappers.cursos_mapper import CursoMapper
-from .mappers.disciplinas_mapper import DisciplinaConteudoMapper, DisciplinaMapper
 from .mappers.escolas_legacy_mapper import EscolaLegacyMapper
 from .mappers.feed_mapper import FeedPostMapper, LembreteMapper
 from .mappers.licencas_mapper import LicencaMapper
@@ -25,7 +23,7 @@ from .mappers.perfis_mapper import PerfilMapper, ensure_defaults
 from .mappers.polos_mapper import PoloMapper
 from .mappers.presencas_mapper import PresencaMapper
 from .mappers.professores_mapper import ProfessorMapper
-from .mappers.turmas_mapper import CalendarioOficialMapper, TurmaMapper
+from .mappers.turmas_mapper import TurmaMapper
 from .mappers.usuarios_mapper import UsuarioMapper
 
 logger = logging.getLogger(__name__)
@@ -38,10 +36,7 @@ FULL_LOAD_ORDER = [
     UsuarioMapper,      # users -> usuarios
     ProfessorMapper,    # users instrutor -> professores
     AlunoMapper,        # users aluno -> alunos
-    CursoMapper,        # pacotes -> cursos
-    DisciplinaMapper,   # section -> disciplinas
-    DisciplinaConteudoMapper,  # lesson -> disciplina_conteudos
-    CalendarioOficialMapper,   # section datas -> calendarios_oficiais
+    # Cursos, disciplinas e calendários são mantidos pelo sistema; o ETL não os altera.
     TurmaMapper,        # no-op (sem origem legado)
     MatriculaMapper,    # enrol -> matriculas_ead
     NotaMapper,         # quiz -> notas

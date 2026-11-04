@@ -2,25 +2,46 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.database import get_db_cursor
 from app.modules.auth.dependencies import get_current_user, require_role
 
 router = APIRouter(prefix="/cursos-disciplinas", tags=["Cursos & Disciplinas (AVA)"])
 
+NivelAcademico = Literal[
+    "bacharelado",
+    "licenciatura",
+    "tecnologo",
+    "pos_graduacao",
+    "mestrado",
+]
+ModalidadeCurso = Literal["hibrido", "presencial", "ead"]
+StatusCurso = Literal["ativo", "cancelado"]
+
 
 class CursoSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: Optional[str] = None
-    nome: str
+    nome: str = Field(min_length=2, max_length=255)
     descricao: Optional[str] = None
     modalidade: str = "hibrido"
     carga_horaria_total: Optional[int] = 0
     semestres: int = 3
     status: str = "ativo"
+    nivel_academico: Optional[NivelAcademico] = None
+
+
+class CursoCreateSchema(CursoSchema):
+    nome: str = Field(min_length=2, max_length=255)
+    descricao: str = Field(min_length=1)
+    modalidade: ModalidadeCurso
+    carga_horaria_total: int = Field(gt=0)
+    semestres: int = Field(gt=0)
+    status: StatusCurso
+    nivel_academico: NivelAcademico
 
 
 class DisciplinaSchema(BaseModel):
@@ -51,31 +72,62 @@ _disciplinas_db: Dict[str, Dict[str, Any]] = {}
 _conteudos_db: Dict[str, Dict[str, Any]] = {}
 
 
-@router.get("/cursos", response_model=List[CursoSchema])
+@router.get(
+    "/cursos",
+    response_model=List[CursoSchema],
+    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+)
 async def list_cursos():
     try:
         with get_db_cursor() as cur:
-            cur.execute("SELECT id, nome, descricao, modalidade, carga_horaria_total, semestres, status FROM cursos")
+            cur.execute(
+                """
+                SELECT id, nome, descricao, modalidade, carga_horaria_total,
+                       semestres, status, nivel_academico
+                FROM cursos
+                ORDER BY nome
+                """
+            )
             return [dict(r) for r in cur.fetchall()]
     except Exception:
         return list(_cursos_db.values())
 
 
 @router.post("/cursos", response_model=CursoSchema, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(["admin"]))])
-async def create_curso(dados: CursoSchema):
+async def create_curso(dados: CursoCreateSchema):
     new_id = str(uuid.uuid4())
     c_dict = dados.model_dump()
     c_dict["id"] = new_id
     try:
         with get_db_cursor() as cur:
-            sql = "INSERT INTO cursos (id, nome, descricao, modalidade, carga_horaria_total, semestres, status, criado_em, atualizado_em) VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())"
-            cur.execute(sql, (new_id, dados.nome, dados.descricao, dados.modalidade, dados.carga_horaria_total, dados.semestres, dados.status))
+            sql = (
+                "INSERT INTO cursos (id, nome, descricao, modalidade, carga_horaria_total, semestres, status, "
+                "nivel_academico, criado_em, atualizado_em) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())"
+            )
+            cur.execute(
+                sql,
+                (
+                    new_id,
+                    dados.nome,
+                    dados.descricao,
+                    dados.modalidade,
+                    dados.carga_horaria_total,
+                    dados.semestres,
+                    dados.status,
+                    dados.nivel_academico,
+                ),
+            )
     except Exception:
         _cursos_db[new_id] = c_dict
     return c_dict
 
 
-@router.get("/disciplinas", response_model=List[DisciplinaSchema])
+@router.get(
+    "/disciplinas",
+    response_model=List[DisciplinaSchema],
+    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+)
 async def list_disciplinas(curso_id: Optional[str] = None, semestre: Optional[int] = None):
     try:
         with get_db_cursor() as cur:

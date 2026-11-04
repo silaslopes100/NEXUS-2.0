@@ -18,6 +18,7 @@ TRACKING = """    legacy_table VARCHAR(64),
     synced_at TIMESTAMPTZ DEFAULT now(),
 """
 UNIQUE_LEGACY = ",\n    UNIQUE (legacy_table, legacy_id)"
+UNTRACKED_TABLES = {"cursos"}
 
 
 def _tbl(name: str, cols: str, *, tracking: bool = True) -> str:
@@ -114,7 +115,9 @@ DDL: List[str] = [
     modalidade VARCHAR(16) DEFAULT 'hibrido',
     carga_horaria_total INT,
     semestres INT DEFAULT 3,
-    status VARCHAR(16) DEFAULT 'ativo'""",
+    status VARCHAR(16) DEFAULT 'ativo',
+    nivel_academico VARCHAR(32)""",
+        tracking=False,
     ),
     _tbl(
         "disciplinas",

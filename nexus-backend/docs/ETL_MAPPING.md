@@ -35,6 +35,10 @@ Agendamento sugerido no Windows: Agendador de Tarefas chamando o passo 4; em ser
 
 ## Mapeamento tabela a tabela
 
+Em instalações existentes, aplique `scripts/migrations/004_cursos_nivel_academico.sql`.
+Cursos, disciplinas, conteúdos do AVA e calendários são mantidos pelo sistema e
+não são atualizados pelo ETL.
+
 | Destino | Origem (MySQL) | Regra / premissa |
 |---|---|---|
 | `perfis` | `role` + seed | Garante os 5 padrões (admin, polo, escola, professor, aluno); importa linhas da `role` |
@@ -43,10 +47,10 @@ Agendamento sugerido no Windows: Agendador de Tarefas chamando o passo 4; em ser
 | `usuarios` | `users` | Perfil por `role_id` ou heurística por flags (`is_pedag/is_exec/is_secret`→admin, `is_instructor`→professor, `is_vendedor`→polo, polo→polo, escola→escola, resto→aluno). e-mail/CPF duplicados → `NULL` (unicidade parcial). Senha migrada como `legacy_bcrypt` p/ lazy rehash |
 | `professores` | `users` (is_instructor/vendedor) | chave_pix e valor_hora_aula são campos novos → NULL |
 | `alunos` | `users` (não staff/instrutor/vendedor) | matrícula = `users.codigo` ou `legacy-<id>`; modalidade polo se tem polo/escola; `revalidacao` preenchida → status `desistente` |
-| `cursos` | `pacotes` | Em produção, a tabela que descreve os cursos (título/modalidade/preço/status) é `pacotes`. A tabela `course` do dicionário não corresponde ao schema real e foi descontinuada no mapper |
-| `disciplinas` | `section` | semestre = `section.order`; `qtd_aulas_prevista` = count de lessons da section |
-| `disciplina_conteudos` | `lesson` | conteúdo do AVA; tipo_midia/url de `lesson_type`/`video_type`/`video_url`/`linkMeet` |
-| `calendarios_oficiais` | `section` (`datainicio`/`datafinal`) | calendário global por curso/disciplina |
+| `cursos` | — | Cadastro mantido pelo sistema; sem rastreabilidade do ETL. `nivel_academico` é informado no cadastro |
+| `disciplinas` | — | Cadastro mantido pelo sistema; o ETL não cria nem atualiza disciplinas |
+| `disciplina_conteudos` | — | Conteúdos do AVA mantidos pelo sistema; o ETL não cria nem atualiza conteúdos |
+| `calendarios_oficiais` | — | Calendários mantidos pelo sistema; o ETL não cria nem atualiza calendários |
 | `turmas` | — | **sem origem legado confiável**; tabela criada vazia (dado novo do sistema) |
 | `matriculas_ead` | `enrol` | `user_id`/`course_id` TEXT podem ter vários ids → usa o primeiro; classificação Polo×EAD a revisar com a equipe |
 | `notas` | `quiz` | origem='ava'; valor = resultado (0–10) |

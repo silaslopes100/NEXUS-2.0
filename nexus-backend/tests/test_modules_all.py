@@ -34,6 +34,18 @@ def auth_setup():
         "status": "ativo",
         "perfil_id": "p-polo",
         "permissoes": ["p_vendas", "p_matriculas"],
+        "polo_id": "polo-1",
+        "escola_id": None,
+    }
+    auth_repo.usuarios["escola-1"] = {
+        "id": "escola-1",
+        "nome": "Gestor Escola",
+        "email": "escola@nexus.com.br",
+        "status": "ativo",
+        "perfil_id": "p-escola",
+        "permissoes": [],
+        "polo_id": "polo-1",
+        "escola_id": "escola-1",
     }
     # Professor
     auth_repo.usuarios["prof-1"] = {
@@ -89,11 +101,76 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient):
 
     c_res = await client.post(
         "/cursos-disciplinas/cursos",
-        json={"nome": "Teologia Sistemática", "semestres": 4, "modalidade": "hibrido"},
+        json={
+            "nome": "Teologia Sistemática",
+            "descricao": "Formação acadêmica em teologia.",
+            "modalidade": "hibrido",
+            "carga_horaria_total": 2400,
+            "semestres": 4,
+            "status": "ativo",
+            "nivel_academico": "bacharelado",
+        },
         headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert c_res.status_code == 201
+    assert c_res.json()["nivel_academico"] == "bacharelado"
+    assert c_res.json()["descricao"] == "Formação acadêmica em teologia."
+    assert c_res.json()["carga_horaria_total"] == 2400
+    assert c_res.json()["status"] == "ativo"
+    acesso_escrita_negado = await client.post(
+        "/cursos-disciplinas/cursos",
+        json={
+            "nome": "Curso por Polo",
+            "descricao": "Não deve ser cadastrado pelo Polo.",
+            "modalidade": "ead",
+            "carga_horaria_total": 100,
+            "semestres": 2,
+            "status": "ativo",
+            "nivel_academico": "bacharelado",
+        },
+        headers={"Authorization": f"Bearer {_token('polo-1', 'polo@nexus.com.br', 'polo')}"},
+    )
+    assert acesso_escrita_negado.status_code == 403
+    curso_invalido = await client.post(
+        "/cursos-disciplinas/cursos",
+        json={
+            "nome": "Curso inválido",
+            "descricao": "Descrição",
+            "modalidade": "ead",
+            "carga_horaria_total": 100,
+            "semestres": 2,
+            "status": "ativo",
+            "nivel_academico": "doutorado",
+        },
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert curso_invalido.status_code == 422
+    curso_incompleto = await client.post(
+        "/cursos-disciplinas/cursos",
+        json={"nome": "Curso incompleto"},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert curso_incompleto.status_code == 422
     curso_id = c_res.json()["id"]
+
+    cursos_res = await client.get(
+        "/cursos-disciplinas/cursos",
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert cursos_res.status_code == 200
+    curso_listado = next(curso for curso in cursos_res.json() if curso["id"] == curso_id)
+    assert curso_listado["nome"] == "Teologia Sistemática"
+    assert curso_listado["nivel_academico"] == "bacharelado"
+
+    for user_id, email, role in (
+        ("polo-1", "polo@nexus.com.br", "polo"),
+        ("escola-1", "escola@nexus.com.br", "escola"),
+    ):
+        leitura = await client.get(
+            "/cursos-disciplinas/cursos",
+            headers={"Authorization": f"Bearer {_token(user_id, email, role)}"},
+        )
+        assert leitura.status_code == 200
 
     d_res = await client.post(
         "/cursos-disciplinas/disciplinas",
@@ -102,6 +179,28 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient):
     )
     assert d_res.status_code == 201
     disc_id = d_res.json()["id"]
+
+    disciplinas_curso = await client.get(
+        "/cursos-disciplinas/disciplinas",
+        params={"curso_id": curso_id},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert disciplinas_curso.status_code == 200
+    assert any(disciplina["id"] == disc_id for disciplina in disciplinas_curso.json())
+
+    turma_res = await client.post(
+        "/turmas",
+        json={"nome": "Turma do Curso", "curso_id": curso_id},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert turma_res.status_code == 201
+    turmas_curso = await client.get(
+        "/turmas",
+        params={"curso_id": curso_id},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert turmas_curso.status_code == 200
+    assert any(turma["id"] == turma_res.json()["id"] for turma in turmas_curso.json())
 
     cont_res = await client.post(
         f"/cursos-disciplinas/disciplinas/{disc_id}/conteudos",

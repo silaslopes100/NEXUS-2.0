@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.core.database import get_db_cursor
 from app.modules.auth.dependencies import get_current_user, require_role
+from app.modules.auth.schemas import UserResponse
 
 router = APIRouter(prefix="/turmas", tags=["Turmas & Calendários"])
 
@@ -39,8 +40,27 @@ _calendarios_db: Dict[str, Dict[str, Any]] = {}
 _turma_alunos_db: List[Dict[str, Any]] = []
 
 
-@router.get("", response_model=List[TurmaSchema])
-async def list_turmas(polo_id: Optional[str] = None, curso_id: Optional[str] = None, escola_id: Optional[str] = None):
+@router.get(
+    "",
+    response_model=List[TurmaSchema],
+    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+)
+async def list_turmas(
+    polo_id: Optional[str] = None,
+    curso_id: Optional[str] = None,
+    escola_id: Optional[str] = None,
+    current_user: UserResponse = Depends(get_current_user),
+):
+    perfil = (current_user.perfil.nome if current_user.perfil else "").lower()
+    if perfil == "polo":
+        if not current_user.polo_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Polo sem vínculo")
+        polo_id = str(current_user.polo_id)
+    elif perfil == "escola":
+        if not current_user.escola_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Escola sem vínculo")
+        escola_id = str(current_user.escola_id)
+
     try:
         with get_db_cursor() as cur:
             sql = "SELECT id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim, calendario_oficial_id FROM turmas"
@@ -63,6 +83,10 @@ async def list_turmas(polo_id: Optional[str] = None, curso_id: Optional[str] = N
         turmas = list(_turmas_db.values())
         if polo_id:
             turmas = [t for t in turmas if t.get("polo_id") == polo_id]
+        if escola_id:
+            turmas = [t for t in turmas if t.get("escola_id") == escola_id]
+        if curso_id:
+            turmas = [t for t in turmas if t.get("curso_id") == curso_id]
         return turmas
 
 

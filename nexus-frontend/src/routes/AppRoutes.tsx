@@ -21,6 +21,7 @@ import { PolosEscolasPage } from '@/features/polos_escolas/pages/PolosEscolasPag
 import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
 import { TurmasEscolaPage } from '@/features/alunos/pages/TurmasEscolaPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
+import { CursosPage } from '@/features/cursos/pages/CursosPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -53,7 +54,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/perfis-permissoes" element={<ModulePlaceholderPage />} />
           <Route path="/admin/polos-escolas" element={<PolosEscolasPage />} />
           <Route path="/admin/professores" element={<ProfessoresPage />} />
-          <Route path="/admin/cursos" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/cursos" element={<CursosPage />} />
           <Route path="/admin/disciplinas" element={<ModulePlaceholderPage />} />
           <Route path="/admin/turmas-calendarios" element={<ModulePlaceholderPage />} />
           <Route path="/admin/alunos" element={<AlunosPage />} />
@@ -75,6 +76,7 @@ export const AppRoutes: React.FC = () => {
         {/* Módulo Polo */}
         <Route element={<RequireRole roles={['admin', 'polo']} />}>
           <Route path="/polo/dashboard" element={<PoloDashboardPage />} />
+          <Route path="/polo/cursos" element={<CursosPage />} />
           <Route path="/polo/escolas" element={<PolosEscolasPage />} />
           <Route path="/polo/alunos" element={<AlunosPage />} />
           <Route path="/polo/turmas" element={<TurmasEscolaPage />} />
@@ -88,6 +90,7 @@ export const AppRoutes: React.FC = () => {
         {/* Módulo Escola */}
         <Route element={<RequireRole roles={['admin', 'escola']} />}>
           <Route path="/escola/dashboard" element={<EscolaDashboardPage />} />
+          <Route path="/escola/cursos" element={<CursosPage />} />
           <Route path="/escola/alunos" element={<AlunosPage />} />
           <Route path="/escola/turmas" element={<TurmasEscolaPage />} />
           <Route path="/escola/presencas" element={<ModulePlaceholderPage />} />
