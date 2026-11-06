@@ -243,6 +243,144 @@ async def test_rn09_multi_tenancy_restringe_coordenador_a_proprio_polo(client: A
 
 
 @pytest.mark.asyncio
+async def test_escola_management_search_soft_deactivation_and_scope(client: AsyncClient, repos):
+    admin_token = _token("admin-1")
+    auth_repo, polos_repo = repos
+
+    polo_a = (
+        await client.post(
+            "/polos",
+            json=_polo_payload(nome="Polo A", coordenador_email="gestorA@polo.com", coordenador_cpf="10000000001"),
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    ).json()
+    polo_b = (
+        await client.post(
+            "/polos",
+            json=_polo_payload(nome="Polo B", coordenador_email="gestorB@polo.com", coordenador_cpf="10000000002"),
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    ).json()
+    school_a_id = polos_repo.create_escola(
+        {"polo_id": polo_a["id"], "nome": "Escola Alfa", "cidade": "Campinas", "status": "ativo"}
+    )
+    school_b_id = polos_repo.create_escola(
+        {"polo_id": polo_b["id"], "nome": "Escola Beta", "cidade": "Santos", "status": "ativo"}
+    )
+
+    search = await client.get(
+        "/escolas",
+        params={"q": "campinas", "status": "ativo"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert search.status_code == 200, search.text
+    assert search.json()["total"] == 1
+    assert search.json()["items"][0]["id"] == school_a_id
+
+    deactivated = await client.put(
+        f"/escolas/{school_a_id}",
+        json={"status": "inativo"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert deactivated.status_code == 200, deactivated.text
+    assert deactivated.json()["status"] == "inativo"
+    assert (await client.get(f"/escolas/{school_a_id}", headers={"Authorization": f"Bearer {admin_token}"})).status_code == 200
+
+    inactive = await client.get(
+        "/escolas",
+        params={"status": "inativo"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert inactive.status_code == 200
+    assert {item["id"] for item in inactive.json()["items"]} == {school_a_id}
+
+    coordinator_id = auth_repo.get_user_by_email("gestorA@polo.com")["id"]
+    coordinator_token = _token(coordinator_id)
+    scoped_list = await client.get("/escolas", headers={"Authorization": f"Bearer {coordinator_token}"})
+    assert scoped_list.status_code == 200
+    assert {item["id"] for item in scoped_list.json()["items"]} == {school_a_id}
+
+    wrong_polo = await client.get(
+        "/escolas",
+        params={"polo_id": polo_b["id"]},
+        headers={"Authorization": f"Bearer {coordinator_token}"},
+    )
+    assert wrong_polo.status_code == 403
+    wrong_school = await client.get(
+        f"/escolas/{school_b_id}",
+        headers={"Authorization": f"Bearer {coordinator_token}"},
+    )
+    assert wrong_school.status_code == 403
+    wrong_school_update = await client.put(
+        f"/escolas/{school_b_id}",
+        json={"status": "inativo"},
+        headers={"Authorization": f"Bearer {coordinator_token}"},
+    )
+    assert wrong_school_update.status_code == 403
+    move_school_outside_scope = await client.put(
+        f"/escolas/{school_a_id}",
+        json={"polo_id": polo_b["id"]},
+        headers={"Authorization": f"Bearer {coordinator_token}"},
+    )
+    assert move_school_outside_scope.status_code == 403
+    wrong_school_licenses = await client.get(
+        f"/escolas/{school_b_id}/licencas/movimentacoes",
+        headers={"Authorization": f"Bearer {coordinator_token}"},
+    )
+    assert wrong_school_licenses.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_school_indicator_and_license_drilldowns_are_filtered_by_school(client: AsyncClient, repos):
+    admin_token = _token("admin-1")
+    _, repository = repos
+    polo_id = repository.create_polo({"nome": "Polo de teste"})
+    escola_id = repository.create_escola(
+        {"polo_id": polo_id, "nome": "Escola de teste", "status": "ativo"}
+    )
+    repository.usuarios["teacher-user"] = {"id": "teacher-user", "nome": "Professora Ana"}
+    repository.professores["teacher-id"] = {
+        "id": "teacher-id",
+        "usuario_id": "teacher-user",
+        "polo_id": polo_id,
+        "escola_id": escola_id,
+        "status": "ativo",
+        "quantidade_aulas": 4,
+        "horas_totais": 4,
+    }
+    repository.aulas["lesson-id"] = {
+        "id": "lesson-id",
+        "professor_id": "teacher-id",
+        "escola_id": escola_id,
+        "data_aula": date.today(),
+        "conteudo": "Revisão",
+        "total_aulas_previstas": 4,
+    }
+    repository.create_turma_escola({"escola_id": escola_id, "polo_id": polo_id, "nome": "Turma A"})
+    repository.registrar_movimentacao({
+        "polo_id": polo_id,
+        "escola_id": escola_id,
+        "tipo": "devolucao_escola_polo",
+        "quantidade": 2,
+    })
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    teachers = await client.get(f"/escolas/{escola_id}/professores", headers=headers)
+    lessons = await client.get(f"/escolas/{escola_id}/aulas", headers=headers)
+    classes = await client.get(f"/escolas/{escola_id}/turmas", headers=headers)
+    movements = await client.get(f"/escolas/{escola_id}/licencas/movimentacoes", headers=headers)
+
+    assert teachers.status_code == 200, teachers.text
+    assert [item["nome"] for item in teachers.json()["items"]] == ["Professora Ana"]
+    assert lessons.status_code == 200, lessons.text
+    assert [item["id"] for item in lessons.json()["items"]] == ["lesson-id"]
+    assert classes.status_code == 200, classes.text
+    assert [item["nome"] for item in classes.json()["items"]] == ["Turma A"]
+    assert movements.status_code == 200, movements.text
+    assert [item["escola_id"] for item in movements.json()["items"]] == [escola_id]
+
+
+@pytest.mark.asyncio
 async def test_rn02_fluxo_completo_de_licencas(client: AsyncClient, repos):
     admin_token = _token("admin-1")
 

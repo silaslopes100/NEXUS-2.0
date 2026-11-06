@@ -10,6 +10,14 @@ export interface LicencaKpis {
   taxa_distribuicao: number;
 }
 
+export interface EscolaLicencaKpis {
+  licencas_recebidas: number;
+  licencas_vendidas: number;
+  licencas_nao_vendidas: number;
+  taxa_conversao: number;
+  taxa_ociosidade: number;
+}
+
 export interface MovimentacaoLicenca {
   id: string;
   tipo: string;
@@ -29,7 +37,9 @@ export interface VendaPayload { aluno_id: string; quantidade: number; }
 
 export const licencasApi = {
   async getKpis(poloId: string) { return (await apiClient.get<LicencaKpis>(`/polos/${poloId}/dashboard/kpis`)).data; },
+  async getKpisEscola(escolaId: string) { return (await apiClient.get<EscolaLicencaKpis>(`/escolas/${escolaId}/dashboard/kpis`)).data; },
   async listMovimentacoes(poloId: string, params?: { limit?: number; offset?: number }) { return (await apiClient.get<{ total: number; items: MovimentacaoLicenca[] }>(`/polos/${poloId}/licencas/movimentacoes`, { params })).data; },
+  async listMovimentacoesEscola(escolaId: string, params?: { limit?: number; offset?: number }) { return (await apiClient.get<{ total: number; items: MovimentacaoLicenca[] }>(`/escolas/${escolaId}/licencas/movimentacoes`, { params })).data; },
   async comprar(poloId: string, payload: CompraPayload) { return (await apiClient.post(`/polos/${poloId}/licencas/compra`, payload)).data; },
   async distribuir(poloId: string, payload: DistribuicaoPayload) { return (await apiClient.post(`/polos/${poloId}/licencas/distribuir`, payload)).data; },
   async vender(escolaId: string, payload: VendaPayload) { return (await apiClient.post(`/escolas/${escolaId}/licencas/vender`, payload)).data; },

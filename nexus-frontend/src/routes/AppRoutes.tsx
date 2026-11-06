@@ -18,6 +18,8 @@ import { ConfiguracoesPage } from '@/features/admin/pages/ConfiguracoesPage';
 import { ExecucoesBatchPage } from '@/features/admin/pages/ExecucoesBatchPage';
 import { LicencasPage } from '@/features/licencas/pages/LicencasPage';
 import { PolosEscolasPage } from '@/features/polos_escolas/pages/PolosEscolasPage';
+import { EscolasPage } from '@/features/polos_escolas/pages/EscolasPage';
+import { LicencasEscolaPage } from '@/features/licencas/pages/LicencasEscolaPage';
 import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
 import { TurmasEscolaPage } from '@/features/alunos/pages/TurmasEscolaPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
@@ -54,6 +56,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/usuarios/:usuarioId" element={<UsuarioFichaPage />} />
           <Route path="/admin/perfis-permissoes" element={<ModulePlaceholderPage />} />
           <Route path="/admin/polos-escolas" element={<PolosEscolasPage />} />
+          <Route path="/admin/escolas" element={<EscolasPage />} />
+          <Route path="/admin/escolas/:escolaId/licencas" element={<LicencasEscolaPage />} />
           <Route path="/admin/professores" element={<ProfessoresPage />} />
           <Route path="/admin/cursos" element={<CursosPage />} />
           <Route path="/admin/disciplinas" element={<DisciplinasPage />} />
@@ -79,6 +83,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/dashboard" element={<PoloDashboardPage />} />
           <Route path="/polo/cursos" element={<CursosPage />} />
           <Route path="/polo/escolas" element={<PolosEscolasPage />} />
+          <Route path="/polo/escolas/gestao" element={<EscolasPage />} />
+          <Route path="/polo/escolas/:escolaId/licencas" element={<LicencasEscolaPage />} />
           <Route path="/polo/alunos" element={<AlunosPage />} />
           <Route path="/polo/turmas" element={<TurmasEscolaPage />} />
           <Route path="/polo/certificados" element={<ModulePlaceholderPage />} />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
+import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 import { menuByRole, MenuItem, MenuGroup } from '@/components/navigation/menuConfig';
 import { NexusLogo } from '@/components/brand/NexusLogo';
 import { UserRole } from '@/types/auth';
@@ -30,10 +30,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { user, perfil, logout, refreshToken } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
 
-  const rawRole = (perfil?.nome || user?.perfil?.nome || 'aluno').toLowerCase().trim();
-  const activeRole: UserRole = (['admin', 'polo', 'escola', 'professor', 'aluno'].includes(rawRole)
-    ? rawRole
-    : 'aluno') as UserRole;
+  const activeRole: UserRole =
+    normalizeUserRole(perfil?.nome || user?.perfil?.nome) || 'aluno';
 
   const menuGroups: MenuGroup[] = menuByRole[activeRole] || menuByRole.aluno;
 

@@ -16,6 +16,8 @@ from app.modules.polos_escolas.repository import (
 )
 from app.modules.polos_escolas.schemas import (
     AlertaListResponse,
+    AulaEscolaListResponse,
+    AulaEscolaResponse,
     AlunoCreateRequest,
     AlunoDesistenteListResponse,
     AlunoDesistenteResponse,
@@ -486,8 +488,21 @@ class PolosEscolasService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada")
         return self._build_escola_response(escola)
 
-    def list_escolas(self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0) -> EscolaListResponse:
-        total, items = self.repo.list_escolas(polo_id=polo_id, limit=limit, offset=offset)
+    def list_escolas(
+        self,
+        polo_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        q: Optional[str] = None,
+        status_filter: Optional[str] = None,
+    ) -> EscolaListResponse:
+        total, items = self.repo.list_escolas(
+            polo_id=polo_id,
+            limit=limit,
+            offset=offset,
+            q=q,
+            status_filter=status_filter,
+        )
         return EscolaListResponse(
             total=total,
             items=[self._build_escola_response(e) for e in items],
@@ -658,6 +673,20 @@ class PolosEscolasService:
         return MovimentacaoListResponse(
             total=total,
             items=[MovimentacaoLicencaResponse(**{**m, "id": str(m["id"])}) for m in items],
+            limit=limit,
+            offset=offset,
+        )
+
+    def list_movimentacoes_escola(
+        self, escola_id: str, limit: int = 50, offset: int = 0
+    ) -> MovimentacaoListResponse:
+        self.get_escola(escola_id)
+        total, items = self.repo.list_movimentacoes_escola(
+            escola_id, limit=limit, offset=offset
+        )
+        return MovimentacaoListResponse(
+            total=total,
+            items=[MovimentacaoLicencaResponse(**{**item, "id": str(item["id"])}) for item in items],
             limit=limit,
             offset=offset,
         )
@@ -985,6 +1014,28 @@ class PolosEscolasService:
             offset=offset,
         )
 
+    def list_aulas_escola(self, escola_id: str, limit: int, offset: int) -> AulaEscolaListResponse:
+        self.get_escola(escola_id)
+        total, items = self.repo.list_aulas_escola(escola_id, limit, offset)
+        return AulaEscolaListResponse(
+            total=total,
+            items=[
+                AulaEscolaResponse(
+                    id=str(item["id"]),
+                    professor_id=str(item["professor_id"]),
+                    professor_nome=item.get("professor_nome") or "",
+                    materia_id=str(item["materia_id"]) if item.get("materia_id") else None,
+                    data_aula=item["data_aula"],
+                    conteudo=item.get("conteudo"),
+                    total_aulas_previstas=item.get("total_aulas_previstas"),
+                    criado_em=item.get("criado_em"),
+                )
+                for item in items
+            ],
+            limit=limit,
+            offset=offset,
+        )
+
     def solicitar_troca_polo(
         self, polo_id: str, aluno_id: str, dados: TrocaPoloRequest, actor_id: Optional[str], ip: Optional[str]
     ) -> RequisicaoResponse:
@@ -1109,10 +1160,23 @@ class PolosEscolasService:
         return ProfessorDashboardResponse(**r)
 
     def list_professores(
-        self, polo_id: str, data_inicio: Optional[date], data_fim: Optional[date], limit: int, offset: int
+        self,
+        polo_id: str,
+        data_inicio: Optional[date],
+        data_fim: Optional[date],
+        limit: int,
+        offset: int,
+        escola_id: Optional[str] = None,
     ) -> ProfessorListResponse:
-        self.get_polo(polo_id)
-        total, items = self.repo.list_professores(polo_id, data_inicio, data_fim, limit, offset)
+        if escola_id:
+            school = self.get_escola(escola_id)
+            if str(school.polo_id) != str(polo_id):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada neste Polo")
+        else:
+            self.get_polo(polo_id)
+        total, items = self.repo.list_professores(
+            polo_id, data_inicio, data_fim, limit, offset, escola_id=escola_id
+        )
         return ProfessorListResponse(
             total=total,
             items=[

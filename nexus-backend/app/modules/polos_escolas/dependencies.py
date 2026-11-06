@@ -51,9 +51,15 @@ def check_polo_scope(current_user: UserResponse, polo_id: str) -> None:
 
 
 def check_escola_scope(current_user: UserResponse, escola_id: str) -> None:
-    """RN-09: multi-tenancy — secretario_escola só acessa a própria escola."""
+    """Aplica escopo de escola para secretaria e escopo de polo para coordenadores."""
     perfil = _perfil_nome(current_user)
     if perfil in ("admin", "secretario_geral", "coordenador_polo"):
+        if perfil == "coordenador_polo":
+            if not current_user.polo_id:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Polo sem vínculo")
+            escola = get_polos_escolas_repository().get_escola(escola_id)
+            if escola and str(escola.get("polo_id")) != str(current_user.polo_id):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Acesso negado a esta Escola")
         return
     if perfil == "secretario_escola":
         if str(current_user.escola_id) != str(escola_id):

@@ -16,6 +16,7 @@ from app.modules.polos_escolas.dependencies import (
 )
 from app.modules.polos_escolas.schemas import (
     AlertaListResponse,
+    AulaEscolaListResponse,
     AlunoCreateRequest,
     AlunoDesistenteListResponse,
     AlunoDrilldownEscolaListResponse,
@@ -176,6 +177,34 @@ async def delete_polo(
 # 2. Escolas (RN-01)
 # =========================================================================
 
+@router.get("/escolas", response_model=EscolaListResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+async def list_escolas_gerenciamento(
+    q: Optional[str] = Query(None, max_length=255),
+    status_filter: Optional[str] = Query(None, alias="status", pattern="^(ativo|inativo)$"),
+    polo_id: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    perfil = (current_user.perfil.nome if current_user.perfil else "").lower().strip()
+    if perfil == "coordenador_polo":
+        if not current_user.polo_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Polo sem vínculo")
+        if polo_id and str(polo_id) != str(current_user.polo_id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Acesso negado a este Polo")
+        polo_id = str(current_user.polo_id)
+    elif polo_id:
+        check_polo_scope(current_user, polo_id)
+    return service.list_escolas(
+        polo_id=polo_id,
+        q=q,
+        status_filter=status_filter,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.post("/polos/{polo_id}/escolas", response_model=EscolaResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
 async def create_escola(
     polo_id: str,
@@ -219,6 +248,8 @@ async def update_escola(
     client_ip: Optional[str] = Depends(get_client_ip),
 ):
     check_escola_scope(current_user, escola_id)
+    if payload.polo_id:
+        check_polo_scope(current_user, payload.polo_id)
     return service.update_escola(escola_id, payload, current_user.id, client_ip)
 
 
@@ -232,6 +263,35 @@ async def list_turmas_escola(
 ):
     check_escola_scope(current_user, escola_id)
     return service.list_turmas_escola(escola_id, limit, offset)
+
+
+@router.get("/escolas/{escola_id}/aulas", response_model=AulaEscolaListResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def list_aulas_escola(
+    escola_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    check_escola_scope(current_user, escola_id)
+    return service.list_aulas_escola(escola_id, limit, offset)
+
+
+@router.get("/escolas/{escola_id}/professores", response_model=ProfessorListResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def list_professores_escola(
+    escola_id: str,
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    check_escola_scope(current_user, escola_id)
+    escola = service.get_escola(escola_id)
+    return service.list_professores(
+        escola.polo_id, data_inicio, data_fim, limit, offset, escola_id=escola_id
+    )
 
 
 @router.post("/escolas/{escola_id}/turmas", response_model=TurmaEscolaResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
@@ -393,6 +453,18 @@ async def list_movimentacoes(
 ):
     check_polo_scope(current_user, polo_id)
     return service.list_movimentacoes(polo_id, limit=limit, offset=offset)
+
+
+@router.get("/escolas/{escola_id}/licencas/movimentacoes", response_model=MovimentacaoListResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def list_movimentacoes_escola(
+    escola_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    check_escola_scope(current_user, escola_id)
+    return service.list_movimentacoes_escola(escola_id, limit=limit, offset=offset)
 
 
 # =========================================================================

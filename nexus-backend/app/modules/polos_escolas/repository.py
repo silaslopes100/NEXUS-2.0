@@ -59,7 +59,12 @@ class PolosEscolasRepositoryInterface(Protocol):
     def update_escola(self, escola_id: str, data: Dict[str, Any]) -> None: ...
     def get_escola(self, escola_id: str) -> Optional[Dict[str, Any]]: ...
     def list_escolas(
-        self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0
+        self,
+        polo_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        q: Optional[str] = None,
+        status_filter: Optional[str] = None,
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
     # ---------- Estoque de licenças ----------
@@ -85,6 +90,9 @@ class PolosEscolasRepositoryInterface(Protocol):
     def registrar_movimentacao(self, data: Dict[str, Any]) -> str: ...
     def list_movimentacoes(
         self, polo_id: str, limit: int = 50, offset: int = 0
+    ) -> Tuple[int, List[Dict[str, Any]]]: ...
+    def list_movimentacoes_escola(
+        self, escola_id: str, limit: int = 50, offset: int = 0
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
     def sum_compradas(self, polo_id: str) -> int: ...
     def sum_distribuidas(self, polo_id: str) -> int: ...
@@ -135,6 +143,7 @@ class PolosEscolasRepositoryInterface(Protocol):
     def create_password_reset(self, usuario_id: str, token_hash: str, expira_em: Any) -> None: ...
     def create_turma_escola(self, data: Dict[str, Any]) -> str: ...
     def list_turmas_escola(self, escola_id: str, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]: ...
+    def list_aulas_escola(self, escola_id: str, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]: ...
     def registrar_nota(self, data: Dict[str, Any]) -> str: ...
     def contar_presencas_aluno(self, aluno_id: str) -> Tuple[int, int]: ...
     def create_requisicao(self, data: Dict[str, Any]) -> str: ...
@@ -160,6 +169,7 @@ class PolosEscolasRepositoryInterface(Protocol):
         data_fim: Optional[date] = None,
         limit: int = 50,
         offset: int = 0,
+        escola_id: Optional[str] = None,
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
     def dashboard_professores(
         self, polo_id: str, data_inicio: Optional[date], data_fim: Optional[date]
@@ -456,10 +466,26 @@ class PostgresPolosEscolasRepository:
             return dict(row) if row else None
 
     def list_escolas(
-        self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0
+        self,
+        polo_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        q: Optional[str] = None,
+        status_filter: Optional[str] = None,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        where = "WHERE e.polo_id = %s" if polo_id else ""
-        params = [str(polo_id)] if polo_id else []
+        conditions = []
+        params: List[Any] = []
+        if polo_id:
+            conditions.append("e.polo_id = %s")
+            params.append(str(polo_id))
+        if q and q.strip():
+            conditions.append("(lower(e.nome) LIKE %s OR lower(coalesce(e.cidade, '')) LIKE %s)")
+            pattern = f"%{q.strip().lower()}%"
+            params.extend([pattern, pattern])
+        if status_filter:
+            conditions.append("e.status = %s")
+            params.append(status_filter)
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
         with get_db_cursor() as cur:
             cur.execute(f"SELECT COUNT(*) as total FROM escolas e {where}", tuple(params))
             total = int(cur.fetchone()["total"])
@@ -670,6 +696,24 @@ class PostgresPolosEscolasRepository:
                 (str(polo_id), limit, offset),
             )
             return total, [dict(r) for r in cur.fetchall()]
+
+    def list_movimentacoes_escola(
+        self, escola_id: str, limit: int = 50, offset: int = 0
+    ) -> Tuple[int, List[Dict[str, Any]]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS total FROM licencas_movimentacoes WHERE escola_id = %s",
+                (str(escola_id),),
+            )
+            total = int(cur.fetchone()["total"])
+            cur.execute(
+                """
+                SELECT * FROM licencas_movimentacoes WHERE escola_id = %s
+                ORDER BY criado_em DESC LIMIT %s OFFSET %s
+                """,
+                (str(escola_id), limit, offset),
+            )
+            return total, [dict(row) for row in cur.fetchall()]
 
     def sum_compradas(self, polo_id: str) -> int:
         with get_db_cursor() as cur:
@@ -1020,6 +1064,27 @@ class PostgresPolosEscolasRepository:
             )
             return total, [dict(r) for r in cur.fetchall()]
 
+    def list_aulas_escola(
+        self, escola_id: str, limit: int = 50, offset: int = 0
+    ) -> Tuple[int, List[Dict[str, Any]]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS total FROM aulas WHERE escola_id = %s", (str(escola_id),))
+            total = int(cur.fetchone()["total"])
+            cur.execute(
+                """
+                SELECT a.id, a.professor_id, u.nome AS professor_nome, a.materia_id,
+                       a.data_aula, a.conteudo, a.total_aulas_previstas, a.criado_em
+                FROM aulas a
+                JOIN professores p ON p.id = a.professor_id
+                JOIN usuarios u ON u.id = p.usuario_id
+                WHERE a.escola_id = %s
+                ORDER BY a.data_aula DESC, a.id
+                LIMIT %s OFFSET %s
+                """,
+                (str(escola_id), limit, offset),
+            )
+            return total, [dict(row) for row in cur.fetchall()]
+
     def update_aluno(self, usuario_id: str, data: Dict[str, Any]) -> None:
         usuario_cols = {k: v for k, v in data.items() if k in ("nome", "sobrenome", "email", "escola_id")}
         aluno_cols = {k: v for k, v in data.items() if k in ("modalidade", "status", "escola_id", "data_nascimento")}
@@ -1211,9 +1276,13 @@ class PostgresPolosEscolasRepository:
         data_fim: Optional[date] = None,
         limit: int = 50,
         offset: int = 0,
+        escola_id: Optional[str] = None,
     ) -> Tuple[int, List[Dict[str, Any]]]:
         conds = ["prof.polo_id = %s"]
         params: List[Any] = [str(polo_id)]
+        if escola_id:
+            conds.append("prof.escola_id = %s")
+            params.append(str(escola_id))
         if data_inicio:
             conds.append("prof.data_inicio >= %s")
             params.append(data_inicio)
@@ -1612,11 +1681,25 @@ class InMemoryPolosEscolasRepository:
         return data
 
     def list_escolas(
-        self, polo_id: Optional[str] = None, limit: int = 50, offset: int = 0
+        self,
+        polo_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        q: Optional[str] = None,
+        status_filter: Optional[str] = None,
     ) -> Tuple[int, List[Dict[str, Any]]]:
         items = list(self.escolas.values())
         if polo_id:
             items = [e for e in items if str(e.get("polo_id")) == str(polo_id)]
+        if q and q.strip():
+            term = q.strip().lower()
+            items = [
+                e for e in items
+                if term in str(e.get("nome") or "").lower()
+                or term in str(e.get("cidade") or "").lower()
+            ]
+        if status_filter:
+            items = [e for e in items if e.get("status") == status_filter]
         items.sort(key=lambda x: x["nome"])
         return len(items), [self._with_secretario(e) for e in items[offset : offset + limit]]
 
@@ -1754,6 +1837,13 @@ class InMemoryPolosEscolasRepository:
     ) -> Tuple[int, List[Dict[str, Any]]]:
         items = [m for m in self.movimentacoes.values() if str(m.get("polo_id")) == str(polo_id)]
         items.sort(key=lambda x: x["criado_em"], reverse=True)
+        return len(items), items[offset : offset + limit]
+
+    def list_movimentacoes_escola(
+        self, escola_id: str, limit: int = 50, offset: int = 0
+    ) -> Tuple[int, List[Dict[str, Any]]]:
+        items = [m for m in self.movimentacoes.values() if str(m.get("escola_id")) == str(escola_id)]
+        items.sort(key=lambda item: item["criado_em"], reverse=True)
         return len(items), items[offset : offset + limit]
 
     def sum_compradas(self, polo_id: str) -> int:
@@ -1961,6 +2051,22 @@ class InMemoryPolosEscolasRepository:
     def list_turmas_escola(self, escola_id: str, limit: int = 50, offset: int = 0) -> Tuple[int, List[Dict[str, Any]]]:
         items = [t for t in getattr(self, "turmas", {}).values() if str(t.get("escola_id")) == str(escola_id)]
         items.sort(key=lambda t: t["nome"])
+        return len(items), items[offset : offset + limit]
+
+    def list_aulas_escola(
+        self, escola_id: str, limit: int = 50, offset: int = 0
+    ) -> Tuple[int, List[Dict[str, Any]]]:
+        items = []
+        for aula in self.aulas.values():
+            if str(aula.get("escola_id")) != str(escola_id):
+                continue
+            professor = self.professores.get(str(aula.get("professor_id")), {})
+            usuario = self.usuarios.get(str(professor.get("usuario_id")), {})
+            items.append({**aula, "professor_nome": usuario.get("nome", "")})
+        items.sort(
+            key=lambda item: (item.get("data_aula") or date.min, str(item.get("id"))),
+            reverse=True,
+        )
         return len(items), [{**t, "total_alunos": 0} for t in items[offset : offset + limit]]
 
     def update_aluno(self, usuario_id: str, data: Dict[str, Any]) -> None:
@@ -2058,8 +2164,11 @@ class InMemoryPolosEscolasRepository:
         data_fim: Optional[date] = None,
         limit: int = 50,
         offset: int = 0,
+        escola_id: Optional[str] = None,
     ) -> Tuple[int, List[Dict[str, Any]]]:
         items = [p for p in self.professores.values() if str(p.get("polo_id")) == str(polo_id)]
+        if escola_id:
+            items = [p for p in items if str(p.get("escola_id")) == str(escola_id)]
         if data_inicio:
             items = [p for p in items if p.get("data_inicio") and p["data_inicio"] >= data_inicio]
         if data_fim:

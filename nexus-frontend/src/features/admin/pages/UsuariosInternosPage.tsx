@@ -23,6 +23,7 @@ import {
 import { adminApi } from '@/features/admin/api';
 import { UsuarioAdmin } from '@/types/admin';
 import { UsuarioFormModal } from '@/features/admin/components/UsuarioFormModal';
+import { UsuarioAvatar } from '@/features/admin/components/UsuarioAvatar';
 import { useAuthStore } from '@/stores/authStore';
 
 const PAGE_SIZE = 20;
@@ -321,17 +322,11 @@ export const UsuariosInternosPage: React.FC = () => {
                   >
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
-                        {u.foto_url ? (
-                          <img
-                            src={u.foto_url}
-                            alt={u.nome}
-                            className="w-8 h-8 rounded-lg object-cover shrink-0 border border-slate-700"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center text-white font-bold text-xs shrink-0">
-                            {u.nome.charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <UsuarioAvatar
+                          fotoUrl={u.foto_url}
+                          nome={u.nome}
+                          className="w-8 h-8 rounded-lg object-cover shrink-0 border border-slate-700 text-xs"
+                        />
                         <div>
                           <p className="font-semibold text-white">
                             {u.nome} {u.sobrenome || ''}

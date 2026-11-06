@@ -62,10 +62,15 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Users,
         },
         {
-          title: 'Polos & Escolas',
+          title: 'Polos',
           path: '/admin/polos-escolas',
           icon: Building2,
           isPlaceholder: true,
+        },
+        {
+          title: 'Escolas',
+          path: '/admin/escolas',
+          icon: Building2,
         },
         {
           title: 'Corpo Docentes',
@@ -216,6 +221,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           path: '/polo/escolas',
           icon: Building2,
           isPlaceholder: true,
+        },
+        {
+          title: 'Gestão de Escolas',
+          path: '/polo/escolas/gestao',
+          icon: Building2,
         },
         {
           title: 'Cursos',

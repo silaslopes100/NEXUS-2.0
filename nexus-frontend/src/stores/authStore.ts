@@ -32,6 +32,21 @@ interface AuthState {
   getDashboardPath: () => string;
 }
 
+export const normalizeUserRole = (role?: string | null): UserRole | null => {
+  const normalized = role?.toLowerCase().trim();
+  if (normalized === 'coordenador_polo') return 'polo';
+  if (
+    normalized === 'admin'
+    || normalized === 'polo'
+    || normalized === 'escola'
+    || normalized === 'professor'
+    || normalized === 'aluno'
+  ) {
+    return normalized;
+  }
+  return null;
+};
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   perfil: null,
@@ -97,13 +112,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hasRole: (roles) => {
     const { perfil } = get();
-    if (!perfil || !perfil.nome) return false;
+    const currentRole = normalizeUserRole(perfil?.nome);
+    if (!currentRole) return false;
 
-    const currentRole = perfil.nome.toLowerCase().trim();
     if (Array.isArray(roles)) {
-      return roles.some((r) => r.toLowerCase().trim() === currentRole);
+      return roles.some((role) => normalizeUserRole(role) === currentRole);
     }
-    return roles.toLowerCase().trim() === currentRole;
+    return normalizeUserRole(roles) === currentRole;
   },
 
   hasPermission: (permission) => {
@@ -126,7 +141,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   getDashboardPath: () => {
     const { perfil } = get();
-    const role = perfil?.nome?.toLowerCase().trim() || '';
+    const role = normalizeUserRole(perfil?.nome) || '';
 
     switch (role) {
       case 'admin':

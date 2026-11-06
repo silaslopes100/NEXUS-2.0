@@ -184,6 +184,24 @@ class TurmaEscolaListResponse(BaseModel):
     offset: int
 
 
+class AulaEscolaResponse(BaseModel):
+    id: str
+    professor_id: str
+    professor_nome: str = ""
+    materia_id: Optional[str] = None
+    data_aula: date
+    conteudo: Optional[str] = None
+    total_aulas_previstas: Optional[int] = None
+    criado_em: Optional[datetime] = None
+
+
+class AulaEscolaListResponse(BaseModel):
+    total: int
+    items: List[AulaEscolaResponse]
+    limit: int
+    offset: int
+
+
 # =========================================================================
 # 3. Vinculação de Usuários (NOVO)
 # =========================================================================

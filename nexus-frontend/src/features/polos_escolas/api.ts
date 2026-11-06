@@ -1,5 +1,9 @@
 import { apiClient } from '@/api/client';
-import { ResumoOperacionalEscola, ResumoOperacionalPolo } from '@/types/polos';
+import {
+  EscolaCreatePayload,
+  ResumoOperacionalEscola,
+  ResumoOperacionalPolo,
+} from '@/types/polos';
 
 const http = apiClient;
 
@@ -61,18 +65,40 @@ export const polosEscolasApi = {
   },
 
   // ---------- Escolas ----------
-  listarEscolas: async (params?: { polo_id?: string; q?: string; limit?: number; offset?: number }) => {
+  listarEscolas: async (params?: {
+    polo_id?: string;
+    q?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
     const { data } = await http.get('/escolas', { params });
     return data;
   },
 
-  criarEscola: async (poloId: string, payload: any) => {
-    const { data } = await http.post(`/polos/${poloId}/escolas`, payload);
+  obterEscola: async (id: string) => {
+    const { data } = await http.get(`/escolas/${id}`);
     return data;
   },
 
-  atualizarEscola: async (id: string, payload: any) => {
+  criarEscola: async (poloId: string, payload: EscolaCreatePayload) => {
+    const { polo_id: _poloId, ...body } = payload;
+    const { data } = await http.post(`/polos/${poloId}/escolas`, body);
+    return data;
+  },
+
+  atualizarEscola: async (id: string, payload: Partial<EscolaCreatePayload> & { status?: string }) => {
     const { data } = await http.put(`/escolas/${id}`, payload);
+    return data;
+  },
+
+  listarAulasEscola: async (id: string, params?: { limit?: number; offset?: number }) => {
+    const { data } = await http.get(`/escolas/${id}/aulas`, { params });
+    return data;
+  },
+
+  listarProfessoresEscola: async (id: string, params?: { limit?: number; offset?: number }) => {
+    const { data } = await http.get(`/escolas/${id}/professores`, { params });
     return data;
   },
 

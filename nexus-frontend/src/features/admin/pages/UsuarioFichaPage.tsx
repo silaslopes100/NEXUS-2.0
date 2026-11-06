@@ -32,6 +32,7 @@ import {
 import { adminApi } from '@/features/admin/api';
 import { UsuarioFicha, ResumoMetricasUsuario, LogAuditoria } from '@/types/admin';
 import { UsuarioFormModal } from '@/features/admin/components/UsuarioFormModal';
+import { UsuarioAvatar } from '@/features/admin/components/UsuarioAvatar';
 import { useAuthStore } from '@/stores/authStore';
 
 function formatarData(iso?: string | null, comHora = false): string {
@@ -237,17 +238,11 @@ export const UsuarioFichaPage: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            {ficha.foto_url ? (
-              <img
-                src={ficha.foto_url}
-                alt={nomeCompleto}
-                className="w-16 h-16 rounded-2xl object-cover border border-slate-700 shrink-0"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center text-white font-extrabold text-xl shrink-0">
-                {ficha.nome.charAt(0).toUpperCase()}
-              </div>
-            )}
+            <UsuarioAvatar
+              fotoUrl={ficha.foto_url}
+              nome={nomeCompleto}
+              className="w-16 h-16 rounded-2xl object-cover border border-slate-700 shrink-0 text-xl"
+            />
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-nexus-yellow/15 border border-nexus-yellow/30 text-nexus-yellow text-[10px] font-bold uppercase tracking-wider mb-1.5">
                 <Fingerprint className="w-3 h-3" />
