@@ -22,6 +22,7 @@ import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
 import { TurmasEscolaPage } from '@/features/alunos/pages/TurmasEscolaPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { CursosPage } from '@/features/cursos/pages/CursosPage';
+import { DisciplinasPage } from '@/features/cursos/pages/DisciplinasPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -55,7 +56,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/polos-escolas" element={<PolosEscolasPage />} />
           <Route path="/admin/professores" element={<ProfessoresPage />} />
           <Route path="/admin/cursos" element={<CursosPage />} />
-          <Route path="/admin/disciplinas" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/disciplinas" element={<DisciplinasPage />} />
           <Route path="/admin/turmas-calendarios" element={<ModulePlaceholderPage />} />
           <Route path="/admin/alunos" element={<AlunosPage />} />
           <Route path="/admin/ead" element={<ModulePlaceholderPage />} />

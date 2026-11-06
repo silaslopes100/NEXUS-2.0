@@ -30,6 +30,7 @@ class AdminRepositoryInterface(Protocol):
     def update_user(self, user_id: str, data: Dict[str, Any]) -> None: ...
     def delete_user(self, user_id: str) -> None: ...
     def get_user_permissions(self, user_id: str) -> List[str]: ...
+    def get_users_permissions(self, user_ids: List[str]) -> Dict[str, List[str]]: ...
     def set_user_permissions(self, user_id: str, permission_keys: List[str]) -> None: ...
 
     # Ficha cadastral & métricas
@@ -294,6 +295,24 @@ class PostgresAdminRepository:
             cur.execute(sql, (str(user_id),))
             rows = cur.fetchall()
             return [r["chave"] for r in rows]
+
+    def get_users_permissions(self, user_ids: List[str]) -> Dict[str, List[str]]:
+        permissions = {str(user_id): [] for user_id in user_ids}
+        if not permissions:
+            return permissions
+
+        sql = """
+            SELECT up.usuario_id, p.chave
+            FROM usuario_permissoes up
+            JOIN permissoes p ON up.permissao_id = p.id
+            WHERE up.usuario_id = ANY(%s::uuid[])
+            ORDER BY up.usuario_id, p.chave ASC
+        """
+        with get_db_cursor() as cur:
+            cur.execute(sql, (list(permissions),))
+            for row in cur.fetchall():
+                permissions[str(row["usuario_id"])].append(row["chave"])
+        return permissions
 
     def ensure_permissoes(self, keys: List[str]) -> None:
         if not keys:
@@ -820,6 +839,22 @@ class InMemoryAdminRepository:
         uid = str(user_id)
         perm_ids = [up["permissao_id"] for up in self.usuario_permissoes if up["usuario_id"] == uid]
         return sorted([self.permissoes[pid]["chave"] for pid in perm_ids if pid in self.permissoes])
+
+    def get_users_permissions(self, user_ids: List[str]) -> Dict[str, List[str]]:
+        permissions = {str(user_id): [] for user_id in user_ids}
+        if not permissions:
+            return permissions
+
+        user_ids_set = set(permissions)
+        for relation in self.usuario_permissoes:
+            user_id = str(relation["usuario_id"])
+            permission = self.permissoes.get(relation["permissao_id"])
+            if user_id in user_ids_set and permission is not None:
+                permissions[user_id].append(permission["chave"])
+
+        for user_permissions in permissions.values():
+            user_permissions.sort()
+        return permissions
 
     def ensure_permissoes(self, keys: List[str]) -> None:
         for k in keys:

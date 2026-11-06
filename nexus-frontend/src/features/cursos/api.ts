@@ -17,6 +17,13 @@ export interface Curso {
   nivel_academico?: NivelAcademico | null;
 }
 
+export interface CursosPagina {
+  items: Curso[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface CursoCreate {
   nome: string;
   descricao: string;
@@ -25,15 +32,30 @@ export interface CursoCreate {
   carga_horaria_total: number;
   semestres: number;
   status: StatusCurso;
+  disciplina_ids: string[];
 }
 
 export interface Disciplina {
   id: string;
+  curso_id?: string | null;
   nome: string;
   semestre?: number | null;
   ordem: number;
   carga_horaria?: number | null;
   qtd_aulas_prevista?: number | null;
+  tipo?: string;
+  eh_extra_grade?: boolean;
+}
+
+export interface DisciplinaInput {
+  curso_id: string | null;
+  semestre: number | null;
+  nome: string;
+  ordem: number;
+  carga_horaria: number | null;
+  qtd_aulas_prevista: number | null;
+  tipo: string;
+  eh_extra_grade: boolean;
 }
 
 export interface Turma {
@@ -45,9 +67,26 @@ export interface Turma {
   escola_id?: string | null;
 }
 
+export interface CursoDetalhes {
+  disciplinas: Disciplina[];
+  turmas: Turma[];
+}
+
 export const cursosApi = {
   listar: async (): Promise<Curso[]> => {
     const { data } = await apiClient.get<Curso[]>('/cursos-disciplinas/cursos');
+    return data;
+  },
+
+  listarPaginado: async (params: {
+    q?: string;
+    limit: number;
+    offset: number;
+  }): Promise<CursosPagina> => {
+    const { data } = await apiClient.get<CursosPagina>(
+      '/cursos-disciplinas/cursos/paginados',
+      { params }
+    );
     return data;
   },
 
@@ -56,15 +95,42 @@ export const cursosApi = {
     return data;
   },
 
-  listarDisciplinas: async (cursoId: string): Promise<Disciplina[]> => {
+  listarDisciplinas: async (cursoId?: string): Promise<Disciplina[]> => {
     const { data } = await apiClient.get<Disciplina[]>('/cursos-disciplinas/disciplinas', {
-      params: { curso_id: cursoId },
+      params: cursoId ? { curso_id: cursoId } : undefined,
     });
     return data;
   },
 
+  criarDisciplina: async (payload: DisciplinaInput): Promise<Disciplina> => {
+    const { data } = await apiClient.post<Disciplina>('/cursos-disciplinas/disciplinas', payload);
+    return data;
+  },
+
+  atualizarDisciplina: async (
+    disciplinaId: string,
+    payload: DisciplinaInput
+  ): Promise<Disciplina> => {
+    const { data } = await apiClient.put<Disciplina>(
+      `/cursos-disciplinas/disciplinas/${disciplinaId}`,
+      payload
+    );
+    return data;
+  },
+
+  excluirDisciplina: async (disciplinaId: string): Promise<void> => {
+    await apiClient.delete(`/cursos-disciplinas/disciplinas/${disciplinaId}`);
+  },
+
   listarTurmas: async (cursoId: string): Promise<Turma[]> => {
     const { data } = await apiClient.get<Turma[]>('/turmas', { params: { curso_id: cursoId } });
+    return data;
+  },
+
+  detalhesCurso: async (cursoId: string): Promise<CursoDetalhes> => {
+    const { data } = await apiClient.get<CursoDetalhes>(
+      `/turmas/cursos/${cursoId}/detalhes`
+    );
     return data;
   },
 };

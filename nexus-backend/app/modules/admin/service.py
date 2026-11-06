@@ -96,9 +96,12 @@ class AdminService:
             offset=offset,
         )
 
+        user_ids = [str(user["id"]) for user in raw_users]
+        permissions_by_user = self.repo.get_users_permissions(user_ids)
+
         items: List[UsuarioAdminResponse] = []
         for u in raw_users:
-            perms = self.repo.get_user_permissions(str(u["id"]))
+            perms = permissions_by_user.get(str(u["id"]), [])
             items.append(self._build_user_response(u, perms))
 
         return UsuarioListResponse(

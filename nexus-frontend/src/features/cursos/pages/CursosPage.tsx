@@ -33,6 +33,7 @@ const nivelLabel: Record<NivelAcademico, string> = {
 
 const inputClass =
   'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500';
+const PAGE_SIZE = 10;
 
 const initialForm: CursoCreate = {
   nome: '',
@@ -42,15 +43,19 @@ const initialForm: CursoCreate = {
   carga_horaria_total: 1,
   semestres: 1,
   status: 'ativo',
+  disciplina_ids: [],
 };
 
 export const CursosPage: React.FC = () => {
   const { perfil } = useAuthStore();
   const isAdmin = perfil?.nome?.toLowerCase() === 'admin';
   const [cursos, setCursos] = useState<Curso[]>([]);
+  const [totalCursos, setTotalCursos] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [buscaAplicada, setBuscaAplicada] = useState('');
+  const [offset, setOffset] = useState(0);
   const [selectedCurso, setSelectedCurso] = useState<Curso | null>(null);
   const [activeTab, setActiveTab] = useState<'disciplinas' | 'turmas'>('disciplinas');
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
@@ -60,17 +65,37 @@ export const CursosPage: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<CursoCreate>(initialForm);
+  const [disciplinasDisponiveis, setDisciplinasDisponiveis] = useState<Disciplina[]>([]);
+  const [disciplinasCarregadas, setDisciplinasCarregadas] = useState(false);
+  const [disciplinasLoading, setDisciplinasLoading] = useState(false);
+  const [disciplinasError, setDisciplinasError] = useState('');
+  const [buscaDisciplina, setBuscaDisciplina] = useState('');
   const [formError, setFormError] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
 
   useEffect(() => {
+    const busca = search.trim();
+    if (busca === buscaAplicada) return;
+    const timeout = window.setTimeout(() => {
+      setOffset(0);
+      setBuscaAplicada(busca);
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [buscaAplicada, search]);
+
+  useEffect(() => {
     let active = true;
+    setIsLoading(true);
+    setError('');
     cursosApi
-      .listar()
-      .then((items) => {
-        if (active) setCursos(items);
+      .listarPaginado({ q: buscaAplicada || undefined, limit: PAGE_SIZE, offset })
+      .then((page) => {
+        if (active) {
+          setCursos(page.items);
+          setTotalCursos(page.total);
+        }
       })
       .catch((err: unknown) => {
         if (active) setError(cursosApiErrorMessage(err, 'Não foi possível carregar os cursos.'));
@@ -81,18 +106,45 @@ export const CursosPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [buscaAplicada, offset]);
+
+  useEffect(() => {
+    if (!isCreateOpen) return;
+    if (disciplinasCarregadas) return;
+    let active = true;
+    setDisciplinasLoading(true);
+    setDisciplinasError('');
+    cursosApi
+      .listarDisciplinas()
+      .then((items) => {
+        if (active) {
+          setDisciplinasDisponiveis(items);
+          setDisciplinasCarregadas(true);
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setDisciplinasError(
+            cursosApiErrorMessage(err, 'Não foi possível carregar as disciplinas.')
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setDisciplinasLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [disciplinasCarregadas, isCreateOpen]);
 
   useEffect(() => {
     if (!selectedCurso) return;
     let active = true;
     setDetailsLoading(true);
     setDetailsError('');
-    Promise.all([
-      cursosApi.listarDisciplinas(selectedCurso.id),
-      cursosApi.listarTurmas(selectedCurso.id),
-    ])
-      .then(([disciplinasItems, turmasItems]) => {
+    cursosApi
+      .detalhesCurso(selectedCurso.id)
+      .then(({ disciplinas: disciplinasItems, turmas: turmasItems }) => {
         if (active) {
           setDisciplinas(disciplinasItems);
           setTurmas(turmasItems);
@@ -113,18 +165,12 @@ export const CursosPage: React.FC = () => {
     };
   }, [selectedCurso]);
 
-  const cursosFiltrados = useMemo(() => {
-    const termo = search.trim().toLocaleLowerCase('pt-BR');
-    if (!termo) return cursos;
-    return cursos.filter(
-      (curso) =>
-        curso.nome.toLocaleLowerCase('pt-BR').includes(termo) ||
-        (curso.descricao || '').toLocaleLowerCase('pt-BR').includes(termo) ||
-        (curso.nivel_academico ? nivelLabel[curso.nivel_academico] : '')
-          .toLocaleLowerCase('pt-BR')
-          .includes(termo)
+  const disciplinasFiltradas = useMemo(() => {
+    const termo = buscaDisciplina.trim().toLocaleLowerCase('pt-BR');
+    return disciplinasDisponiveis.filter((disciplina) =>
+      disciplina.nome.toLocaleLowerCase('pt-BR').includes(termo)
     );
-  }, [cursos, search]);
+  }, [buscaDisciplina, disciplinasDisponiveis]);
 
   const abrirDetalhes = (curso: Curso, tab: 'disciplinas' | 'turmas') => {
     setDisciplinas([]);
@@ -144,12 +190,23 @@ export const CursosPage: React.FC = () => {
         nome: form.nome.trim(),
         descricao: form.descricao.trim(),
       });
-      setCursos((atuais) =>
-        [...atuais, cursoCriado].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      setDisciplinasDisponiveis((items) =>
+        items.map((item) =>
+          form.disciplina_ids.includes(item.id) ? { ...item, curso_id: cursoCriado.id } : item
+        )
       );
+      setSearch(cursoCriado.nome);
+      setBuscaAplicada(cursoCriado.nome);
+      setOffset(0);
       setForm(initialForm);
       setIsCreateOpen(false);
-      setFeedback({ type: 'success', message: 'Curso cadastrado com sucesso.' });
+      setFeedback({
+        type: 'success',
+        message:
+          form.disciplina_ids.length > 0
+            ? `Curso cadastrado com ${form.disciplina_ids.length} disciplina(s) vinculada(s).`
+            : 'Curso cadastrado com sucesso.',
+      });
     } catch (err) {
       setFormError(cursosApiErrorMessage(err, 'Não foi possível cadastrar o curso.'));
     } finally {
@@ -177,6 +234,7 @@ export const CursosPage: React.FC = () => {
             onClick={() => {
               setForm(initialForm);
               setFormError('');
+              setBuscaDisciplina('');
               setIsCreateOpen(true);
             }}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -209,15 +267,15 @@ export const CursosPage: React.FC = () => {
       <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="flex flex-col gap-3 border-b border-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-bold text-white">Lista de cursos</h2>
-            <p className="text-xs text-slate-500">{cursosFiltrados.length} cursos</p>
+              <h2 className="font-bold text-white">Lista de cursos</h2>
+              <p className="text-xs text-slate-500">{totalCursos} cursos</p>
           </div>
           <div className="relative w-full sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               aria-label="Buscar curso"
               className={inputClass}
-              placeholder="Buscar por nome, descrição ou nível"
+              placeholder="Buscar por nome ou descrição"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -247,7 +305,7 @@ export const CursosPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {cursosFiltrados.map((curso) => (
+                {cursos.map((curso) => (
                   <tr key={curso.id} className="text-slate-300 hover:bg-slate-800/40">
                     <td className="p-4 font-semibold text-white">{curso.nome}</td>
                     <td className="max-w-sm p-4 text-slate-400">
@@ -278,10 +336,12 @@ export const CursosPage: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-                {cursosFiltrados.length === 0 && (
+                {cursos.length === 0 && (
                   <tr>
                     <td colSpan={5} className="p-12 text-center text-slate-500">
-                      {cursos.length ? 'Nenhum curso corresponde à busca.' : 'Nenhum curso cadastrado.'}
+                      {buscaAplicada
+                        ? 'Nenhum curso corresponde à busca.'
+                        : 'Nenhum curso cadastrado.'}
                     </td>
                   </tr>
                 )}
@@ -289,6 +349,34 @@ export const CursosPage: React.FC = () => {
             </table>
           </div>
         ) : null}
+        {!isLoading && !error && totalCursos > 0 && (
+          <footer className="flex flex-col gap-3 border-t border-slate-800 px-4 py-3 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Exibindo {offset + 1}–{Math.min(offset + cursos.length, totalCursos)} de {totalCursos}
+            </span>
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
+              <button
+                type="button"
+                disabled={offset === 0}
+                onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <span>
+                Página {Math.floor(offset / PAGE_SIZE) + 1} de {Math.ceil(totalCursos / PAGE_SIZE)}
+              </span>
+              <button
+                type="button"
+                disabled={offset + PAGE_SIZE >= totalCursos}
+                onClick={() => setOffset((current) => current + PAGE_SIZE)}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Próxima
+              </button>
+            </div>
+          </footer>
+        )}
       </section>
 
       {isCreateOpen && (
@@ -300,7 +388,7 @@ export const CursosPage: React.FC = () => {
         >
           <form
             onSubmit={salvarCurso}
-            className="my-auto w-full max-w-2xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+            className="my-auto max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
           >
             <header className="flex items-start justify-between gap-4">
               <div>
@@ -426,6 +514,83 @@ export const CursosPage: React.FC = () => {
                   <option value="cancelado">Cancelado</option>
                 </select>
               </label>
+
+              <div className="space-y-3 sm:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-200">Disciplinas</h3>
+                    <p className="text-xs text-slate-500">
+                      Opcional · {form.disciplina_ids.length} selecionada(s)
+                    </p>
+                  </div>
+                  <input
+                    aria-label="Buscar disciplina para vincular"
+                    className={`${inputClass} max-w-xs`}
+                    placeholder="Buscar disciplina"
+                    value={buscaDisciplina}
+                    onChange={(event) => setBuscaDisciplina(event.target.value)}
+                  />
+                </div>
+                <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+                  Uma disciplina vinculada a outro curso será transferida para este curso ao salvar.
+                </p>
+                {disciplinasError && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200"
+                  >
+                    {disciplinasError}
+                  </div>
+                )}
+                {disciplinasLoading ? (
+                  <div className="flex justify-center rounded-xl border border-slate-800 py-6 text-blue-400">
+                    <Loader2 className="animate-spin" />
+                  </div>
+                ) : (
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/60 p-2">
+                    {disciplinasFiltradas.map((disciplina) => {
+                      const selected = form.disciplina_ids.includes(disciplina.id);
+                      const cursoAtual = cursos.find((curso) => curso.id === disciplina.curso_id);
+                      return (
+                        <label
+                          key={disciplina.id}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg p-2.5 hover:bg-slate-800/70"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() =>
+                              setForm((current) => ({
+                                ...current,
+                                disciplina_ids: selected
+                                  ? current.disciplina_ids.filter((id) => id !== disciplina.id)
+                                  : [...current.disciplina_ids, disciplina.id],
+                              }))
+                            }
+                            className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-blue-600"
+                          />
+                          <span className="min-w-0 text-sm text-slate-200">
+                            <span className="block font-medium">{disciplina.nome}</span>
+                            <span className="block text-xs text-slate-500">
+                              {cursoAtual ? `Vinculada a: ${cursoAtual.nome}` : 'Sem curso vinculado'}
+                              {disciplina.semestre != null
+                                ? ` · Semestre ${disciplina.semestre}`
+                                : ''}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {disciplinasFiltradas.length === 0 && (
+                      <p className="p-4 text-center text-sm text-slate-500">
+                        {disciplinasDisponiveis.length
+                          ? 'Nenhuma disciplina corresponde à busca.'
+                          : 'Nenhuma disciplina cadastrada.'}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <footer className="flex flex-col-reverse justify-end gap-2 border-t border-slate-800 pt-4 sm:flex-row">

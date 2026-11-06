@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
+from app.core.config import settings
 from app.core.database import get_db_cursor
 from app.modules.auth.dependencies import get_current_user, require_role
 from app.modules.auth.schemas import UserResponse
@@ -33,6 +34,11 @@ class CalendarioSchema(BaseModel):
     disciplina_id: Optional[str] = None
     data_liberacao: Optional[date] = None
     data_encerramento: Optional[date] = None
+
+
+class CursoDetalhesSchema(BaseModel):
+    disciplinas: List[Dict[str, Any]]
+    turmas: List[TurmaSchema]
 
 
 _turmas_db: Dict[str, Dict[str, Any]] = {}
@@ -88,6 +94,84 @@ async def list_turmas(
         if curso_id:
             turmas = [t for t in turmas if t.get("curso_id") == curso_id]
         return turmas
+
+
+@router.get(
+    "/cursos/{curso_id}/detalhes",
+    response_model=CursoDetalhesSchema,
+    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+)
+async def get_detalhes_curso(
+    curso_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+) -> CursoDetalhesSchema:
+    perfil = (current_user.perfil.nome if current_user.perfil else "").lower()
+    polo_id = None
+    escola_id = None
+    if perfil == "polo":
+        if not current_user.polo_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Polo sem vínculo")
+        polo_id = str(current_user.polo_id)
+    elif perfil == "escola":
+        if not current_user.escola_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Escola sem vínculo")
+        escola_id = str(current_user.escola_id)
+
+    course_key = str(curso_id)
+    if not settings.PG_DSN:
+        from app.modules.cursos_disciplinas import _disciplinas_db
+
+        disciplinas = sorted(
+            [
+                dict(discipline)
+                for discipline in _disciplinas_db.values()
+                if str(discipline.get("curso_id")) == course_key
+            ],
+            key=lambda discipline: (discipline.get("ordem") or 0, str(discipline.get("id") or "")),
+        )
+        turmas = [
+            dict(turma)
+            for turma in _turmas_db.values()
+            if str(turma.get("curso_id")) == course_key
+            and (polo_id is None or str(turma.get("polo_id")) == polo_id)
+            and (escola_id is None or str(turma.get("escola_id")) == escola_id)
+        ]
+        return CursoDetalhesSchema(disciplinas=disciplinas, turmas=turmas)
+
+    turma_conditions = ["curso_id = %s"]
+    turma_params: List[Any] = [course_key]
+    if polo_id:
+        turma_conditions.append("polo_id = %s")
+        turma_params.append(polo_id)
+    if escola_id:
+        turma_conditions.append("escola_id = %s")
+        turma_params.append(escola_id)
+
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, curso_id, semestre, nome, ordem, carga_horaria,
+                   qtd_aulas_prevista, tipo, eh_extra_grade
+            FROM disciplinas
+            WHERE curso_id = %s
+            ORDER BY ordem, id
+            """,
+            (course_key,),
+        )
+        disciplinas = [dict(row) for row in cur.fetchall()]
+
+        cur.execute(
+            """
+            SELECT id, curso_id, polo_id, escola_id, nome, data_inicio,
+                   data_fim, calendario_oficial_id
+            FROM turmas
+            WHERE """
+            + " AND ".join(turma_conditions),
+            tuple(turma_params),
+        )
+        turmas = [dict(row) for row in cur.fetchall()]
+
+    return CursoDetalhesSchema(disciplinas=disciplinas, turmas=turmas)
 
 
 @router.post("", response_model=TurmaSchema, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(["admin", "polo"]))])

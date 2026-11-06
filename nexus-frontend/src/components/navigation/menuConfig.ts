@@ -86,7 +86,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Disciplinas & AVA',
           path: '/admin/disciplinas',
           icon: FolderKanban,
-          isPlaceholder: true,
         },
         {
           title: 'Turmas & Calendários',

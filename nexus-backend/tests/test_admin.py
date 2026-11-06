@@ -8,7 +8,12 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.modules.admin.repository import InMemoryAdminRepository, set_admin_repository
+from app.modules.admin.repository import (
+    InMemoryAdminRepository,
+    PostgresAdminRepository,
+    set_admin_repository,
+)
+from app.modules.admin.service import AdminService
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
 
 
@@ -620,6 +625,89 @@ async def test_list_usuarios_exibe_polo_nome_e_escola_nome(client: AsyncClient, 
     assert len(items) == 1
     assert items[0]["polo_nome"] == "Polo Centro"
     assert items[0]["escola_nome"] == "Escola Modelo"
+
+
+def test_list_usuarios_carrega_permissoes_em_lote():
+    class CountingRepository(InMemoryAdminRepository):
+        def __init__(self):
+            super().__init__()
+            self.permission_batch_calls = []
+            self.single_permission_calls = 0
+
+        def get_users_permissions(self, user_ids):
+            self.permission_batch_calls.append(list(user_ids))
+            return super().get_users_permissions(user_ids)
+
+        def get_user_permissions(self, user_id):
+            self.single_permission_calls += 1
+            return super().get_user_permissions(user_id)
+
+    repo = CountingRepository()
+    user_a = repo.create_user({"id": "user-a", "nome": "Ana"})
+    user_b = repo.create_user({"id": "user-b", "nome": "Bruno"})
+    repo.set_user_permissions(user_a, ["p_chat", "p_cadastro"])
+    repo.set_user_permissions(user_b, ["p_vendas"])
+    service = AdminService(repo)
+
+    response = service.list_usuarios(limit=10)
+
+    assert response.total == 2
+    assert [item.permissoes for item in response.items] == [
+        ["p_cadastro", "p_chat"],
+        ["p_vendas"],
+    ]
+    assert repo.permission_batch_calls == [["user-a", "user-b"]]
+    assert repo.single_permission_calls == 0
+
+    empty_page = service.list_usuarios(limit=10, offset=10)
+    assert empty_page.items == []
+    assert repo.permission_batch_calls[-1] == []
+    assert repo.single_permission_calls == 0
+
+
+def test_postgres_carrega_permissoes_de_usuarios_em_uma_consulta(monkeypatch):
+    user_a = "00000000-0000-0000-0000-000000000001"
+    user_b = "00000000-0000-0000-0000-000000000002"
+
+    class Cursor:
+        def __init__(self):
+            self.executions = []
+
+        def execute(self, sql, params):
+            self.executions.append((sql, params))
+
+        def fetchall(self):
+            return [
+                {"usuario_id": user_a, "chave": "p_cadastro"},
+                {"usuario_id": user_a, "chave": "p_chat"},
+            ]
+
+    class CursorContext:
+        def __init__(self, cursor):
+            self.cursor = cursor
+
+        def __enter__(self):
+            return self.cursor
+
+        def __exit__(self, *exc):
+            return False
+
+    cursor = Cursor()
+    monkeypatch.setattr(
+        "app.modules.admin.repository.get_db_cursor",
+        lambda: CursorContext(cursor),
+    )
+
+    permissions = PostgresAdminRepository().get_users_permissions([user_a, user_b])
+
+    assert permissions == {
+        user_a: ["p_cadastro", "p_chat"],
+        user_b: [],
+    }
+    assert len(cursor.executions) == 1
+    sql, params = cursor.executions[0]
+    assert "ANY(%s::uuid[])" in sql
+    assert params == ([user_a, user_b],)
 
 
 @pytest.mark.asyncio
