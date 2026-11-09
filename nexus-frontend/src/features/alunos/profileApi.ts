@@ -8,6 +8,7 @@ export interface PerfilAluno {
   email?: string | null;
   telefone?: string | null;
   celular?: string | null;
+  foto_url?: string | null;
   endereco: {
     cep?: string | null;
     logradouro?: string | null;
@@ -19,6 +20,10 @@ export interface PerfilAluno {
   };
 }
 
+export interface FotoAlunoResponse {
+  foto_url: string;
+}
+
 export const perfilAlunoApi = {
   async get(): Promise<PerfilAluno> {
     const { data } = await apiClient.get<PerfilAluno>('/alunos/meu-perfil');
@@ -27,6 +32,22 @@ export const perfilAlunoApi = {
 
   async update(payload: PerfilAlunoForm): Promise<PerfilAluno> {
     const { data } = await apiClient.put<PerfilAluno>('/alunos/meu-perfil', payload);
+    return data;
+  },
+
+  async getFoto(fotoUrl: string): Promise<Blob> {
+    const { data } = await apiClient.get<Blob>(fotoUrl, { responseType: 'blob' });
+    return data;
+  },
+
+  async uploadFoto(foto: File): Promise<FotoAlunoResponse> {
+    const formData = new FormData();
+    formData.append('foto', foto);
+    const { data } = await apiClient.post<FotoAlunoResponse>(
+      '/alunos/meu-perfil/foto',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
     return data;
   },
 };

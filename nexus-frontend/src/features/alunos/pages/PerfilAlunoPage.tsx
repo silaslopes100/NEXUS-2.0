@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, Save, UserRound } from 'lucide-react';
+import { CheckCircle2, ImagePlus, Loader2, Save, Upload, UserRound } from 'lucide-react';
 import { apiErrorMessage } from '@/features/alunos/api';
 import { perfilAlunoApi, PerfilAluno } from '@/features/alunos/profileApi';
 import { perfilAlunoSchema, PerfilAlunoForm } from '@/features/alunos/profileSchema';
@@ -45,6 +45,12 @@ export const PerfilAlunoPage: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [validationError, setValidationError] = useState('');
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
+  const [savedPhotoUrl, setSavedPhotoUrl] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState('');
+  const [photoSuccess, setPhotoSuccess] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -63,6 +69,46 @@ export const PerfilAlunoPage: React.FC = () => {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    if (!selectedPhoto) {
+      setSelectedPhotoUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(selectedPhoto);
+    setSelectedPhotoUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [selectedPhoto]);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+    setSavedPhotoUrl(null);
+    if (!perfil?.foto_url) {
+      return () => {
+        active = false;
+      };
+    }
+
+    perfilAlunoApi
+      .getFoto(perfil.foto_url)
+      .then((blob) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSavedPhotoUrl(objectUrl);
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setPhotoError(apiErrorMessage(err, 'Não foi possível carregar a foto atual.'));
+        }
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [perfil?.foto_url]);
 
   const handleChange = (field: keyof PerfilAlunoForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -94,6 +140,43 @@ export const PerfilAlunoPage: React.FC = () => {
       setError(apiErrorMessage(err, 'Não foi possível salvar as alterações.'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePhotoSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
+    setPhotoError('');
+    setPhotoSuccess('');
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setSelectedPhoto(null);
+      setPhotoError('Escolha uma imagem JPEG, PNG ou WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSelectedPhoto(null);
+      setPhotoError('A imagem deve ter no máximo 5 MB.');
+      return;
+    }
+    setSelectedPhoto(file);
+  };
+
+  const handlePhotoUpload = async () => {
+    if (!selectedPhoto || !perfil) return;
+    setUploadingPhoto(true);
+    setPhotoError('');
+    setPhotoSuccess('');
+    try {
+      const result = await perfilAlunoApi.uploadFoto(selectedPhoto);
+      setPerfil({ ...perfil, foto_url: result.foto_url });
+      setSelectedPhoto(null);
+      setPhotoSuccess('Foto de perfil atualizada.');
+    } catch (err) {
+      setPhotoError(apiErrorMessage(err, 'Não foi possível enviar a foto.'));
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -148,12 +231,52 @@ export const PerfilAlunoPage: React.FC = () => {
       </header>
 
       <section className="flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-300">
-          <UserRound className="h-6 w-6" />
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-slate-950 text-sky-300">
+          {selectedPhotoUrl || savedPhotoUrl ? (
+            <img
+              src={selectedPhotoUrl || savedPhotoUrl || ''}
+              alt="Foto de perfil"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <UserRound className="h-8 w-8" />
+          )}
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="font-semibold text-white">{[perfil.nome, perfil.sobrenome].filter(Boolean).join(' ')}</p>
-          <p className="text-xs text-slate-400">Dados pessoais e de contato</p>
+          <p className="mt-1 text-xs text-slate-400">Foto de perfil · JPEG, PNG ou WebP · máximo 5 MB</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">
+              <ImagePlus className="h-4 w-4" />
+              Escolher imagem
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={uploadingPhoto}
+                onChange={handlePhotoSelection}
+              />
+            </label>
+            {selectedPhoto && (
+              <button
+                type="button"
+                onClick={() => void handlePhotoUpload()}
+                disabled={uploadingPhoto}
+                className="inline-flex items-center gap-2 rounded-lg bg-nexus-yellow px-3 py-2 text-xs font-bold text-slate-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploadingPhoto ? 'Enviando...' : 'Enviar foto'}
+              </button>
+            )}
+          </div>
+          {(photoError || photoSuccess) && (
+            <p
+              role={photoError ? 'alert' : 'status'}
+              className={`mt-2 text-xs ${photoError ? 'text-red-300' : 'text-emerald-300'}`}
+            >
+              {photoError || photoSuccess}
+            </p>
+          )}
         </div>
       </section>
 

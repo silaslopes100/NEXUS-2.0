@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 from contextlib import contextmanager
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from PIL import Image
 
 from app.core.security import create_access_token
 from app.main import app
@@ -22,6 +24,7 @@ class ProfileDatabase:
                 "email": "ana@example.com",
                 "telefone": None,
                 "celular": "11999990000",
+                "foto_url": None,
                 "cep": None,
                 "logradouro": None,
                 "numero": None,
@@ -49,6 +52,9 @@ class ProfileDatabase:
             query = " ".join(sql.split()).lower()
             if query.startswith("select id, nome, sobrenome, email"):
                 self.result = self.database.users.get(params[0])
+            elif query.startswith("select foto_url from usuarios"):
+                user = self.database.users.get(params[0])
+                self.result = {"foto_url": user.get("foto_url")} if user else None
             elif query.startswith("select id from usuarios"):
                 self.result = next(
                     (
@@ -60,21 +66,26 @@ class ProfileDatabase:
                     None,
                 )
             elif query.startswith("update usuarios"):
-                keys = (
-                    "email",
-                    "telefone",
-                    "celular",
-                    "cep",
-                    "logradouro",
-                    "numero",
-                    "complemento",
-                    "bairro",
-                    "cidade",
-                    "uf",
-                )
-                user = self.database.users.get(params[-1])
-                if user:
-                    user.update(dict(zip(keys, params[:-1])))
+                if "set foto_url" in query:
+                    user = self.database.users.get(params[1])
+                    if user:
+                        user["foto_url"] = params[0]
+                else:
+                    keys = (
+                        "email",
+                        "telefone",
+                        "celular",
+                        "cep",
+                        "logradouro",
+                        "numero",
+                        "complemento",
+                        "bairro",
+                        "cidade",
+                        "uf",
+                    )
+                    user = self.database.users.get(params[-1])
+                    if user:
+                        user.update(dict(zip(keys, params[:-1])))
                 self.result = user
             elif query.startswith("insert into logs_auditoria"):
                 self.database.audit_logs.append(params)
@@ -138,6 +149,13 @@ async def client(auth_repository, profile_database):
 def _headers(user_id: str, role: str) -> dict[str, str]:
     token = create_access_token({"sub": user_id, "perfil": role})
     return {"Authorization": f"Bearer {token}"}
+
+
+def _image_bytes(image_format: str = "PNG") -> bytes:
+    image = Image.new("RGB", (4, 4), color="blue")
+    output = io.BytesIO()
+    image.save(output, format=image_format)
+    return output.getvalue()
 
 
 @pytest.mark.asyncio
@@ -215,3 +233,120 @@ async def test_non_student_cannot_access_student_profile(client):
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("image_format", "media_type", "extension"),
+    [
+        ("JPEG", "image/jpeg", "jpg"),
+        ("PNG", "image/png", "png"),
+        ("WEBP", "image/webp", "webp"),
+    ],
+)
+async def test_student_uploads_and_reads_own_profile_photo(
+    client, profile_database, monkeypatch, tmp_path, image_format, media_type, extension
+):
+    monkeypatch.setattr(perfil_module, "PHOTO_DIRECTORY", tmp_path)
+    headers = _headers("aluno-1", "aluno")
+
+    upload_response = await client.post(
+        "/alunos/meu-perfil/foto",
+        headers=headers,
+        files={"foto": (f"avatar.{extension}", _image_bytes(image_format), media_type)},
+    )
+
+    assert upload_response.status_code == 200
+    photo_url = upload_response.json()["foto_url"]
+    assert photo_url.startswith("/alunos/meu-perfil/foto?v=")
+    stored_filename = profile_database.users["aluno-1"]["foto_url"]
+    assert (tmp_path / stored_filename).is_file()
+
+    profile_response = await client.get("/alunos/meu-perfil", headers=headers)
+    assert profile_response.json()["foto_url"] == photo_url
+
+    contact_update_response = await client.put(
+        "/alunos/meu-perfil",
+        headers=headers,
+        json={"email": "ana@example.com", "telefone": "11999990000"},
+    )
+    assert contact_update_response.status_code == 200
+    assert contact_update_response.json()["foto_url"] == photo_url
+
+    photo_response = await client.get("/alunos/meu-perfil/foto", headers=headers)
+    assert photo_response.status_code == 200
+    assert photo_response.headers["content-type"] == media_type
+    assert Image.open(io.BytesIO(photo_response.content)).format == image_format
+    assert photo_response.headers["cache-control"] == "private, no-store"
+
+    other_user_response = await client.get(
+        "/alunos/meu-perfil/foto",
+        headers=_headers("aluno-2", "aluno"),
+    )
+    assert other_user_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_student_photo_upload_rejects_unsupported_and_invalid_images(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(perfil_module, "PHOTO_DIRECTORY", tmp_path)
+    headers = _headers("aluno-1", "aluno")
+
+    unsupported = await client.post(
+        "/alunos/meu-perfil/foto",
+        headers=headers,
+        files={"foto": ("avatar.gif", b"GIF89a", "image/gif")},
+    )
+    invalid_image = await client.post(
+        "/alunos/meu-perfil/foto",
+        headers=headers,
+        files={"foto": ("avatar.png", b"not an image", "image/png")},
+    )
+    mismatched_format = await client.post(
+        "/alunos/meu-perfil/foto",
+        headers=headers,
+        files={"foto": ("avatar.png", b"\xff\xd8\xff" + b"x" * 20, "image/png")},
+    )
+
+    assert unsupported.status_code == 415
+    assert invalid_image.status_code == 415
+    assert mismatched_format.status_code == 415
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_student_photo_upload_rejects_files_over_five_megabytes(client):
+    response = await client.post(
+        "/alunos/meu-perfil/foto",
+        headers=_headers("aluno-1", "aluno"),
+        files={"foto": ("avatar.png", b"x" * (perfil_module.MAX_PHOTO_BYTES + 1), "image/png")},
+    )
+
+    assert response.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_student_photo_replacement_removes_old_file(client, profile_database, monkeypatch, tmp_path):
+    monkeypatch.setattr(perfil_module, "PHOTO_DIRECTORY", tmp_path)
+    headers = _headers("aluno-1", "aluno")
+
+    for _ in range(2):
+        response = await client.post(
+            "/alunos/meu-perfil/foto",
+            headers=headers,
+            files={"foto": ("avatar.png", _image_bytes(), "image/png")},
+        )
+        assert response.status_code == 200
+
+    stored_files = list(tmp_path.iterdir())
+    assert len(stored_files) == 1
+    assert stored_files[0].name == profile_database.users["aluno-1"]["foto_url"]
+
+
+@pytest.mark.asyncio
+async def test_profile_photo_upload_requires_authenticated_student(client):
+    response = await client.post(
+        "/alunos/meu-perfil/foto",
+        files={"foto": ("avatar.png", _image_bytes(), "image/png")},
+    )
+
+    assert response.status_code == 401
