@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 
 from app.core.email import send_student_invite_email
 from app.core.security import generate_secure_token, hash_password, hash_token, verify_password
+from app.modules.auth.roles import nomes_equivalentes, perfil_canonico
 from app.modules.polos_escolas import dashboard as dash
 from app.modules.polos_escolas import licencas as lic
 from app.modules.polos_escolas.repository import (
@@ -93,7 +94,7 @@ from app.modules.polos_escolas.schemas import (
     UsuarioVinculavelResponse,
 )
 
-_PERFIS_FEED_AUTORIZADOS = {"professor", "coordenador_polo", "secretario_escola", "admin", "diretor"}
+_PERFIS_FEED_AUTORIZADOS = {"professor", "polo", "escola", "admin", "diretor"}
 _DIAS_CHURN = 365
 
 
@@ -108,6 +109,14 @@ class PolosEscolasService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _perfil_id_do_papel(self, nome: str) -> Optional[str]:
+        """Busca o perfil pelo nome informado ou por seus equivalentes."""
+        for candidato in nomes_equivalentes(nome):
+            perfil_id = self.repo.get_perfil_id_by_nome(candidato)
+            if perfil_id:
+                return perfil_id
+        return None
 
     def _endereco_from(self, data: Dict[str, Any]) -> EnderecoSchema:
         return EnderecoSchema(
@@ -186,7 +195,7 @@ class PolosEscolasService:
     # ------------------------------------------------------------------
 
     def create_polo(self, dados: PoloCreateRequest, actor_id: Optional[str], ip: Optional[str]) -> PoloResponse:
-        perfil_id = self.repo.get_perfil_id_by_nome("coordenador_polo")
+        perfil_id = self._perfil_id_do_papel("coordenador_polo")
         if not perfil_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Perfil 'coordenador_polo' não configurado")
 
@@ -280,7 +289,7 @@ class PolosEscolasService:
                 )
             update_dict["coordenador_usuario_id"] = dados.coordenador_usuario_id
             # Promove ao perfil coordenador_polo se necessário
-            perfil_id = self.repo.get_perfil_id_by_nome("coordenador_polo")
+            perfil_id = self._perfil_id_do_papel("coordenador_polo")
             if perfil_id and novo_coord.get("perfil_id") != perfil_id:
                 self.repo.update_usuario(str(novo_coord["id"]), {"perfil_id": perfil_id})
 
@@ -339,9 +348,9 @@ class PolosEscolasService:
         return self._build_polo_response(polo)
 
     def list_polos(
-        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None, polo_id: Optional[str] = None
     ) -> PoloListResponse:
-        total, items = self.repo.list_polos(limit=limit, offset=offset, search=search)
+        total, items = self.repo.list_polos(limit=limit, offset=offset, search=search, polo_id=polo_id)
         usuario_ids = [str(p.get("coordenador_usuario_id")) for p in items if p.get("coordenador_usuario_id")]
         usuarios_por_id = self._load_usuarios_by_ids(usuario_ids)
         return PoloListResponse(
@@ -363,7 +372,7 @@ class PolosEscolasService:
 
         self._validar_email_cpf_unicos(dados.secretario_email, dados.secretario_cpf)
 
-        perfil_id = self.repo.get_perfil_id_by_nome("secretario_escola")
+        perfil_id = self._perfil_id_do_papel("secretario_escola")
         if not perfil_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Perfil 'secretario_escola' não configurado")
 
@@ -522,6 +531,7 @@ class PolosEscolasService:
         escola_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        incluir_sem_polo: bool = False,
     ) -> UsuarioVinculavelListResponse:
         total, items = self.repo.list_usuarios_por_perfil(
             perfil_nome=perfil_nome,
@@ -530,6 +540,7 @@ class PolosEscolasService:
             escola_id=escola_id,
             limit=limit,
             offset=offset,
+            incluir_sem_polo=incluir_sem_polo,
         )
         return UsuarioVinculavelListResponse(
             total=total,
@@ -1316,7 +1327,7 @@ class PolosEscolasService:
     def create_feed_post(
         self, dados: FeedPostCreateRequest, actor_id: str, perfil_nome: str, ip: Optional[str]
     ) -> FeedPostResponse:
-        if perfil_nome.lower() not in _PERFIS_FEED_AUTORIZADOS:
+        if perfil_canonico(perfil_nome) not in _PERFIS_FEED_AUTORIZADOS:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Perfil não autorizado a publicar no feed")
         post_id = self.repo.create_feed_post(
             {"autor_id": actor_id, "titulo": dados.titulo, "conteudo": dados.conteudo, "tags": dados.tags, "polo_id": dados.polo_id}

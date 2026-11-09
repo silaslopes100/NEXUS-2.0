@@ -12,6 +12,9 @@ from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
 from app.modules.admin.repository import InMemoryAdminRepository, set_admin_repository
 from app.modules import cursos_disciplinas as cursos_disciplinas_module
+from app.modules import turmas as turmas_module
+from app.modules.polos_escolas import repository as polos_repository_module
+from app.modules.polos_escolas.repository import InMemoryPolosEscolasRepository
 
 
 @pytest.fixture
@@ -384,7 +387,8 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
 
 # 08. Turmas e Calendários
 @pytest.mark.asyncio
-async def test_modulo_turmas_e_calendarios(client: AsyncClient):
+async def test_modulo_turmas_e_calendarios(client: AsyncClient, monkeypatch):
+    monkeypatch.setattr(settings, "PG_DSN", "")
     t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
 
     t_res = await client.post(
@@ -400,6 +404,239 @@ async def test_modulo_turmas_e_calendarios(client: AsyncClient):
         headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert m_res.status_code == 200
+
+
+POLO_A = "11111111-1111-1111-1111-111111111111"
+POLO_B = "22222222-2222-2222-2222-222222222222"
+ESCOLA_A = "33333333-3333-3333-3333-333333333333"
+ESCOLA_B = "44444444-4444-4444-4444-444444444444"
+
+
+@pytest.fixture
+def turmas_setup(auth_setup, monkeypatch):
+    """Isola o estado em memória de turmas e cria usuários com escopo nos dois nomes de perfil."""
+    monkeypatch.setattr(settings, "PG_DSN", "")
+    monkeypatch.setattr(turmas_module, "_turmas_db", {})
+    monkeypatch.setattr(turmas_module, "_calendarios_db", {})
+    monkeypatch.setattr(turmas_module, "_turma_alunos_db", [])
+
+    polos_repo = InMemoryPolosEscolasRepository()
+    polos_repo.escolas[ESCOLA_A] = {"id": ESCOLA_A, "polo_id": POLO_A, "nome": "Escola A"}
+    polos_repo.escolas[ESCOLA_B] = {"id": ESCOLA_B, "polo_id": POLO_B, "nome": "Escola B"}
+    monkeypatch.setattr(polos_repository_module, "_repo_instance", polos_repo)
+
+    auth_setup.perfis["p-coordpolo"] = {"id": "p-coordpolo", "nome": "coordenador_polo", "descricao": "Coordenador"}
+    auth_setup.perfis["p-secescola"] = {"id": "p-secescola", "nome": "secretario_escola", "descricao": "Secretário"}
+    auth_setup.usuarios["polo-1"].update({"polo_id": POLO_A, "escola_id": None})
+    auth_setup.usuarios["escola-1"].update({"polo_id": POLO_A, "escola_id": ESCOLA_A})
+    base = {"status": "ativo", "permissoes": []}
+    auth_setup.usuarios["coord-1"] = {
+        **base, "id": "coord-1", "nome": "Coord", "email": "coord@nexus.com.br",
+        "perfil_id": "p-coordpolo", "polo_id": POLO_A, "escola_id": None,
+    }
+    auth_setup.usuarios["sec-1"] = {
+        **base, "id": "sec-1", "nome": "Sec", "email": "sec@nexus.com.br",
+        "perfil_id": "p-secescola", "polo_id": POLO_A, "escola_id": ESCOLA_A,
+    }
+    return auth_setup
+
+
+def _auth(user_id: str, role: str) -> dict:
+    return {"Authorization": f"Bearer {_token(user_id, f'{user_id}@nexus.com.br', role)}"}
+
+
+ADMIN = ("admin-1", "admin")
+POLO_CURTO = ("polo-1", "polo")
+POLO_LONGO = ("coord-1", "coordenador_polo")
+ESCOLA_CURTO = ("escola-1", "escola")
+ESCOLA_LONGO = ("sec-1", "secretario_escola")
+
+
+@pytest.mark.asyncio
+async def test_turmas_crud_paginacao_e_datas(client: AsyncClient, turmas_setup):
+    admin = _auth(*ADMIN)
+
+    invalida = await client.post(
+        "/turmas",
+        json={"nome": "Datas erradas", "data_inicio": "2026-06-01", "data_fim": "2026-01-01"},
+        headers=admin,
+    )
+    assert invalida.status_code == 422
+
+    criada = await client.post(
+        "/turmas",
+        json={"nome": "Turma Alfa", "escola_id": ESCOLA_A, "polo_id": POLO_B},
+        headers=admin,
+    )
+    assert criada.status_code == 201
+    corpo = criada.json()
+    assert corpo["polo_id"] == POLO_A, "o polo deve vir da escola, não do payload"
+    turma_id = corpo["id"]
+
+    for nome in ("Turma Beta", "Turma Gama"):
+        assert (await client.post("/turmas", json={"nome": nome}, headers=admin)).status_code == 201
+
+    pagina = await client.get("/turmas/paginadas", params={"limit": 2, "offset": 0}, headers=admin)
+    assert pagina.status_code == 200
+    assert pagina.json()["total"] == 3
+    assert [item["nome"] for item in pagina.json()["items"]] == ["Turma Alfa", "Turma Beta"]
+
+    busca = await client.get("/turmas/paginadas", params={"q": "gam"}, headers=admin)
+    assert [item["nome"] for item in busca.json()["items"]] == ["Turma Gama"]
+
+    detalhe = await client.get(f"/turmas/{turma_id}", headers=admin)
+    assert detalhe.status_code == 200
+    assert detalhe.json()["total_alunos"] == 0
+
+    editada = await client.put(
+        f"/turmas/{turma_id}",
+        json={"nome": "Turma Alfa 2", "escola_id": ESCOLA_B, "data_inicio": "2026-02-01"},
+        headers=admin,
+    )
+    assert editada.status_code == 200
+    assert editada.json()["nome"] == "Turma Alfa 2"
+    assert editada.json()["polo_id"] == POLO_B
+
+    inexistente = await client.put(f"/turmas/{POLO_A}", json={"nome": "Nada"}, headers=admin)
+    assert inexistente.status_code == 404
+
+    escola_inexistente = await client.post(
+        "/turmas", json={"nome": "Sem escola", "escola_id": POLO_A}, headers=admin
+    )
+    assert escola_inexistente.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_turmas_alunos_e_bloqueio_de_exclusao(client: AsyncClient, turmas_setup):
+    admin = _auth(*ADMIN)
+    turma_id = (await client.post("/turmas", json={"nome": "Turma Alunos"}, headers=admin)).json()["id"]
+
+    for _ in range(2):
+        matricula = await client.post(
+            f"/turmas/{turma_id}/matricular-aluno", params={"aluno_id": "aluno-1"}, headers=admin
+        )
+        assert matricula.status_code == 200
+
+    alunos = await client.get(f"/turmas/{turma_id}/alunos", headers=admin)
+    assert alunos.status_code == 200
+    assert alunos.json()["total"] == 1
+    assert alunos.json()["items"][0]["aluno_id"] == "aluno-1"
+
+    assert (await client.delete(f"/turmas/{turma_id}", headers=admin)).status_code == 409
+
+    assert (await client.delete(f"/turmas/{turma_id}/alunos/aluno-1", headers=admin)).status_code == 204
+    assert (await client.delete(f"/turmas/{turma_id}/alunos/aluno-1", headers=admin)).status_code == 404
+
+    assert (await client.delete(f"/turmas/{turma_id}", headers=admin)).status_code == 204
+    assert (await client.get(f"/turmas/{turma_id}", headers=admin)).status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("usuario", [POLO_CURTO, POLO_LONGO])
+async def test_turmas_escopo_polo(client: AsyncClient, turmas_setup, usuario):
+    admin = _auth(*ADMIN)
+    polo = _auth(*usuario)
+    outra_id = (
+        await client.post("/turmas", json={"nome": "Outro polo", "escola_id": ESCOLA_B}, headers=admin)
+    ).json()["id"]
+
+    propria = await client.post("/turmas", json={"nome": "Do polo"}, headers=polo)
+    assert propria.status_code == 201
+    assert propria.json()["polo_id"] == POLO_A
+
+    negada = await client.post("/turmas", json={"nome": "Invasão", "escola_id": ESCOLA_B}, headers=polo)
+    assert negada.status_code == 403
+
+    pagina = await client.get("/turmas/paginadas", params={"polo_id": POLO_B}, headers=polo)
+    assert [item["nome"] for item in pagina.json()["items"]] == ["Do polo"]
+
+    assert (await client.get(f"/turmas/{outra_id}", headers=polo)).status_code == 403
+    assert (await client.put(f"/turmas/{outra_id}", json={"nome": "X1"}, headers=polo)).status_code == 403
+    assert (await client.delete(f"/turmas/{outra_id}", headers=polo)).status_code == 403
+    assert (await client.get(f"/turmas/{outra_id}/alunos", headers=polo)).status_code == 403
+    assert (await client.get(f"/turmas/{outra_id}/alunos-disponiveis", headers=polo)).status_code == 403
+    assert (
+        await client.post(f"/turmas/{outra_id}/matricular-aluno", params={"aluno_id": "a"}, headers=polo)
+    ).status_code == 403
+    assert (await client.delete(f"/turmas/{outra_id}/alunos/a", headers=polo)).status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("usuario", [ESCOLA_CURTO, ESCOLA_LONGO])
+async def test_turmas_escopo_escola(client: AsyncClient, turmas_setup, usuario):
+    admin = _auth(*ADMIN)
+    escola = _auth(*usuario)
+    outra_id = (
+        await client.post("/turmas", json={"nome": "Outra escola", "escola_id": ESCOLA_B}, headers=admin)
+    ).json()["id"]
+
+    propria = await client.post(
+        "/turmas", json={"nome": "Da escola", "escola_id": ESCOLA_B}, headers=escola
+    )
+    assert propria.status_code == 201
+    assert propria.json()["escola_id"] == ESCOLA_A, "a escola do usuário deve prevalecer"
+    assert propria.json()["polo_id"] == POLO_A
+
+    listagem = await client.get("/turmas", headers=escola)
+    assert [item["nome"] for item in listagem.json()] == ["Da escola"]
+
+    assert (await client.delete(f"/turmas/{outra_id}", headers=escola)).status_code == 403
+    assert (await client.delete(f"/turmas/{propria.json()['id']}", headers=escola)).status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_turmas_professor_sem_acesso(client: AsyncClient, turmas_setup):
+    resposta = await client.post("/turmas", json={"nome": "Negada"}, headers=_auth("prof-1", "professor"))
+    assert resposta.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_calendarios_crud_e_permissoes(client: AsyncClient, turmas_setup):
+    admin = _auth(*ADMIN)
+    polo = _auth(*POLO_CURTO)
+
+    sem_token = await client.get("/turmas/calendarios")
+    assert sem_token.status_code in (401, 403)
+
+    invalido = await client.post(
+        "/turmas/calendarios",
+        json={"data_liberacao": "2026-06-01", "data_encerramento": "2026-01-01"},
+        headers=admin,
+    )
+    assert invalido.status_code == 422
+
+    negado = await client.post("/turmas/calendarios", json={}, headers=polo)
+    assert negado.status_code == 403
+
+    criado = await client.post(
+        "/turmas/calendarios",
+        json={"data_liberacao": "2026-01-01", "data_encerramento": "2026-06-01"},
+        headers=admin,
+    )
+    assert criado.status_code == 201
+    calendario_id = criado.json()["id"]
+
+    listagem = await client.get("/turmas/calendarios", headers=polo)
+    assert [item["id"] for item in listagem.json()] == [calendario_id]
+
+    editado = await client.put(
+        f"/turmas/calendarios/{calendario_id}",
+        json={"data_liberacao": "2026-02-01", "data_encerramento": "2026-07-01"},
+        headers=admin,
+    )
+    assert editado.status_code == 200
+    assert editado.json()["data_liberacao"] == "2026-02-01"
+
+    turma = await client.post(
+        "/turmas", json={"nome": "Com calendário", "calendario_oficial_id": calendario_id}, headers=admin
+    )
+    assert turma.status_code == 201
+
+    assert (await client.delete(f"/turmas/calendarios/{calendario_id}", headers=polo)).status_code == 403
+    assert (await client.delete(f"/turmas/calendarios/{calendario_id}", headers=admin)).status_code == 409
+
+    assert (await client.delete(f"/turmas/{turma.json()['id']}", headers=admin)).status_code == 204
+    assert (await client.delete(f"/turmas/calendarios/{calendario_id}", headers=admin)).status_code == 204
 
 
 # 09. EAD

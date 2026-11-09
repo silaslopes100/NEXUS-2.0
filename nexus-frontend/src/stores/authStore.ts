@@ -35,6 +35,7 @@ interface AuthState {
 export const normalizeUserRole = (role?: string | null): UserRole | null => {
   const normalized = role?.toLowerCase().trim();
   if (normalized === 'coordenador_polo') return 'polo';
+  if (normalized === 'secretario_escola') return 'escola';
   if (
     normalized === 'admin'
     || normalized === 'polo'

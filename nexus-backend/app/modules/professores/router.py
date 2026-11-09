@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
+from app.modules.auth.roles import perfil_do_usuario
 from app.modules.auth.schemas import UserResponse
 from app.modules.professores.repository import (
     ProfessoresRepositoryInterface,
@@ -36,7 +37,7 @@ def get_professores_service(
 
 def _escopo_usuario(current_user: UserResponse) -> Tuple[Optional[str], Optional[str]]:
     """RN-09: multi-tenancy — retorna (polo_id, escola_id) obrigatórios do perfil."""
-    perfil = (current_user.perfil.nome if current_user.perfil else "").lower()
+    perfil = perfil_do_usuario(current_user)
     if perfil == "admin":
         return None, None
     if perfil == "polo":

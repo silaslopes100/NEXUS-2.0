@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.security import decode_access_token
 from app.modules.auth.repository import AuthRepositoryInterface, get_auth_repository
+from app.modules.auth.roles import perfil_canonico, perfil_do_usuario
 from app.modules.auth.schemas import PerfilResponse, UserResponse
 from app.modules.auth.service import AuthService
 
@@ -79,7 +80,7 @@ async def get_scoped_user(
     current_user: UserResponse = Depends(get_current_user),
 ) -> dict:
     """Aplica o escopo de visibilidade com base no perfil do usuário."""
-    perfil = (current_user.perfil.nome if current_user.perfil else "").lower()
+    perfil = perfil_do_usuario(current_user)
     if perfil == "admin":
         return {"user": current_user, "polo_id": None, "escola_id": None}
     if perfil == "polo":
@@ -99,12 +100,12 @@ def require_role(allowed_roles: List[str]) -> Callable:
     Exemplo:
         @router.get("/polos", dependencies=[Depends(require_role(["admin", "polo"]))])
     """
-    normalized_allowed = [r.lower().strip() for r in allowed_roles]
+    normalized_allowed = {perfil_canonico(r) for r in allowed_roles}
 
     async def role_checker(
         current_user: UserResponse = Depends(get_current_user),
     ) -> UserResponse:
-        user_role = current_user.perfil.nome.lower().strip() if current_user.perfil else ""
+        user_role = perfil_do_usuario(current_user)
         if user_role not in normalized_allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

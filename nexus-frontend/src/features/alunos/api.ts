@@ -50,12 +50,6 @@ export interface TurmaItem {
   total_alunos: number;
 }
 
-export interface TurmaCreatePayload {
-  nome: string;
-  data_inicio?: string | null;
-  data_fim?: string | null;
-}
-
 export const alunosApi = {
   listar: async (
     poloId: string,
@@ -82,11 +76,6 @@ export const alunosApi = {
 
   listarTurmasEscola: async (escolaId: string): Promise<{ total: number; items: TurmaItem[] }> => {
     const { data } = await apiClient.get(`/escolas/${escolaId}/turmas`, { params: { limit: 200 } });
-    return data;
-  },
-
-  criarTurmaEscola: async (escolaId: string, payload: TurmaCreatePayload): Promise<TurmaItem> => {
-    const { data } = await apiClient.post(`/escolas/${escolaId}/turmas`, payload);
     return data;
   },
 };

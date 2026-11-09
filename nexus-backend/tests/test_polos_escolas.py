@@ -23,6 +23,8 @@ _PERFIS = {
     "p-secgeral": {"id": "p-secgeral", "nome": "secretario_geral", "descricao": "Secretario Geral"},
     "p-coordpolo": {"id": "p-coordpolo", "nome": "coordenador_polo", "descricao": "Coordenador de Polo"},
     "p-secescola": {"id": "p-secescola", "nome": "secretario_escola", "descricao": "Secretario de Escola"},
+    "p-polo": {"id": "p-polo", "nome": "polo", "descricao": "Gestor de Polo"},
+    "p-escola": {"id": "p-escola", "nome": "escola", "descricao": "Gestor de Escola"},
     "p-professor": {"id": "p-professor", "nome": "professor", "descricao": "Professor"},
     "p-aluno": {"id": "p-aluno", "nome": "aluno", "descricao": "Aluno"},
 }
@@ -240,6 +242,140 @@ async def test_rn09_multi_tenancy_restringe_coordenador_a_proprio_polo(client: A
 
     forbidden = await client.get(f"/polos/{polo_b['id']}", headers={"Authorization": f"Bearer {token_a}"})
     assert forbidden.status_code == 403
+
+
+def _criar_usuario(auth_repo, user_id, perfil_id, polo_id=None, escola_id=None, nome=None):
+    auth_repo.usuarios[user_id] = {
+        "id": user_id,
+        "nome": nome or user_id,
+        "sobrenome": "",
+        "email": f"{user_id}@nexus.com.br",
+        "cpf": "",
+        "status": "ativo",
+        "perfil_id": perfil_id,
+        "polo_id": polo_id,
+        "escola_id": escola_id,
+    }
+
+
+@pytest.fixture
+def dois_polos(repos):
+    _, polos_repo = repos
+    polo_a = polos_repo.create_polo({"nome": "Polo A"})
+    polo_b = polos_repo.create_polo({"nome": "Polo B"})
+    escola_a = polos_repo.create_escola({"polo_id": polo_a, "nome": "Escola A"})
+    escola_b = polos_repo.create_escola({"polo_id": polo_b, "nome": "Escola B"})
+    return polo_a, polo_b, escola_a, escola_b
+
+
+def _bearer(user_id: str) -> dict:
+    return {"Authorization": f"Bearer {_token(user_id)}"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("perfil_id", ["p-polo", "p-coordpolo"])
+async def test_coordenador_restrito_ao_proprio_polo(client: AsyncClient, repos, dois_polos, perfil_id):
+    auth_repo, _ = repos
+    polo_a, polo_b, escola_a, escola_b = dois_polos
+    _criar_usuario(auth_repo, "coord", perfil_id, polo_id=polo_a)
+    headers = _bearer("coord")
+
+    escolas = await client.get(f"/polos/{polo_a}/escolas", headers=headers)
+    assert escolas.status_code == 200, escolas.text
+    assert [item["id"] for item in escolas.json()["items"]] == [escola_a]
+    assert (await client.get(f"/polos/{polo_b}/escolas", headers=headers)).status_code == 403
+
+    assert (await client.get(f"/escolas/{escola_a}", headers=headers)).status_code == 200
+    assert (await client.get(f"/escolas/{escola_b}", headers=headers)).status_code == 403
+
+    gestao = await client.get("/escolas", headers=headers)
+    assert [item["id"] for item in gestao.json()["items"]] == [escola_a]
+
+    polos = await client.get("/polos", headers=headers)
+    assert polos.status_code == 200, polos.text
+    assert [item["id"] for item in polos.json()["items"]] == [polo_a]
+
+
+@pytest.mark.asyncio
+async def test_coordenador_sem_vinculo_nao_lista_polos(client: AsyncClient, repos, dois_polos):
+    auth_repo, _ = repos
+    _criar_usuario(auth_repo, "coord", "p-polo")
+    assert (await client.get("/polos", headers=_bearer("coord"))).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_continua_vendo_todos_os_polos(client: AsyncClient, dois_polos):
+    polos = await client.get("/polos", headers=_bearer("admin-1"))
+    assert polos.status_code == 200
+    assert polos.json()["total"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("perfil_id", ["p-escola", "p-secescola"])
+async def test_secretario_restrito_a_propria_escola(client: AsyncClient, repos, dois_polos, perfil_id):
+    auth_repo, _ = repos
+    polo_a, _, escola_a, escola_b = dois_polos
+    _criar_usuario(auth_repo, "sec", perfil_id, polo_id=polo_a, escola_id=escola_a)
+    headers = _bearer("sec")
+
+    assert (await client.get(f"/escolas/{escola_a}", headers=headers)).status_code == 200
+    assert (await client.get(f"/escolas/{escola_b}", headers=headers)).status_code == 403
+    assert (await client.get("/polos", headers=headers)).status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("perfil_id", ["p-polo", "p-coordpolo"])
+async def test_usuarios_vinculaveis_do_coordenador(client: AsyncClient, repos, dois_polos, perfil_id):
+    auth_repo, _ = repos
+    polo_a, polo_b, _, _ = dois_polos
+    _criar_usuario(auth_repo, "coord", perfil_id, polo_id=polo_a)
+    _criar_usuario(auth_repo, "do-polo", "p-professor", polo_id=polo_a)
+    _criar_usuario(auth_repo, "de-outro", "p-professor", polo_id=polo_b)
+    headers = _bearer("coord")
+
+    resposta = await client.get("/usuarios-vinculaveis", headers=headers)
+    assert resposta.status_code == 200, resposta.text
+    ids = {item["id"] for item in resposta.json()["items"]}
+    assert {"coord", "do-polo", "admin-1"} == ids, "próprio polo e usuários sem polo"
+
+    alheio = await client.get("/usuarios-vinculaveis", params={"polo_id": polo_b}, headers=headers)
+    assert alheio.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_usuarios_vinculaveis_admin_sem_restricao(client: AsyncClient, repos, dois_polos):
+    auth_repo, _ = repos
+    _, polo_b, _, _ = dois_polos
+    _criar_usuario(auth_repo, "de-outro", "p-professor", polo_id=polo_b)
+
+    todos = await client.get("/usuarios-vinculaveis", headers=_bearer("admin-1"))
+    assert {"admin-1", "de-outro"} <= {item["id"] for item in todos.json()["items"]}
+
+    filtrado = await client.get("/usuarios-vinculaveis", params={"polo_id": polo_b}, headers=_bearer("admin-1"))
+    assert [item["id"] for item in filtrado.json()["items"]] == ["de-outro"]
+
+
+@pytest.mark.asyncio
+async def test_filtro_de_perfil_encontra_nomes_equivalentes(client: AsyncClient, repos, dois_polos):
+    auth_repo, _ = repos
+    polo_a, _, escola_a, _ = dois_polos
+    _criar_usuario(auth_repo, "sec-curto", "p-escola", polo_id=polo_a, escola_id=escola_a)
+    _criar_usuario(auth_repo, "sec-longo", "p-secescola", polo_id=polo_a, escola_id=escola_a)
+
+    resposta = await client.get(
+        "/usuarios-vinculaveis", params={"perfil": "secretario_escola"}, headers=_bearer("admin-1")
+    )
+    assert {item["id"] for item in resposta.json()["items"]} == {"sec-curto", "sec-longo"}
+
+
+@pytest.mark.asyncio
+async def test_create_polo_usa_perfil_curto_quando_longo_nao_existe(client: AsyncClient, repos):
+    auth_repo, polos_repo = repos
+    del polos_repo.perfis["coordenador_polo"]
+
+    res = await client.post("/polos", json=_polo_payload(), headers=_bearer("admin-1"))
+    assert res.status_code == 201, res.text
+    assert auth_repo.get_user_by_email("coordenador@polo.com")["perfil_id"] == "p-polo"
 
 
 @pytest.mark.asyncio

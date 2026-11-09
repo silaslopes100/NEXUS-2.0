@@ -16,6 +16,7 @@ from app.modules.professores.repository import (
 _PERFIS = {
     "p-admin": {"id": "p-admin", "nome": "admin", "descricao": "Administrador"},
     "p-polo": {"id": "p-polo", "nome": "polo", "descricao": "Gestor de Polo"},
+    "p-coordpolo": {"id": "p-coordpolo", "nome": "coordenador_polo", "descricao": "Coordenador de Polo"},
     "p-professor": {"id": "p-professor", "nome": "professor", "descricao": "Professor"},
 }
 
@@ -101,6 +102,26 @@ def _payload(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("polo_usuario", "esperados"), [("polo-1", 1), ("polo-2", 0)])
+async def test_coordenador_polo_ve_apenas_o_proprio_polo(client: AsyncClient, repos, polo_usuario, esperados):
+    auth_repo, _ = repos
+    auth_repo.usuarios["coord-1"] = {
+        **auth_repo.usuarios["gestor-1"],
+        "id": "coord-1",
+        "perfil_id": "p-coordpolo",
+        "polo_id": polo_usuario,
+    }
+    criado = await client.post(
+        "/professores/", json=_payload(), headers={"Authorization": f"Bearer {_token('admin-1')}"}
+    )
+    assert criado.status_code == 201
+
+    listagem = await client.get("/professores/", headers={"Authorization": f"Bearer {_token('coord-1')}"})
+    assert listagem.status_code == 200, listagem.text
+    assert listagem.json()["total"] == esperados
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from app.core.database import get_db_cursor
+from app.modules.auth.roles import nomes_equivalentes
 
 # O secretário da escola é derivado de usuarios.escola_id (único vínculo escola<->usuário).
 SECRETARIO_PERFIS = ("secretario_escola", "escola")
@@ -44,6 +45,7 @@ class PolosEscolasRepositoryInterface(Protocol):
         escola_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        incluir_sem_polo: bool = False,
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
     # ---------- Polos ----------
@@ -51,7 +53,7 @@ class PolosEscolasRepositoryInterface(Protocol):
     def update_polo(self, polo_id: str, data: Dict[str, Any]) -> None: ...
     def get_polo(self, polo_id: str) -> Optional[Dict[str, Any]]: ...
     def list_polos(
-        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None, polo_id: Optional[str] = None
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
     # ---------- Escolas ----------
@@ -303,18 +305,19 @@ class PostgresPolosEscolasRepository:
         escola_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        incluir_sem_polo: bool = False,
     ) -> Tuple[int, List[Dict[str, Any]]]:
         conds: List[str] = []
         params: List[Any] = []
         if perfil_nome:
-            conds.append("lower(p.nome) = lower(%s)")
-            params.append(perfil_nome)
+            conds.append("lower(p.nome) = ANY(%s)")
+            params.append(list(nomes_equivalentes(perfil_nome)))
         if q:
             conds.append("(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s OR lower(u.cpf) LIKE %s)")
             like = f"%{q.lower()}%"
             params.extend([like, like, like])
         if polo_id:
-            conds.append("u.polo_id = %s")
+            conds.append("(u.polo_id = %s OR u.polo_id IS NULL)" if incluir_sem_polo else "u.polo_id = %s")
             params.append(str(polo_id))
         if escola_id:
             conds.append("u.escola_id = %s")
@@ -392,13 +395,16 @@ class PostgresPolosEscolasRepository:
             return dict(row) if row else None
 
     def list_polos(
-        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None, polo_id: Optional[str] = None
     ) -> Tuple[int, List[Dict[str, Any]]]:
         conds: List[str] = []
         params: List[Any] = []
         if search and search.strip():
             conds.append("lower(nome) LIKE %s")
             params.append(f"%{search.strip().lower()}%")
+        if polo_id:
+            conds.append("id = %s")
+            params.append(str(polo_id))
         where = f"WHERE {' AND '.join(conds)}" if conds else ""
         with get_db_cursor() as cur:
             cur.execute(f"SELECT COUNT(*) as total FROM polos {where}", tuple(params))
@@ -1603,16 +1609,20 @@ class InMemoryPolosEscolasRepository:
         escola_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        incluir_sem_polo: bool = False,
     ) -> Tuple[int, List[Dict[str, Any]]]:
         items = list(self.usuarios.values())
         if perfil_nome:
-            perfil_id = self.perfis.get(perfil_nome.lower().strip())
-            items = [u for u in items if u.get("perfil_id") == perfil_id]
+            perfil_ids = {self.perfis[n] for n in nomes_equivalentes(perfil_nome) if n in self.perfis}
+            items = [u for u in items if u.get("perfil_id") in perfil_ids]
         if q:
             ql = q.lower()
             items = [u for u in items if ql in (u.get("nome", "") + u.get("email", "") + (u.get("cpf") or "")).lower()]
         if polo_id:
-            items = [u for u in items if str(u.get("polo_id")) == str(polo_id)]
+            items = [
+                u for u in items
+                if str(u.get("polo_id")) == str(polo_id) or (incluir_sem_polo and not u.get("polo_id"))
+            ]
         if escola_id:
             items = [u for u in items if str(u.get("escola_id")) == str(escola_id)]
         items.sort(key=lambda x: x.get("nome", ""))
@@ -1636,12 +1646,14 @@ class InMemoryPolosEscolasRepository:
         return p.copy() if p else None
 
     def list_polos(
-        self, limit: int = 50, offset: int = 0, search: Optional[str] = None
+        self, limit: int = 50, offset: int = 0, search: Optional[str] = None, polo_id: Optional[str] = None
     ) -> Tuple[int, List[Dict[str, Any]]]:
         items = sorted(self.polos.values(), key=lambda x: x["nome"])
         if search and search.strip():
             termo = search.strip().lower()
             items = [p for p in items if termo in str(p.get("nome") or "").lower()]
+        if polo_id:
+            items = [p for p in items if str(p.get("id")) == str(polo_id)]
         return len(items), items[offset : offset + limit]
 
     # ---------- Escolas ----------

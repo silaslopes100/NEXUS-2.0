@@ -21,7 +21,7 @@ import { PolosEscolasPage } from '@/features/polos_escolas/pages/PolosEscolasPag
 import { EscolasPage } from '@/features/polos_escolas/pages/EscolasPage';
 import { LicencasEscolaPage } from '@/features/licencas/pages/LicencasEscolaPage';
 import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
-import { TurmasEscolaPage } from '@/features/alunos/pages/TurmasEscolaPage';
+import { TurmasPage } from '@/features/turmas/pages/TurmasPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { CursosPage } from '@/features/cursos/pages/CursosPage';
 import { DisciplinasPage } from '@/features/cursos/pages/DisciplinasPage';
@@ -61,7 +61,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/professores" element={<ProfessoresPage />} />
           <Route path="/admin/cursos" element={<CursosPage />} />
           <Route path="/admin/disciplinas" element={<DisciplinasPage />} />
-          <Route path="/admin/turmas-calendarios" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/turmas-calendarios" element={<TurmasPage />} />
           <Route path="/admin/alunos" element={<AlunosPage />} />
           <Route path="/admin/ead" element={<ModulePlaceholderPage />} />
           <Route path="/admin/notas-historico" element={<ModulePlaceholderPage />} />
@@ -86,7 +86,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/escolas/gestao" element={<EscolasPage />} />
           <Route path="/polo/escolas/:escolaId/licencas" element={<LicencasEscolaPage />} />
           <Route path="/polo/alunos" element={<AlunosPage />} />
-          <Route path="/polo/turmas" element={<TurmasEscolaPage />} />
+          <Route path="/polo/turmas" element={<TurmasPage />} />
           <Route path="/polo/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/polo/transferencias" element={<ModulePlaceholderPage />} />
           <Route path="/polo/licencas" element={<LicencasPage />} />
@@ -99,7 +99,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/escola/dashboard" element={<EscolaDashboardPage />} />
           <Route path="/escola/cursos" element={<CursosPage />} />
           <Route path="/escola/alunos" element={<AlunosPage />} />
-          <Route path="/escola/turmas" element={<TurmasEscolaPage />} />
+          <Route path="/escola/turmas" element={<TurmasPage />} />
           <Route path="/escola/presencas" element={<ModulePlaceholderPage />} />
           <Route path="/escola/licencas" element={<LicencasPage />} />
           <Route path="/escola/livros" element={<ModulePlaceholderPage />} />

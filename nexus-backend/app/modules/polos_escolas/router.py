@@ -7,12 +7,14 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
+from app.modules.auth.roles import perfil_do_usuario
 from app.modules.auth.schemas import UserResponse
 from app.modules.polos_escolas import pdf as pdf_gen
 from app.modules.polos_escolas.dependencies import (
     check_escola_scope,
     check_polo_scope,
     get_polos_escolas_service,
+    polo_do_coordenador,
 )
 from app.modules.polos_escolas.schemas import (
     AlertaListResponse,
@@ -105,15 +107,20 @@ async def list_usuarios_vinculaveis(
     escola_id: Optional[str] = Query(None, description="Filtra por escola atualmente vinculada"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
     service: PolosEscolasService = Depends(get_polos_escolas_service),
 ):
+    polo_escopo = polo_do_coordenador(current_user)
+    if polo_escopo and polo_id and str(polo_id) != polo_escopo:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Acesso negado a este Polo")
     return service.list_usuarios_vinculaveis(
         perfil_nome=perfil,
         q=q,
-        polo_id=polo_id,
+        polo_id=polo_escopo or polo_id,
         escola_id=escola_id,
         limit=limit,
         offset=offset,
+        incluir_sem_polo=polo_escopo is not None,
     )
 
 
@@ -136,9 +143,15 @@ async def list_polos(
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     search: Optional[str] = Query(None, description="Termo de busca por nome do polo"),
+    current_user: UserResponse = Depends(get_current_user),
     service: PolosEscolasService = Depends(get_polos_escolas_service),
 ):
-    return service.list_polos(limit=limit, offset=offset, search=search)
+    return service.list_polos(
+        limit=limit,
+        offset=offset,
+        search=search,
+        polo_id=polo_do_coordenador(current_user),
+    )
 
 
 @router.get("/polos/{polo_id}", response_model=PoloResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
@@ -187,13 +200,11 @@ async def list_escolas_gerenciamento(
     current_user: UserResponse = Depends(get_current_user),
     service: PolosEscolasService = Depends(get_polos_escolas_service),
 ):
-    perfil = (current_user.perfil.nome if current_user.perfil else "").lower().strip()
-    if perfil == "coordenador_polo":
-        if not current_user.polo_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Polo sem vínculo")
-        if polo_id and str(polo_id) != str(current_user.polo_id):
+    polo_escopo = polo_do_coordenador(current_user)
+    if polo_escopo:
+        if polo_id and str(polo_id) != polo_escopo:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Acesso negado a este Polo")
-        polo_id = str(current_user.polo_id)
+        polo_id = polo_escopo
     elif polo_id:
         check_polo_scope(current_user, polo_id)
     return service.list_escolas(
@@ -639,7 +650,7 @@ async def create_aluno(
     check_polo_scope(current_user, polo_id)
     if payload.escola_id:
         check_escola_scope(current_user, payload.escola_id)
-    elif (current_user.perfil.nome if current_user.perfil else "").lower() == "secretario_escola":
+    elif perfil_do_usuario(current_user) == "escola":
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Secretário de escola só cadastra alunos da própria escola")
     return service.create_aluno(polo_id, payload, current_user.id, client_ip)
 
