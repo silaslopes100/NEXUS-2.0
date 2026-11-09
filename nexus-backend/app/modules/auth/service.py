@@ -16,6 +16,7 @@ from app.core.security import (
     verify_password,
 )
 from app.modules.auth.repository import AuthRepositoryInterface, get_auth_repository
+from app.modules.auth.roles import perfil_canonico
 from app.modules.auth.schemas import (
     LoginResponse,
     PerfilResponse,
@@ -65,6 +66,10 @@ class AuthService:
             escola_id=str(user_data["escola_id"]) if user_data.get("escola_id") else None,
             permissoes=permissoes,
             ultimo_login_em=user_data.get("ultimo_login_em"),
+            tambem_aluno=(
+                perfil_canonico(user_data.get("perfil_nome")) == "polo"
+                and bool(user_data.get("possui_cadastro_aluno"))
+            ),
         )
 
     def login(

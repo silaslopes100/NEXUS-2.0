@@ -112,14 +112,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   hasRole: (roles) => {
-    const { perfil } = get();
+    const { perfil, user } = get();
     const currentRole = normalizeUserRole(perfil?.nome);
     if (!currentRole) return false;
 
-    if (Array.isArray(roles)) {
-      return roles.some((role) => normalizeUserRole(role) === currentRole);
-    }
-    return normalizeUserRole(roles) === currentRole;
+    const allowedRoles = (Array.isArray(roles) ? roles : [roles]).map(normalizeUserRole);
+    return (
+      allowedRoles.includes(currentRole) || (!!user?.tambem_aluno && allowedRoles.includes('aluno'))
+    );
   },
 
   hasPermission: (permission) => {

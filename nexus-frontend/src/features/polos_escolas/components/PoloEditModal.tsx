@@ -73,11 +73,16 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
     );
   }, [usuarios, buscaUsuario]);
 
+  // Polos antigos podem ter coordenador sem o perfil Polo; ele continua visível no campo.
+  const coordenadorForaDaLista =
+    !loadingUsuarios && !!polo.coordenador_id && !usuarios.some((u) => u.id === polo.coordenador_id);
+
   useEffect(() => {
     const fetchUsuarios = async () => {
       setLoadingUsuarios(true);
       try {
         const resp = await polosEscolasApi.listarUsuariosVinculaveis({
+          perfil: 'polo',
           limit: 500,
         });
         setUsuarios(resp.items || []);
@@ -207,6 +212,11 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
                   <option value="">
                     {loadingUsuarios ? 'Carregando usuários...' : 'Selecione um usuário'}
                   </option>
+                  {coordenadorForaDaLista && (
+                    <option value={polo.coordenador_id ?? ''}>
+                      {polo.coordenador_nome || 'Coordenador atual'} — {polo.coordenador_email || 'sem e-mail'} (coordenador atual)
+                    </option>
+                  )}
                   {usuariosFiltrados.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.nome} {user.sobrenome} — {user.email || 'sem e-mail'}{user.perfil_nome ? ` (${user.perfil_nome})` : ''}

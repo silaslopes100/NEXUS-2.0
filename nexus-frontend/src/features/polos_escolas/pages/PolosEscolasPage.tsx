@@ -146,7 +146,7 @@ export const PolosEscolasPage: React.FC = () => {
   const carregarUsuarios = async () => {
     setLoadingUsuarios(true);
     try {
-      const resp = await polosEscolasApi.listarUsuariosVinculaveis({ limit: 500 });
+      const resp = await polosEscolasApi.listarUsuariosVinculaveis({ perfil: 'polo', limit: 500 });
       setUsuariosDisponiveis(resp.items || []);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);

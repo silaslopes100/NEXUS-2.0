@@ -27,6 +27,7 @@ export interface User {
   escola_id?: string | null;
   permissoes: string[];
   ultimo_login_em?: string | null;
+  tambem_aluno?: boolean;
 }
 
 export interface LoginResponse {

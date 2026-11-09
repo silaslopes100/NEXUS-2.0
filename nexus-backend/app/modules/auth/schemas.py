@@ -39,6 +39,8 @@ class UserResponse(BaseModel):
     escola_id: Optional[str] = None
     permissoes: List[str] = Field(default_factory=list)
     ultimo_login_em: Optional[datetime] = None
+    # Usuário de perfil Polo que também possui cadastro de aluno.
+    tambem_aluno: bool = False
 
 
 class LoginRequest(BaseModel):

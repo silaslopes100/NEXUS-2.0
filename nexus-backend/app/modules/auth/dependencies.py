@@ -106,7 +106,8 @@ def require_role(allowed_roles: List[str]) -> Callable:
         current_user: UserResponse = Depends(get_current_user),
     ) -> UserResponse:
         user_role = perfil_do_usuario(current_user)
-        if user_role not in normalized_allowed:
+        acesso_como_aluno = current_user.tambem_aluno and "aluno" in normalized_allowed
+        if user_role not in normalized_allowed and not acesso_como_aluno:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Acesso negado: perfil '{user_role}' não possui autorização para este recurso",

@@ -62,7 +62,8 @@ class PostgresAuthRepository:
             SELECT u.id, u.nome, u.sobrenome, u.email, u.cpf, u.senha_hash, u.senha_algoritmo,
                    u.telefone, u.celular, u.foto_url, u.status, u.ultimo_login_em,
                    u.polo_id, u.escola_id, u.perfil_id,
-                   p.nome as perfil_nome, p.descricao as perfil_descricao
+                   p.nome as perfil_nome, p.descricao as perfil_descricao,
+                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id) AS possui_cadastro_aluno
             FROM usuarios u
             LEFT JOIN perfis p ON u.perfil_id = p.id
             WHERE lower(u.email) = lower(%s)
@@ -78,7 +79,8 @@ class PostgresAuthRepository:
             SELECT u.id, u.nome, u.sobrenome, u.email, u.cpf, u.senha_hash, u.senha_algoritmo,
                    u.telefone, u.celular, u.foto_url, u.status, u.ultimo_login_em,
                    u.polo_id, u.escola_id, u.perfil_id,
-                   p.nome as perfil_nome, p.descricao as perfil_descricao
+                   p.nome as perfil_nome, p.descricao as perfil_descricao,
+                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id) AS possui_cadastro_aluno
             FROM usuarios u
             LEFT JOIN perfis p ON u.perfil_id = p.id
             WHERE u.id = %s

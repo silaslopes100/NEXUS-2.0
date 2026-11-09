@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 import { menuByRole, MenuItem, MenuGroup } from '@/components/navigation/menuConfig';
 import { NexusLogo } from '@/components/brand/NexusLogo';
 import { UserRole } from '@/types/auth';
 import {
   LogOut,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   User as UserIcon,
@@ -27,13 +28,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, perfil, logout, refreshToken } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [areaAlunoAberta, setAreaAlunoAberta] = useState(() =>
+    location.pathname.startsWith('/aluno/')
+  );
 
   const activeRole: UserRole =
     normalizeUserRole(perfil?.nome || user?.perfil?.nome) || 'aluno';
 
   const menuGroups: MenuGroup[] = menuByRole[activeRole] || menuByRole.aluno;
+
+  // Chat e Mural já existem no menu do Polo; aqui entram só as telas próprias do aluno.
+  const itensAreaAluno: MenuItem[] = user?.tambem_aluno
+    ? menuByRole.aluno.flatMap((group) => group.items).filter((item) => item.path.startsWith('/aluno/'))
+    : [];
 
   const handleLogout = async () => {
     try {
@@ -106,6 +116,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
     );
   };
 
+  const renderMenuItem = (item: MenuItem) => {
+    const Icon = item.icon;
+    return (
+      <NavLink
+        key={item.path}
+        to={item.path}
+        onClick={onCloseMobile}
+        className={({ isActive }) =>
+          `group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative ${
+            isActive
+              ? 'bg-nexus-blue/15 text-white border border-nexus-blue/40 shadow-sm'
+              : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/80 border border-transparent'
+          } ${collapsed ? 'justify-center px-0' : ''}`
+        }
+        title={collapsed ? item.title : undefined}
+      >
+        {({ isActive }) => (
+          <>
+            {isActive && (
+              <div className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-nexus-yellow rounded-r-full" />
+            )}
+            <Icon
+              className={`w-4 h-4 shrink-0 transition-colors ${
+                isActive
+                  ? 'text-nexus-yellow'
+                  : 'text-slate-400 group-hover:text-slate-200'
+              }`}
+            />
+            {!collapsed && (
+              <div className="flex-1 flex items-center justify-between overflow-hidden">
+                <span className="truncate">{item.title}</span>
+                {renderBadge(item)}
+              </div>
+            )}
+          </>
+        )}
+      </NavLink>
+    );
+  };
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -173,47 +223,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               )}
 
-              {group.items.map((item, iIdx) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={iIdx}
-                    to={item.path}
-                    onClick={onCloseMobile}
-                    className={({ isActive }) =>
-                      `group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative ${
-                        isActive
-                          ? 'bg-nexus-blue/15 text-white border border-nexus-blue/40 shadow-sm'
-                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/80 border border-transparent'
-                      } ${collapsed ? 'justify-center px-0' : ''}`
-                    }
-                    title={collapsed ? item.title : undefined}
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && (
-                          <div className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-nexus-yellow rounded-r-full" />
-                        )}
-                        <Icon
-                          className={`w-4 h-4 shrink-0 transition-colors ${
-                            isActive
-                              ? 'text-nexus-yellow'
-                              : 'text-slate-400 group-hover:text-slate-200'
-                          }`}
-                        />
-                        {!collapsed && (
-                          <div className="flex-1 flex items-center justify-between overflow-hidden">
-                            <span className="truncate">{item.title}</span>
-                            {renderBadge(item)}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </NavLink>
-                );
-              })}
+              {group.items.map(renderMenuItem)}
             </div>
           ))}
+
+          {itensAreaAluno.length > 0 && (
+            <div className="space-y-1 border-t border-slate-800/80 pt-4">
+              <button
+                type="button"
+                aria-expanded={areaAlunoAberta}
+                title={collapsed ? 'Área do Aluno' : undefined}
+                onClick={() => setAreaAlunoAberta((aberta) => !aberta)}
+                className={`flex w-full items-center gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5 text-sm font-semibold text-sky-300 transition-colors hover:bg-sky-500/20 ${
+                  collapsed ? 'justify-center px-0' : ''
+                }`}
+              >
+                <BookOpen className="w-4 h-4 shrink-0" />
+                {!collapsed && (
+                  <>
+                    <span className="flex-1 truncate text-left">Área do Aluno</span>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 transition-transform ${
+                        areaAlunoAberta ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </>
+                )}
+              </button>
+              {areaAlunoAberta && itensAreaAluno.map(renderMenuItem)}
+            </div>
+          )}
         </nav>
 
         {/* Bottom Profile & Logout Footer */}
