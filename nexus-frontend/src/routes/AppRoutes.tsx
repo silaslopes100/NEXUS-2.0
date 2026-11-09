@@ -21,6 +21,7 @@ import { PolosEscolasPage } from '@/features/polos_escolas/pages/PolosEscolasPag
 import { EscolasPage } from '@/features/polos_escolas/pages/EscolasPage';
 import { LicencasEscolaPage } from '@/features/licencas/pages/LicencasEscolaPage';
 import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
+import { PerfilAlunoPage } from '@/features/alunos/pages/PerfilAlunoPage';
 import { TurmasPage } from '@/features/turmas/pages/TurmasPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { CursosPage } from '@/features/cursos/pages/CursosPage';
@@ -119,6 +120,9 @@ export const AppRoutes: React.FC = () => {
         {/* Módulo Aluno */}
         <Route element={<RequireRole roles={['admin', 'aluno']} />}>
           <Route path="/aluno/dashboard" element={<AlunoDashboardPage />} />
+          <Route element={<RequireRole roles={['aluno']} />}>
+            <Route path="/aluno/perfil" element={<PerfilAlunoPage />} />
+          </Route>
           <Route path="/aluno/ava" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/disciplinas" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/historico" element={<ModulePlaceholderPage />} />
