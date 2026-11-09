@@ -1,5 +1,5 @@
 import { apiClient } from '@/api/client';
-import { PerfilAlunoForm } from '@/features/alunos/profileSchema';
+import { onlyDigits, PerfilAlunoForm } from '@/features/alunos/profileSchema';
 
 export interface PerfilAluno {
   id: string;
@@ -31,7 +31,12 @@ export const perfilAlunoApi = {
   },
 
   async update(payload: PerfilAlunoForm): Promise<PerfilAluno> {
-    const { data } = await apiClient.put<PerfilAluno>('/alunos/meu-perfil', payload);
+    const { data } = await apiClient.put<PerfilAluno>('/alunos/meu-perfil', {
+      ...payload,
+      telefone: onlyDigits(payload.telefone),
+      celular: onlyDigits(payload.celular),
+      cep: onlyDigits(payload.cep),
+    });
     return data;
   },
 

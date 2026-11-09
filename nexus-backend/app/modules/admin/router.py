@@ -1,11 +1,15 @@
 """Rotas HTTP da API Administrativa do NEXUS 2.0."""
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import FileResponse
 
+from app.core.database import get_db_cursor
+from app.modules.alunos import perfil as perfil_aluno
 from app.modules.admin.dependencies import get_admin_service, require_admin_user
 from app.modules.admin.schemas import (
     AdminDashboardMetricsResponse,
@@ -103,6 +107,108 @@ async def get_usuario_ficha(
     service: AdminService = Depends(get_admin_service),
 ) -> UsuarioFichaResponse:
     return service.get_usuario_ficha(usuario_id)
+
+
+@router.get(
+    "/usuarios/{usuario_id}/foto",
+    summary="Retorna a foto compartilhada do usuário com acesso administrativo",
+)
+async def get_usuario_foto(usuario_id: str) -> FileResponse:
+    with get_db_cursor() as cur:
+        cur.execute("SELECT foto_url FROM usuarios WHERE id = %s", (usuario_id,))
+        row = cur.fetchone()
+
+    photo_path = perfil_aluno._stored_photo_path(row.get("foto_url") if row else None)
+    if not photo_path or not photo_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foto de perfil não encontrada",
+        )
+
+    media_type = {
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }[photo_path.suffix]
+    return FileResponse(
+        photo_path,
+        media_type=media_type,
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.post(
+    "/usuarios/{usuario_id}/foto",
+    summary="Atualiza a foto compartilhada do usuário",
+)
+async def upload_usuario_foto(
+    usuario_id: str,
+    request: Request,
+    foto: UploadFile = File(...),
+    current_admin: UserResponse = Depends(require_admin_user),
+) -> Dict[str, str]:
+    content = await foto.read(perfil_aluno.MAX_PHOTO_BYTES + 1)
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selecione uma imagem para enviar.",
+        )
+    if len(content) > perfil_aluno.MAX_PHOTO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="A imagem deve ter no máximo 5 MB.",
+        )
+
+    processed_content, extension = perfil_aluno._prepare_photo(
+        content,
+        foto.content_type or "",
+    )
+    new_filename = perfil_aluno._write_photo(processed_content, extension)
+    previous_filename: Optional[str] = None
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT foto_url FROM usuarios WHERE id = %s FOR UPDATE",
+                (usuario_id,),
+            )
+            previous = cur.fetchone()
+            if not previous:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Usuário não encontrado",
+                )
+            previous_filename = previous.get("foto_url")
+
+            cur.execute(
+                """
+                UPDATE usuarios SET foto_url = %s, atualizado_em = now()
+                WHERE id = %s
+                """,
+                (new_filename, usuario_id),
+            )
+            cur.execute(
+                """
+                INSERT INTO logs_auditoria (
+                    usuario_id, acao, entidade, entidade_id, dados_depois,
+                    ip, criado_em, atualizado_em
+                ) VALUES (%s, %s, %s, %s, %s, %s, now(), now())
+                """,
+                (
+                    current_admin.id,
+                    "usuario_foto_atualizada",
+                    "usuarios",
+                    usuario_id,
+                    json.dumps({"foto_url": "/admin/usuarios/{}/foto".format(usuario_id)}),
+                    get_client_ip(request),
+                ),
+            )
+    except Exception:
+        perfil_aluno._remove_photo(new_filename)
+        raise
+
+    if previous_filename != new_filename:
+        perfil_aluno._remove_photo(previous_filename)
+    return {"foto_url": f"/admin/usuarios/{usuario_id}/foto?v={new_filename}"}
 
 
 @router.get(

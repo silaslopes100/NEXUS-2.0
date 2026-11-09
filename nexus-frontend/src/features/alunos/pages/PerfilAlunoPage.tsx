@@ -2,7 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, ImagePlus, Loader2, Save, Upload, UserRound } from 'lucide-react';
 import { apiErrorMessage } from '@/features/alunos/api';
 import { perfilAlunoApi, PerfilAluno } from '@/features/alunos/profileApi';
-import { perfilAlunoSchema, PerfilAlunoForm } from '@/features/alunos/profileSchema';
+import {
+  formatCep,
+  formatPhone,
+  perfilAlunoSchema,
+  PerfilAlunoForm,
+} from '@/features/alunos/profileSchema';
 import { useAuthStore } from '@/stores/authStore';
 
 const emptyForm: PerfilAlunoForm = {
@@ -24,9 +29,9 @@ const inputClass =
 function toForm(perfil: PerfilAluno): PerfilAlunoForm {
   return {
     email: perfil.email || '',
-    telefone: perfil.telefone || '',
-    celular: perfil.celular || '',
-    cep: perfil.endereco.cep || '',
+    telefone: formatPhone(perfil.telefone || ''),
+    celular: formatPhone(perfil.celular || ''),
+    cep: formatCep(perfil.endereco.cep || ''),
     logradouro: perfil.endereco.logradouro || '',
     numero: perfil.endereco.numero || '',
     complemento: perfil.endereco.complemento || '',
@@ -111,7 +116,12 @@ export const PerfilAlunoPage: React.FC = () => {
   }, [perfil?.foto_url]);
 
   const handleChange = (field: keyof PerfilAlunoForm, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
+    const formattedValue = field === 'telefone' || field === 'celular'
+      ? formatPhone(value)
+      : field === 'cep'
+        ? formatCep(value)
+        : value;
+    setForm((current) => ({ ...current, [field]: formattedValue }));
     setSuccess('');
     setValidationError('');
   };
@@ -213,11 +223,20 @@ export const PerfilAlunoPage: React.FC = () => {
       <input
         className={inputClass}
         name={name}
-        type={name === 'email' ? 'email' : 'text'}
+        type={name === 'email' ? 'email' : name === 'telefone' || name === 'celular' ? 'tel' : 'text'}
+        inputMode={name === 'telefone' || name === 'celular' || name === 'cep' ? 'numeric' : undefined}
         value={form[name]}
         required={options?.required}
         autoComplete={options?.autoComplete}
-        maxLength={name === 'uf' ? 2 : undefined}
+        maxLength={
+          name === 'telefone' || name === 'celular'
+            ? 18
+            : name === 'cep'
+              ? 9
+              : name === 'uf'
+                ? 2
+                : undefined
+        }
         onChange={(event) => handleChange(name, event.target.value)}
       />
     </label>

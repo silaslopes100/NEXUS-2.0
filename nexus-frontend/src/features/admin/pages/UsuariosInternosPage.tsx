@@ -324,6 +324,7 @@ export const UsuariosInternosPage: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <UsuarioAvatar
                           fotoUrl={u.foto_url}
+                          usuarioId={u.id}
                           nome={u.nome}
                           className="w-8 h-8 rounded-lg object-cover shrink-0 border border-slate-700 text-xs"
                         />

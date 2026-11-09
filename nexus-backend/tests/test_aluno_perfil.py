@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from contextlib import contextmanager
+from importlib import import_module
 
 import pytest
 import pytest_asyncio
@@ -12,6 +13,8 @@ from app.core.security import create_access_token
 from app.main import app
 from app.modules.alunos import perfil as perfil_module
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
+
+admin_router_module = import_module("app.modules.admin.router")
 
 
 class ProfileDatabase:
@@ -178,9 +181,9 @@ async def test_student_updates_email_contacts_and_address(client, profile_databa
         headers=_headers("aluno-1", "aluno"),
         json={
             "email": " ANA.NOVA@EXAMPLE.COM ",
-            "telefone": " 1133334444 ",
+            "telefone": " (11) 93333-4444 ",
             "celular": " ",
-            "cep": "01000-000",
+            "cep": " 01000-000 ",
             "logradouro": "Rua Central",
             "numero": "42",
             "complemento": "Casa 2",
@@ -193,12 +196,38 @@ async def test_student_updates_email_contacts_and_address(client, profile_databa
     assert response.status_code == 200
     body = response.json()
     assert body["email"] == "ana.nova@example.com"
-    assert body["telefone"] == "1133334444"
+    assert body["telefone"] == "11933334444"
     assert body["celular"] is None
     assert body["endereco"]["logradouro"] == "Rua Central"
+    assert body["endereco"]["cep"] == "01000000"
     assert body["endereco"]["uf"] == "SP"
     assert profile_database.users["aluno-1"]["email"] == "ana.nova@example.com"
+    assert profile_database.users["aluno-1"]["telefone"] == "11933334444"
+    assert profile_database.users["aluno-1"]["cep"] == "01000000"
     assert len(profile_database.audit_logs) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value", "expected_detail"),
+    [
+        ("telefone", "(11) 3333-4444", "O telefone deve conter 11 dígitos"),
+        ("celular", "(11) 99999-123", "O celular deve conter 11 dígitos"),
+        ("cep", "01000-00", "O CEP deve conter 8 dígitos"),
+    ],
+)
+async def test_profile_update_rejects_contact_fields_with_wrong_digit_count(
+    client, profile_database, field, value, expected_detail
+):
+    response = await client.put(
+        "/alunos/meu-perfil",
+        headers=_headers("aluno-1", "aluno"),
+        json={"email": "ana@example.com", field: value},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == expected_detail
+    assert not profile_database.audit_logs
 
 
 @pytest.mark.asyncio
@@ -284,6 +313,48 @@ async def test_student_uploads_and_reads_own_profile_photo(
         headers=_headers("aluno-2", "aluno"),
     )
     assert other_user_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_and_student_share_the_same_profile_photo(
+    client, profile_database, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(perfil_module, "PHOTO_DIRECTORY", tmp_path)
+    monkeypatch.setattr(admin_router_module, "get_db_cursor", profile_database.cursor_context)
+    student_headers = _headers("aluno-1", "aluno")
+    admin_headers = _headers("admin-1", "admin")
+
+    student_upload = await client.post(
+        "/alunos/meu-perfil/foto",
+        headers=student_headers,
+        files={"foto": ("aluno.png", _image_bytes(), "image/png")},
+    )
+    assert student_upload.status_code == 200
+    student_filename = profile_database.users["aluno-1"]["foto_url"]
+
+    admin_read = await client.get(
+        "/admin/usuarios/aluno-1/foto",
+        headers=admin_headers,
+    )
+    assert admin_read.status_code == 200
+    assert Image.open(io.BytesIO(admin_read.content)).format == "PNG"
+
+    admin_upload = await client.post(
+        "/admin/usuarios/aluno-1/foto",
+        headers=admin_headers,
+        files={"foto": ("admin.png", _image_bytes("PNG"), "image/png")},
+    )
+    assert admin_upload.status_code == 200
+    admin_filename = profile_database.users["aluno-1"]["foto_url"]
+    assert admin_filename != student_filename
+    assert not (tmp_path / student_filename).exists()
+
+    student_read = await client.get(
+        "/alunos/meu-perfil/foto",
+        headers=student_headers,
+    )
+    assert student_read.status_code == 200
+    assert Image.open(io.BytesIO(student_read.content)).format == "PNG"
 
 
 @pytest.mark.asyncio

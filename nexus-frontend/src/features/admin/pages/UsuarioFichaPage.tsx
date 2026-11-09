@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  ShieldCheck,
   Loader2,
   AlertCircle,
   X,
@@ -23,14 +22,14 @@ import {
   Award,
   ClipboardCheck,
   Users as UsersIcon,
-  History,
   RefreshCw,
   Fingerprint,
   BarChart3,
   Shield,
+  Camera,
 } from 'lucide-react';
 import { adminApi } from '@/features/admin/api';
-import { UsuarioFicha, ResumoMetricasUsuario, LogAuditoria } from '@/types/admin';
+import { UsuarioFicha, ResumoMetricasUsuario } from '@/types/admin';
 import { UsuarioFormModal } from '@/features/admin/components/UsuarioFormModal';
 import { UsuarioAvatar } from '@/features/admin/components/UsuarioAvatar';
 import { useAuthStore } from '@/stores/authStore';
@@ -42,6 +41,30 @@ function formatarData(iso?: string | null, comHora = false): string {
   return comHora
     ? d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString('pt-BR');
+}
+
+function mensagemErro(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { data?: { detail?: unknown } } }).response;
+    if (typeof response?.data?.detail === 'string') return response.data.detail;
+  }
+  return fallback;
+}
+
+function valorMetrica(value?: number | null): number | string {
+  return value ?? '—';
+}
+
+function formatarTelefone(value?: string | null): string {
+  if (!value) return '—';
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return value;
 }
 
 const getStatusBadge = (status: string) => {
@@ -86,21 +109,6 @@ const MetricaCard: React.FC<{
   </div>
 );
 
-const AcaoLabel: Record<string, string> = {
-  usuario_criado: 'Usuário criado',
-  usuario_atualizado: 'Usuário atualizado',
-  usuario_permissoes_atualizadas: 'Permissões atualizadas',
-  senha_alterada_admin: 'Senha redefinida (admin)',
-  usuario_excluido: 'Usuário excluído',
-  login_sucesso: 'Login realizado',
-  login_falha: 'Falha no login',
-  login_bloqueado: 'Login bloqueado',
-  logout: 'Logout',
-  senha_esquecida_solicitada: 'Recuperação de senha solicitada',
-  senha_redefinida: 'Senha redefinida (token)',
-  perfil_atualizado: 'Perfil atualizado',
-};
-
 export const UsuarioFichaPage: React.FC = () => {
   const { usuarioId } = useParams<{ usuarioId: string }>();
   const navigate = useNavigate();
@@ -108,33 +116,40 @@ export const UsuarioFichaPage: React.FC = () => {
 
   const [ficha, setFicha] = useState<UsuarioFicha | null>(null);
   const [resumo, setResumo] = useState<ResumoMetricasUsuario | null>(null);
-  const [logs, setLogs] = useState<LogAuditoria[]>([]);
-  const [logsTotal, setLogsTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resumoError, setResumoError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [fotoObjectUrl, setFotoObjectUrl] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     if (!usuarioId) return;
     setIsLoading(true);
     setError(null);
+    setResumoError(null);
     try {
-      const [fichaRes, resumoRes, logsRes] = await Promise.all([
+      const [fichaResult, resumoResult] = await Promise.allSettled([
         adminApi.getUsuarioFicha(usuarioId),
-        adminApi.getResumoUsuario(usuarioId).catch(() => null),
-        adminApi.listAuditLogs({ usuario_id: usuarioId, limit: 10 }).catch(() => null),
+        adminApi.getResumoUsuario(usuarioId),
       ]);
-      setFicha(fichaRes);
-      setResumo(resumoRes);
-      setLogs(logsRes?.items || []);
-      setLogsTotal(logsRes?.total || 0);
+
+      if (fichaResult.status === 'rejected') throw fichaResult.reason;
+      setFicha(fichaResult.value);
+
+      if (resumoResult.status === 'fulfilled') {
+        setResumo(resumoResult.value);
+      } else {
+        setResumo(null);
+        setResumoError(mensagemErro(resumoResult.reason, 'Não foi possível carregar as métricas do usuário.'));
+      }
+
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erro ao carregar a ficha do usuário.');
+      setError(mensagemErro(err, 'Erro ao carregar a ficha do usuário.'));
     } finally {
       setIsLoading(false);
     }
@@ -143,6 +158,58 @@ export const UsuarioFichaPage: React.FC = () => {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    if (!ficha) return;
+    const storedFilename = /^[a-f0-9]{32}\.(?:jpg|png|webp)$/.test(ficha.foto_url || '');
+    const adminPhotoUrl = `/admin/usuarios/${ficha.id}/foto`;
+    const storedAdminUrl = ficha.foto_url?.startsWith(adminPhotoUrl) || storedFilename;
+    if (!storedAdminUrl) {
+      setFotoObjectUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    void adminApi.getUsuarioFoto(ficha.id).then((blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      if (cancelled) {
+        URL.revokeObjectURL(objectUrl);
+      } else {
+        setFotoObjectUrl(objectUrl);
+      }
+    }).catch((err: unknown) => {
+      if (!cancelled) {
+        setFotoObjectUrl(null);
+        setFeedback({
+          type: 'error',
+          message: mensagemErro(err, 'Não foi possível carregar a foto do usuário.'),
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [ficha?.id, ficha?.foto_url]);
+
+  const handleUploadFoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const foto = event.target.files?.[0];
+    event.target.value = '';
+    if (!foto || !ficha) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(foto.type) || foto.size > 5 * 1024 * 1024) {
+      setFeedback({ type: 'error', message: 'Envie uma imagem JPEG, PNG ou WebP de até 5 MB.' });
+      return;
+    }
+    try {
+      const resultado = await adminApi.uploadUsuarioFoto(ficha.id, foto);
+      setFicha((atual) => atual ? { ...atual, foto_url: resultado.foto_url } : atual);
+      setFeedback({ type: 'success', message: 'Foto atualizada para o usuário e o aluno.' });
+    } catch (err: unknown) {
+      setFeedback({ type: 'error', message: mensagemErro(err, 'Não foi possível atualizar a foto.') });
+    }
+  };
 
   const handleConfirmResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,6 +267,14 @@ export const UsuarioFichaPage: React.FC = () => {
   const resumoAluno = resumo?.aluno;
   const resumoProfessor = resumo?.professor;
   const resumoUnidade = resumo?.unidade;
+  const temVinculoUnidade = Boolean(
+    ficha.polo_id
+    || ficha.escola_id
+    || ficha.aluno?.polo_id
+    || ficha.aluno?.escola_id
+    || ficha.professor?.polo_id
+    || ficha.professor?.escola_id
+  );
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -225,6 +300,11 @@ export const UsuarioFichaPage: React.FC = () => {
           </button>
         </div>
       )}
+      {resumoError && (
+        <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          Não foi possível carregar as métricas do usuário. Os valores indisponíveis aparecem como “—”. {resumoError}
+        </div>
+      )}
 
       {/* Header da Ficha */}
       <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl">
@@ -238,11 +318,36 @@ export const UsuarioFichaPage: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <UsuarioAvatar
-              fotoUrl={ficha.foto_url}
-              nome={nomeCompleto}
-              className="w-16 h-16 rounded-2xl object-cover border border-slate-700 shrink-0 text-xl"
-            />
+            <div className="relative shrink-0">
+              {fotoObjectUrl ? (
+                <img
+                  src={fotoObjectUrl}
+                  alt={nomeCompleto}
+                  className="w-16 h-16 rounded-2xl object-cover border border-slate-700"
+                />
+              ) : (
+                <UsuarioAvatar
+                  fotoUrl={ficha.foto_url}
+                  nome={nomeCompleto}
+                  className="w-16 h-16 rounded-2xl object-cover border border-slate-700 text-xl"
+                />
+              )}
+              <label
+                htmlFor="usuario-foto-upload"
+                title="Alterar foto do usuário"
+                className="absolute -bottom-2 -right-2 p-1.5 rounded-full bg-nexus-yellow text-slate-950 cursor-pointer shadow-lg hover:bg-yellow-300"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span className="sr-only">Alterar foto do usuário</span>
+              </label>
+              <input
+                id="usuario-foto-upload"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleUploadFoto}
+              />
+            </div>
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-nexus-yellow/15 border border-nexus-yellow/30 text-nexus-yellow text-[10px] font-bold uppercase tracking-wider mb-1.5">
                 <Fingerprint className="w-3 h-3" />
@@ -310,8 +415,8 @@ export const UsuarioFichaPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <DadoItem icon={<Mail className="w-3 h-3" />} label="E-mail" value={ficha.email || '—'} />
           <DadoItem icon={<CreditCard className="w-3 h-3" />} label="CPF" value={ficha.cpf || '—'} />
-          <DadoItem icon={<Phone className="w-3 h-3" />} label="Telefone" value={ficha.telefone || '—'} />
-          <DadoItem icon={<Smartphone className="w-3 h-3" />} label="Celular" value={ficha.celular || '—'} />
+          <DadoItem icon={<Phone className="w-3 h-3" />} label="Telefone" value={formatarTelefone(ficha.telefone)} />
+          <DadoItem icon={<Smartphone className="w-3 h-3" />} label="Celular" value={formatarTelefone(ficha.celular)} />
           <DadoItem
             icon={<MapPin className="w-3 h-3" />}
             label="Polo"
@@ -360,45 +465,43 @@ export const UsuarioFichaPage: React.FC = () => {
               value={formatarData(ficha.aluno.data_nascimento)}
             />
           </div>
-          {resumoAluno && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <MetricaCard
-                icon={<BookOpen className="w-4 h-4" />}
-                label="Matrículas EAD"
-                value={resumoAluno.matriculas_total}
-              />
-              <MetricaCard
-                icon={<BarChart3 className="w-4 h-4" />}
-                label={
-                  resumoAluno.media_notas != null
-                    ? `Média de Notas (${resumoAluno.total_notas} avaliações)`
-                    : 'Média de Notas'
-                }
-                value={resumoAluno.media_notas != null ? resumoAluno.media_notas.toFixed(1) : '—'}
-                accent="text-blue-400"
-              />
-              <MetricaCard
-                icon={<ClipboardCheck className="w-4 h-4" />}
-                label={
-                  resumoAluno.percentual_presenca != null
-                    ? `Presença (${resumoAluno.presencas_positivas}/${resumoAluno.total_presencas})`
-                    : 'Presença'
-                }
-                value={
-                  resumoAluno.percentual_presenca != null
-                    ? `${resumoAluno.percentual_presenca}%`
-                    : '—'
-                }
-                accent="text-emerald-400"
-              />
-              <MetricaCard
-                icon={<Award className="w-4 h-4" />}
-                label="Certificados"
-                value={resumoAluno.certificados_total}
-                accent="text-amber-400"
-              />
-            </div>
-          )}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <MetricaCard
+              icon={<BookOpen className="w-4 h-4" />}
+              label="Matrículas EAD"
+              value={valorMetrica(resumoAluno?.matriculas_total)}
+            />
+            <MetricaCard
+              icon={<BarChart3 className="w-4 h-4" />}
+              label={
+                resumoAluno?.media_notas != null
+                  ? `Média de Notas (${resumoAluno.total_notas} avaliações)`
+                  : 'Média de Notas'
+              }
+              value={resumoAluno?.media_notas != null ? resumoAluno.media_notas.toFixed(1) : '—'}
+              accent="text-blue-400"
+            />
+            <MetricaCard
+              icon={<ClipboardCheck className="w-4 h-4" />}
+              label={
+                resumoAluno?.percentual_presenca != null
+                  ? `Presença (${resumoAluno.presencas_positivas}/${resumoAluno.total_presencas})`
+                  : 'Presença'
+              }
+              value={
+                resumoAluno?.percentual_presenca != null
+                  ? `${resumoAluno.percentual_presenca}%`
+                  : '—'
+              }
+              accent="text-emerald-400"
+            />
+            <MetricaCard
+              icon={<Award className="w-4 h-4" />}
+              label="Certificados"
+              value={valorMetrica(resumoAluno?.certificados_total)}
+              accent="text-amber-400"
+            />
+          </div>
         </div>
       )}
 
@@ -432,126 +535,38 @@ export const UsuarioFichaPage: React.FC = () => {
               }`}
             />
           </div>
-          {resumoProfessor && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <MetricaCard
-                icon={<ClipboardCheck className="w-4 h-4" />}
-                label="Aulas Registradas"
-                value={resumoProfessor.aulas_registradas}
-              />
-              <MetricaCard
-                icon={<Award className="w-4 h-4" />}
-                label="Treinamentos"
-                value={resumoProfessor.treinamentos_total}
-                accent="text-blue-400"
-              />
-            </div>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <MetricaCard
+              icon={<ClipboardCheck className="w-4 h-4" />}
+              label="Aulas Registradas"
+              value={valorMetrica(resumoProfessor?.aulas_registradas)}
+            />
+            <MetricaCard
+              icon={<Award className="w-4 h-4" />}
+              label="Treinamentos"
+              value={valorMetrica(resumoProfessor?.treinamentos_total)}
+              accent="text-blue-400"
+            />
+          </div>
         </div>
       )}
 
       {/* Unidade (Polo/Escola) */}
-      {resumoUnidade && (
+      {temVinculoUnidade && (
         <div className="rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
             <UsersIcon className="w-4 h-4 text-nexus-yellow" />
             Resumo da Unidade ({ficha.polo_nome || ficha.escola_nome || '—'})
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <MetricaCard icon={<Building2 className="w-4 h-4" />} label="Escolas" value={resumoUnidade.escolas} />
-            <MetricaCard icon={<UsersIcon className="w-4 h-4" />} label="Alunos Ativos" value={resumoUnidade.alunos} accent="text-blue-400" />
-            <MetricaCard icon={<BookOpen className="w-4 h-4" />} label="Professores" value={resumoUnidade.professores} accent="text-emerald-400" />
-            <MetricaCard icon={<ClipboardCheck className="w-4 h-4" />} label="Aulas" value={resumoUnidade.aulas} accent="text-amber-400" />
-            <MetricaCard icon={<GraduationCap className="w-4 h-4" />} label="Turmas" value={resumoUnidade.turmas} accent="text-purple-400" />
+            <MetricaCard icon={<Building2 className="w-4 h-4" />} label="Escolas" value={valorMetrica(resumoUnidade?.escolas)} />
+            <MetricaCard icon={<UsersIcon className="w-4 h-4" />} label="Alunos Ativos" value={valorMetrica(resumoUnidade?.alunos)} accent="text-blue-400" />
+            <MetricaCard icon={<BookOpen className="w-4 h-4" />} label="Professores" value={valorMetrica(resumoUnidade?.professores)} accent="text-emerald-400" />
+            <MetricaCard icon={<ClipboardCheck className="w-4 h-4" />} label="Aulas" value={valorMetrica(resumoUnidade?.aulas)} accent="text-amber-400" />
+            <MetricaCard icon={<GraduationCap className="w-4 h-4" />} label="Turmas" value={valorMetrica(resumoUnidade?.turmas)} accent="text-purple-400" />
           </div>
         </div>
       )}
-
-      {/* Consolidado: Acesso & Permissões */}
-      <div className="rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
-        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <ShieldCheck className="w-4 h-4 text-nexus-yellow" />
-          Consolidado: Acesso & Permissões
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <DadoItem
-            icon={<Clock className="w-3 h-3" />}
-            label="Último Acesso"
-            value={formatarData(ficha.ultimo_login_em, true)}
-          />
-          <DadoItem
-            icon={<CalendarDays className="w-3 h-3" />}
-            label="Cadastro"
-            value={formatarData(ficha.criado_em)}
-          />
-          <DadoItem
-            icon={<RefreshCw className="w-3 h-3" />}
-            label="Última Atualização"
-            value={formatarData(ficha.atualizado_em, true)}
-          />
-        </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-            Permissões Granulares
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {ficha.permissoes && ficha.permissoes.length > 0 ? (
-              ficha.permissoes.map((p) => (
-                <span
-                  key={p}
-                  className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 text-[11px] text-nexus-yellow font-mono"
-                >
-                  {p}
-                </span>
-              ))
-            ) : (
-              <span className="text-slate-500 text-xs">Sem permissões granulares (básicas do perfil)</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Trilha de Auditoria */}
-      <div className="rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <History className="w-4 h-4 text-nexus-yellow" />
-            Trilha de Auditoria
-          </h2>
-          <span className="text-[11px] text-slate-500">{logsTotal} registro(s)</span>
-        </div>
-        {logs.length === 0 ? (
-          <p className="text-xs text-slate-500 text-center py-6">
-            Nenhum evento de auditoria registrado para este usuário.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-nexus-yellow shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold text-white">
-                      {AcaoLabel[log.acao] || log.acao}
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      {log.entidade || '—'}
-                      {log.entidade_id ? ` · ${String(log.entidade_id).slice(0, 8)}…` : ''}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0 pl-4">
-                  <p className="text-[11px] text-slate-300">{formatarData(log.criado_em, true)}</p>
-                  {log.ip && <p className="text-[10px] text-slate-500 font-mono">IP {log.ip}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Modal de Edição */}
       <UsuarioFormModal
