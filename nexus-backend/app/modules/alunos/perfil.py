@@ -111,7 +111,7 @@ def _prepare_photo(content: bytes, content_type: str) -> tuple[bytes, str]:
                 )
             if source.width * source.height > MAX_PHOTO_PIXELS:
                 raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                     detail="A imagem excede a resolução máxima permitida.",
                 )
             source.verify()
@@ -257,7 +257,7 @@ async def upload_meu_perfil_foto(
         )
     if len(content) > MAX_PHOTO_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="A imagem deve ter no máximo 5 MB.",
         )
 
@@ -321,9 +321,24 @@ async def update_meu_perfil(
     for key, value in values.items():
         if isinstance(value, str):
             values[key] = value.strip() or None
+    for field, expected_length, label in (
+        ("telefone", 11, "O telefone"),
+        ("celular", 11, "O celular"),
+        ("cep", 8, "O CEP"),
+    ):
+        value = values[field]
+        if value is None:
+            continue
+        digits = re.sub(r"\D", "", value)
+        if len(digits) != expected_length:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{label} deve conter {expected_length} dígitos",
+            )
+        values[field] = digits
     if values["email"] is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="O e-mail é obrigatório",
         )
     if values["uf"]:

@@ -178,9 +178,9 @@ async def test_student_updates_email_contacts_and_address(client, profile_databa
         headers=_headers("aluno-1", "aluno"),
         json={
             "email": " ANA.NOVA@EXAMPLE.COM ",
-            "telefone": " 1133334444 ",
+            "telefone": " (11) 93333-4444 ",
             "celular": " ",
-            "cep": "01000-000",
+            "cep": " 01000-000 ",
             "logradouro": "Rua Central",
             "numero": "42",
             "complemento": "Casa 2",
@@ -193,12 +193,38 @@ async def test_student_updates_email_contacts_and_address(client, profile_databa
     assert response.status_code == 200
     body = response.json()
     assert body["email"] == "ana.nova@example.com"
-    assert body["telefone"] == "1133334444"
+    assert body["telefone"] == "11933334444"
     assert body["celular"] is None
     assert body["endereco"]["logradouro"] == "Rua Central"
+    assert body["endereco"]["cep"] == "01000000"
     assert body["endereco"]["uf"] == "SP"
     assert profile_database.users["aluno-1"]["email"] == "ana.nova@example.com"
+    assert profile_database.users["aluno-1"]["telefone"] == "11933334444"
+    assert profile_database.users["aluno-1"]["cep"] == "01000000"
     assert len(profile_database.audit_logs) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value", "expected_detail"),
+    [
+        ("telefone", "(11) 3333-4444", "O telefone deve conter 11 dígitos"),
+        ("celular", "(11) 99999-123", "O celular deve conter 11 dígitos"),
+        ("cep", "01000-00", "O CEP deve conter 8 dígitos"),
+    ],
+)
+async def test_profile_update_rejects_contact_fields_with_wrong_digit_count(
+    client, profile_database, field, value, expected_detail
+):
+    response = await client.put(
+        "/alunos/meu-perfil",
+        headers=_headers("aluno-1", "aluno"),
+        json={"email": "ana@example.com", field: value},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == expected_detail
+    assert not profile_database.audit_logs
 
 
 @pytest.mark.asyncio
