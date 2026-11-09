@@ -35,7 +35,8 @@ Agendamento sugerido no Windows: Agendador de Tarefas chamando o passo 4; em ser
 
 ## Mapeamento tabela a tabela
 
-Em instalações existentes, aplique `scripts/migrations/004_cursos_nivel_academico.sql`.
+Em instalações existentes, aplique `scripts/migrations/004_cursos_nivel_academico.sql`
+e `scripts/migrations/005_cursos_nivel_curso_livre.sql`.
 Cursos, disciplinas, conteúdos do AVA e calendários são mantidos pelo sistema e
 não são atualizados pelo ETL.
 

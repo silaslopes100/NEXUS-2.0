@@ -5,16 +5,22 @@ export type NivelAcademico =
   | 'licenciatura'
   | 'tecnologo'
   | 'pos_graduacao'
-  | 'mestrado';
+  | 'mestrado'
+  | 'curso_livre';
 
-export type ModalidadeCurso = 'hibrido' | 'presencial' | 'ead';
-export type StatusCurso = 'ativo' | 'cancelado';
+// 'polo' e 'inativo' existem apenas em cursos importados do legado.
+export type ModalidadeCurso = 'hibrido' | 'presencial' | 'ead' | 'polo';
+export type StatusCurso = 'ativo' | 'cancelado' | 'inativo';
 
 export interface Curso {
   id: string;
   nome: string;
   descricao?: string | null;
   nivel_academico?: NivelAcademico | null;
+  modalidade?: ModalidadeCurso | null;
+  carga_horaria_total?: number | null;
+  semestres?: number | null;
+  status?: StatusCurso | null;
 }
 
 export interface CursosPagina {
@@ -34,6 +40,9 @@ export interface CursoCreate {
   status: StatusCurso;
   disciplina_ids: string[];
 }
+
+// Sem disciplina_ids, a API mantém os vínculos atuais do curso.
+export type CursoUpdate = Omit<CursoCreate, 'disciplina_ids'> & { disciplina_ids?: string[] };
 
 export interface Disciplina {
   id: string;
@@ -93,6 +102,15 @@ export const cursosApi = {
   criar: async (payload: CursoCreate): Promise<Curso> => {
     const { data } = await apiClient.post<Curso>('/cursos-disciplinas/cursos', payload);
     return data;
+  },
+
+  atualizar: async (cursoId: string, payload: CursoUpdate): Promise<Curso> => {
+    const { data } = await apiClient.put<Curso>(`/cursos-disciplinas/cursos/${cursoId}`, payload);
+    return data;
+  },
+
+  excluir: async (cursoId: string): Promise<void> => {
+    await apiClient.delete(`/cursos-disciplinas/cursos/${cursoId}`);
   },
 
   listarDisciplinas: async (cursoId?: string): Promise<Disciplina[]> => {

@@ -165,6 +165,164 @@ async def test_delete_disciplina_checks_database_references(
     assert (cursor.executions[-1][0].startswith("DELETE")) is delete_expected
 
 
+COURSE_ID = uuid.UUID("00000000-0000-0000-0000-00000000000a")
+
+
+def _course_update_payload(disciplina_ids=None, **overrides):
+    values = {
+        "nome": "Curso editado",
+        "descricao": "Descrição editada",
+        "modalidade": "ead",
+        "carga_horaria_total": 200,
+        "semestres": 4,
+        "status": "ativo",
+        "nivel_academico": "licenciatura",
+        "disciplina_ids": disciplina_ids,
+        **overrides,
+    }
+    return cursos_disciplinas.CursoUpdateSchema(**values)
+
+
+class _CourseCursor:
+    """Cursor falso: responde fetchone/fetchall com as filas informadas."""
+
+    def __init__(self, fetchone_rows=(), fetchall_rows=()):
+        self.executions = []
+        self.fetchone_rows = list(fetchone_rows)
+        self.fetchall_rows = list(fetchall_rows)
+
+    def execute(self, sql, params=()):
+        self.executions.append((sql, params))
+
+    def fetchone(self):
+        return self.fetchone_rows.pop(0) if self.fetchone_rows else None
+
+    def fetchall(self):
+        return self.fetchall_rows
+
+
+def _use_course_cursor(monkeypatch, cursor):
+    @contextmanager
+    def database_cursor():
+        yield cursor
+
+    monkeypatch.setattr(settings, "PG_DSN", "configured-for-test")
+    monkeypatch.setattr(cursos_disciplinas, "get_db_cursor", database_cursor)
+
+
+@pytest.mark.asyncio
+async def test_update_course_replaces_discipline_links(monkeypatch):
+    discipline_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    cursor = _CourseCursor(
+        fetchone_rows=[{"id": COURSE_ID, "nome": "Curso editado"}],
+        fetchall_rows=[{"id": discipline_id}],
+    )
+    _use_course_cursor(monkeypatch, cursor)
+
+    course = await cursos_disciplinas.update_curso(COURSE_ID, _course_update_payload([discipline_id]))
+
+    assert course["nome"] == "Curso editado"
+    assert len(cursor.executions) == 3
+    assert "UPDATE cursos" in cursor.executions[0][0]
+    assert "curso_id = NULL" in cursor.executions[1][0]
+    assert cursor.executions[1][1] == (str(COURSE_ID), [str(discipline_id)])
+    assert cursor.executions[2][1] == (str(COURSE_ID), [str(discipline_id)])
+
+
+@pytest.mark.asyncio
+async def test_update_course_without_discipline_ids_keeps_links(monkeypatch):
+    cursor = _CourseCursor(fetchone_rows=[{"id": COURSE_ID, "nome": "Curso editado"}])
+    _use_course_cursor(monkeypatch, cursor)
+
+    await cursos_disciplinas.update_curso(COURSE_ID, _course_update_payload())
+
+    assert len(cursor.executions) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_course_with_empty_list_unlinks_all_disciplines(monkeypatch):
+    cursor = _CourseCursor(fetchone_rows=[{"id": COURSE_ID, "nome": "Curso editado"}])
+    _use_course_cursor(monkeypatch, cursor)
+
+    await cursos_disciplinas.update_curso(COURSE_ID, _course_update_payload([]))
+
+    assert len(cursor.executions) == 2
+    assert "curso_id = NULL" in cursor.executions[1][0]
+
+
+@pytest.mark.asyncio
+async def test_update_missing_course_returns_404(monkeypatch):
+    cursor = _CourseCursor()
+    _use_course_cursor(monkeypatch, cursor)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await cursos_disciplinas.update_curso(COURSE_ID, _course_update_payload([]))
+
+    assert exc_info.value.status_code == 404
+    assert len(cursor.executions) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_course_preserves_legacy_values_in_memory(monkeypatch):
+    uid = str(COURSE_ID)
+    courses = {uid: {"id": uid, "nome": "Legado", "modalidade": "polo", "status": "inativo"}}
+    disciplines = {
+        "removida": {"id": "removida", "curso_id": uid},
+        "de-outro-curso": {"id": "de-outro-curso", "curso_id": "outro"},
+    }
+    monkeypatch.setattr(settings, "PG_DSN", "")
+    monkeypatch.setattr(cursos_disciplinas, "_cursos_db", courses)
+    monkeypatch.setattr(cursos_disciplinas, "_disciplinas_db", disciplines)
+
+    course = await cursos_disciplinas.update_curso(
+        COURSE_ID,
+        _course_update_payload([], modalidade="polo", status="inativo"),
+    )
+
+    assert course["modalidade"] == "polo"
+    assert course["status"] == "inativo"
+    assert disciplines["removida"]["curso_id"] is None
+    assert disciplines["de-outro-curso"]["curso_id"] == "outro"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("has_references", "delete_expected"), [(True, False), (False, True)])
+async def test_delete_course_checks_database_references(
+    monkeypatch,
+    has_references: bool,
+    delete_expected: bool,
+):
+    cursor = _CourseCursor(fetchone_rows=[{"id": COURSE_ID}, {"em_uso": has_references}])
+    _use_course_cursor(monkeypatch, cursor)
+
+    if has_references:
+        with pytest.raises(HTTPException) as exc_info:
+            await cursos_disciplinas.delete_curso(COURSE_ID)
+        assert exc_info.value.status_code == 409
+    else:
+        response = await cursos_disciplinas.delete_curso(COURSE_ID)
+        assert response.status_code == 204
+
+    assert "FOR UPDATE" in cursor.executions[0][0]
+    reference_sql, params = cursor.executions[1]
+    for table in ("disciplinas", "turmas", "calendarios_oficiais", "matriculas_ead", "certificados"):
+        assert f"FROM {table} " in reference_sql
+    assert params == (str(COURSE_ID),) * 5
+    assert cursor.executions[-1][0].startswith("DELETE") is delete_expected
+
+
+@pytest.mark.asyncio
+async def test_delete_missing_course_returns_404(monkeypatch):
+    cursor = _CourseCursor()
+    _use_course_cursor(monkeypatch, cursor)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await cursos_disciplinas.delete_curso(COURSE_ID)
+
+    assert exc_info.value.status_code == 404
+    assert len(cursor.executions) == 1
+
+
 @pytest.mark.asyncio
 async def test_disciplina_database_errors_are_not_hidden(monkeypatch):
     monkeypatch.setattr(settings, "PG_DSN", "configured-for-test")

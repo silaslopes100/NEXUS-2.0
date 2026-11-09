@@ -18,9 +18,13 @@ NivelAcademico = Literal[
     "tecnologo",
     "pos_graduacao",
     "mestrado",
+    "curso_livre",
 ]
 ModalidadeCurso = Literal["hibrido", "presencial", "ead"]
 StatusCurso = Literal["ativo", "cancelado"]
+# "polo" e "inativo" só existem em cursos importados do legado; a edição precisa preservá-los.
+ModalidadeCursoEdicao = Literal["hibrido", "presencial", "ead", "polo"]
+StatusCursoEdicao = Literal["ativo", "cancelado", "inativo"]
 
 
 class CursoSchema(BaseModel):
@@ -44,6 +48,18 @@ class CursoCreateSchema(CursoSchema):
     status: StatusCurso
     nivel_academico: NivelAcademico
     disciplina_ids: List[uuid.UUID] = Field(default_factory=list)
+
+
+class CursoUpdateSchema(BaseModel):
+    nome: str = Field(min_length=2, max_length=255)
+    descricao: str = Field(min_length=1)
+    modalidade: ModalidadeCursoEdicao
+    carga_horaria_total: int = Field(gt=0)
+    semestres: int = Field(gt=0)
+    status: StatusCursoEdicao
+    nivel_academico: NivelAcademico
+    # None mantém os vínculos atuais; uma lista substitui todos os vínculos do curso.
+    disciplina_ids: Optional[List[uuid.UUID]] = None
 
 
 class CursosPaginaSchema(BaseModel):
@@ -90,6 +106,29 @@ class DisciplinaConteudoSchema(BaseModel):
 _cursos_db: Dict[str, Dict[str, Any]] = {}
 _disciplinas_db: Dict[str, Dict[str, Any]] = {}
 _conteudos_db: Dict[str, Dict[str, Any]] = {}
+
+CURSO_COM_VINCULOS_DETAIL = (
+    "Não é possível excluir um curso que possui disciplinas, turmas, calendários, "
+    "matrículas EAD ou certificados vinculados."
+)
+
+
+def _vincular_disciplinas(cur: Any, curso_id: str, disciplina_ids: List[str]) -> None:
+    cur.execute(
+        """
+        UPDATE disciplinas
+        SET curso_id = %s, atualizado_em = now()
+        WHERE id = ANY(%s::uuid[])
+        RETURNING id
+        """,
+        (curso_id, disciplina_ids),
+    )
+    updated_ids = {str(row["id"]) for row in cur.fetchall()}
+    if updated_ids != set(disciplina_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Uma ou mais disciplinas não foram encontradas.",
+        )
 
 
 @router.get(
@@ -217,22 +256,118 @@ async def create_curso(dados: CursoCreateSchema):
             ),
         )
         if disciplina_ids:
-            cur.execute(
-                """
-                UPDATE disciplinas
-                SET curso_id = %s, atualizado_em = now()
-                WHERE id = ANY(%s::uuid[])
-                RETURNING id
-                """,
-                (new_id, disciplina_ids),
-            )
-            updated_ids = {str(row["id"]) for row in cur.fetchall()}
-            if updated_ids != set(disciplina_ids):
+            _vincular_disciplinas(cur, new_id, disciplina_ids)
+    return c_dict
+
+
+@router.put(
+    "/cursos/{curso_id}",
+    response_model=CursoSchema,
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def update_curso(curso_id: uuid.UUID, dados: CursoUpdateSchema):
+    uid = str(curso_id)
+    disciplina_ids = (
+        None
+        if dados.disciplina_ids is None
+        else list(dict.fromkeys(str(disciplina_id) for disciplina_id in dados.disciplina_ids))
+    )
+    if not settings.PG_DSN:
+        current = _cursos_db.get(uid)
+        if current is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
+        if disciplina_ids is not None:
+            if any(disciplina_id not in _disciplinas_db for disciplina_id in disciplina_ids):
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Uma ou mais disciplinas não foram encontradas.",
                 )
-    return c_dict
+            for disciplina_id, disciplina in _disciplinas_db.items():
+                if disciplina_id in disciplina_ids:
+                    disciplina["curso_id"] = uid
+                elif disciplina.get("curso_id") == uid:
+                    disciplina["curso_id"] = None
+        current.update(dados.model_dump(exclude={"disciplina_ids"}))
+        return current
+
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            UPDATE cursos
+            SET nome = %s, descricao = %s, modalidade = %s, carga_horaria_total = %s,
+                semestres = %s, status = %s, nivel_academico = %s, atualizado_em = now()
+            WHERE id = %s
+            RETURNING id, nome, descricao, modalidade, carga_horaria_total,
+                      semestres, status, nivel_academico
+            """,
+            (
+                dados.nome,
+                dados.descricao,
+                dados.modalidade,
+                dados.carga_horaria_total,
+                dados.semestres,
+                dados.status,
+                dados.nivel_academico,
+                uid,
+            ),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
+        if disciplina_ids is not None:
+            cur.execute(
+                """
+                UPDATE disciplinas
+                SET curso_id = NULL, atualizado_em = now()
+                WHERE curso_id = %s AND NOT (id = ANY(%s::uuid[]))
+                """,
+                (uid, disciplina_ids),
+            )
+            if disciplina_ids:
+                _vincular_disciplinas(cur, uid, disciplina_ids)
+        return dict(row)
+
+
+@router.delete(
+    "/cursos/{curso_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def delete_curso(curso_id: uuid.UUID) -> Response:
+    uid = str(curso_id)
+    if not settings.PG_DSN:
+        from app.modules.turmas import _calendarios_db, _turmas_db
+
+        if uid not in _cursos_db:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
+        vinculados = (*_disciplinas_db.values(), *_turmas_db.values(), *_calendarios_db.values())
+        if any(item.get("curso_id") == uid for item in vinculados):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CURSO_COM_VINCULOS_DETAIL)
+        del _cursos_db[uid]
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # As FKs usam ON DELETE SET NULL: sem esta verificação, os registros ficariam órfãos.
+    references_sql = """
+        SELECT
+            EXISTS (SELECT 1 FROM disciplinas WHERE curso_id = %s)
+            OR EXISTS (SELECT 1 FROM turmas WHERE curso_id = %s)
+            OR EXISTS (SELECT 1 FROM calendarios_oficiais WHERE curso_id = %s)
+            OR EXISTS (SELECT 1 FROM matriculas_ead WHERE curso_id = %s)
+            OR EXISTS (SELECT 1 FROM certificados WHERE curso_id = %s)
+            AS em_uso
+    """
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id FROM cursos WHERE id = %s FOR UPDATE", (uid,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
+
+        cur.execute(references_sql, (uid,) * 5)
+        row = cur.fetchone()
+        if row is None or row["em_uso"]:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CURSO_COM_VINCULOS_DETAIL)
+
+        cur.execute("DELETE FROM cursos WHERE id = %s", (uid,))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

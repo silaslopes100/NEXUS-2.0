@@ -6,13 +6,16 @@ import {
   CheckCircle2,
   GraduationCap,
   Loader2,
+  Pencil,
   Plus,
   Search,
+  Trash2,
   X,
 } from 'lucide-react';
 import {
   Curso,
   CursoCreate,
+  CursoUpdate,
   cursosApi,
   cursosApiErrorMessage,
   Disciplina,
@@ -28,6 +31,7 @@ const nivelLabel: Record<NivelAcademico, string> = {
   licenciatura: 'Licenciatura',
   tecnologo: 'Tecnólogo',
   pos_graduacao: 'Pós-graduação',
+  curso_livre: 'Curso livre',
   mestrado: 'Mestrado',
 };
 
@@ -35,7 +39,10 @@ const inputClass =
   'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500';
 const PAGE_SIZE = 10;
 
-const initialForm: CursoCreate = {
+// Cursos do legado podem não ter nível; o campo vazio obriga a escolha ao editar.
+type CursoForm = Omit<CursoCreate, 'nivel_academico'> & { nivel_academico: NivelAcademico | '' };
+
+const initialForm: CursoForm = {
   nome: '',
   descricao: '',
   nivel_academico: 'bacharelado',
@@ -62,9 +69,12 @@ export const CursosPage: React.FC = () => {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState('');
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [form, setForm] = useState<CursoCreate>(initialForm);
+  const [editing, setEditing] = useState<Curso | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [form, setForm] = useState<CursoForm>(initialForm);
   const [disciplinasDisponiveis, setDisciplinasDisponiveis] = useState<Disciplina[]>([]);
   const [disciplinasCarregadas, setDisciplinasCarregadas] = useState(false);
   const [disciplinasLoading, setDisciplinasLoading] = useState(false);
@@ -106,10 +116,10 @@ export const CursosPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [buscaAplicada, offset]);
+  }, [buscaAplicada, offset, reloadKey]);
 
   useEffect(() => {
-    if (!isCreateOpen) return;
+    if (!isFormOpen) return;
     if (disciplinasCarregadas) return;
     let active = true;
     setDisciplinasLoading(true);
@@ -120,6 +130,14 @@ export const CursosPage: React.FC = () => {
         if (active) {
           setDisciplinasDisponiveis(items);
           setDisciplinasCarregadas(true);
+          if (editing) {
+            setForm((current) => ({
+              ...current,
+              disciplina_ids: items
+                .filter((item) => item.curso_id === editing.id)
+                .map((item) => item.id),
+            }));
+          }
         }
       })
       .catch((err: unknown) => {
@@ -135,7 +153,7 @@ export const CursosPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [disciplinasCarregadas, isCreateOpen]);
+  }, [disciplinasCarregadas, editing, isFormOpen]);
 
   useEffect(() => {
     if (!selectedCurso) return;
@@ -179,17 +197,83 @@ export const CursosPage: React.FC = () => {
     setSelectedCurso(curso);
   };
 
+  const abrirCadastro = () => {
+    setEditing(null);
+    setForm(initialForm);
+    setFormError('');
+    setBuscaDisciplina('');
+    setIsFormOpen(true);
+  };
+
+  const abrirEdicao = (curso: Curso) => {
+    setEditing(curso);
+    setForm({
+      nome: curso.nome,
+      descricao: curso.descricao ?? '',
+      nivel_academico: curso.nivel_academico ?? '',
+      modalidade: curso.modalidade ?? 'hibrido',
+      carga_horaria_total: curso.carga_horaria_total ?? 0,
+      semestres: curso.semestres ?? 3,
+      status: curso.status ?? 'ativo',
+      disciplina_ids: [],
+    });
+    setFormError('');
+    setBuscaDisciplina('');
+    // Recarrega para marcar os vínculos atuais do curso a partir de dados atualizados.
+    setDisciplinasCarregadas(false);
+    setIsFormOpen(true);
+  };
+
+  const excluirCurso = async (curso: Curso) => {
+    if (!window.confirm(`Deseja excluir o curso "${curso.nome}"?`)) return;
+    setDeletingId(curso.id);
+    setFeedback(null);
+    try {
+      await cursosApi.excluir(curso.id);
+      if (cursos.length === 1 && offset > 0) {
+        setOffset((current) => Math.max(0, current - PAGE_SIZE));
+      } else {
+        setReloadKey((current) => current + 1);
+      }
+      setFeedback({ type: 'success', message: 'Curso excluído com sucesso.' });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: cursosApiErrorMessage(
+          err,
+          'Não foi possível excluir o curso. Verifique se há vínculos acadêmicos.'
+        ),
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const salvarCurso = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSaving(true);
     setFormError('');
     setFeedback(null);
+    const dados = {
+      ...form,
+      nome: form.nome.trim(),
+      descricao: form.descricao.trim(),
+      nivel_academico: form.nivel_academico as NivelAcademico,
+    };
     try {
-      const cursoCriado = await cursosApi.criar({
-        ...form,
-        nome: form.nome.trim(),
-        descricao: form.descricao.trim(),
-      });
+      if (editing) {
+        // Sem a lista carregada, omitir os ids evita desvincular as disciplinas do curso.
+        const payload: CursoUpdate = disciplinasCarregadas
+          ? dados
+          : { ...dados, disciplina_ids: undefined };
+        await cursosApi.atualizar(editing.id, payload);
+        setDisciplinasCarregadas(false);
+        setReloadKey((current) => current + 1);
+        setIsFormOpen(false);
+        setFeedback({ type: 'success', message: 'Curso atualizado com sucesso.' });
+        return;
+      }
+      const cursoCriado = await cursosApi.criar(dados);
       setDisciplinasDisponiveis((items) =>
         items.map((item) =>
           form.disciplina_ids.includes(item.id) ? { ...item, curso_id: cursoCriado.id } : item
@@ -199,7 +283,7 @@ export const CursosPage: React.FC = () => {
       setBuscaAplicada(cursoCriado.nome);
       setOffset(0);
       setForm(initialForm);
-      setIsCreateOpen(false);
+      setIsFormOpen(false);
       setFeedback({
         type: 'success',
         message:
@@ -208,7 +292,12 @@ export const CursosPage: React.FC = () => {
             : 'Curso cadastrado com sucesso.',
       });
     } catch (err) {
-      setFormError(cursosApiErrorMessage(err, 'Não foi possível cadastrar o curso.'));
+      setFormError(
+        cursosApiErrorMessage(
+          err,
+          editing ? 'Não foi possível atualizar o curso.' : 'Não foi possível cadastrar o curso.'
+        )
+      );
     } finally {
       setIsSaving(false);
     }
@@ -231,12 +320,7 @@ export const CursosPage: React.FC = () => {
           <button
             type="button"
             disabled={isLoading}
-            onClick={() => {
-              setForm(initialForm);
-              setFormError('');
-              setBuscaDisciplina('');
-              setIsCreateOpen(true);
-            }}
+            onClick={abrirCadastro}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Plus size={17} />
@@ -302,6 +386,7 @@ export const CursosPage: React.FC = () => {
                   <th className="p-4">Nível Acadêmico</th>
                   <th className="p-4 text-center">Disciplinas</th>
                   <th className="p-4 text-center">Turmas</th>
+                  {isAdmin && <th className="p-4 text-right">Ações</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -334,11 +419,38 @@ export const CursosPage: React.FC = () => {
                         Ver turmas
                       </button>
                     </td>
+                    {isAdmin && (
+                      <td className="p-4">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            aria-label={`Editar ${curso.nome}`}
+                            onClick={() => abrirEdicao(curso)}
+                            className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Excluir ${curso.nome}`}
+                            disabled={deletingId === curso.id}
+                            onClick={() => void excluirCurso(curso)}
+                            className="rounded-lg border border-red-500/30 p-2 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                          >
+                            {deletingId === curso.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {cursos.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-12 text-center text-slate-500">
+                    <td colSpan={isAdmin ? 6 : 5} className="p-12 text-center text-slate-500">
                       {buscaAplicada
                         ? 'Nenhum curso corresponde à busca.'
                         : 'Nenhum curso cadastrado.'}
@@ -379,11 +491,11 @@ export const CursosPage: React.FC = () => {
         )}
       </section>
 
-      {isCreateOpen && (
+      {isFormOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !isSaving) setIsCreateOpen(false);
+            if (event.target === event.currentTarget && !isSaving) setIsFormOpen(false);
           }}
         >
           <form
@@ -395,14 +507,16 @@ export const CursosPage: React.FC = () => {
                 <p className="text-xs font-bold uppercase tracking-wider text-blue-300">
                   Gestão curricular
                 </p>
-                <h2 className="mt-1 text-xl font-bold text-white">Cadastrar curso</h2>
+                <h2 className="mt-1 text-xl font-bold text-white">
+                  {editing ? 'Editar curso' : 'Cadastrar curso'}
+                </h2>
                 <p className="mt-1 text-sm text-slate-400">Preencha os dados obrigatórios do curso.</p>
               </div>
               <button
                 type="button"
-                aria-label="Fechar cadastro"
+                aria-label="Fechar formulário"
                 disabled={isSaving}
-                onClick={() => setIsCreateOpen(false)}
+                onClick={() => setIsFormOpen(false)}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
               >
                 <X size={20} />
@@ -450,6 +564,11 @@ export const CursosPage: React.FC = () => {
                     setForm({ ...form, nivel_academico: event.target.value as NivelAcademico })
                   }
                 >
+                  {form.nivel_academico === '' && (
+                    <option value="" disabled>
+                      Selecione
+                    </option>
+                  )}
                   {Object.entries(nivelLabel).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
@@ -469,6 +588,7 @@ export const CursosPage: React.FC = () => {
                   <option value="hibrido">Híbrido</option>
                   <option value="presencial">Presencial</option>
                   <option value="ead">EAD (Online)</option>
+                  {editing?.modalidade === 'polo' && <option value="polo">Polo (legado)</option>}
                 </select>
               </label>
 
@@ -480,7 +600,7 @@ export const CursosPage: React.FC = () => {
                   min={1}
                   step={1}
                   className={inputClass}
-                  value={form.carga_horaria_total}
+                  value={form.carga_horaria_total || ''}
                   onChange={(event) =>
                     setForm({ ...form, carga_horaria_total: Number(event.target.value) })
                   }
@@ -512,6 +632,7 @@ export const CursosPage: React.FC = () => {
                 >
                   <option value="ativo">Ativo</option>
                   <option value="cancelado">Cancelado</option>
+                  {editing?.status === 'inativo' && <option value="inativo">Inativo (legado)</option>}
                 </select>
               </label>
 
@@ -533,6 +654,7 @@ export const CursosPage: React.FC = () => {
                 </div>
                 <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
                   Uma disciplina vinculada a outro curso será transferida para este curso ao salvar.
+                  {editing && ' Desmarcar uma disciplina remove o vínculo dela com este curso.'}
                 </p>
                 {disciplinasError && (
                   <div
@@ -540,6 +662,7 @@ export const CursosPage: React.FC = () => {
                     className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200"
                   >
                     {disciplinasError}
+                    {editing && ' Os vínculos atuais serão mantidos ao salvar.'}
                   </div>
                 )}
                 {disciplinasLoading ? (
@@ -597,7 +720,7 @@ export const CursosPage: React.FC = () => {
               <button
                 type="button"
                 disabled={isSaving}
-                onClick={() => setIsCreateOpen(false)}
+                onClick={() => setIsFormOpen(false)}
                 className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50"
               >
                 Cancelar
