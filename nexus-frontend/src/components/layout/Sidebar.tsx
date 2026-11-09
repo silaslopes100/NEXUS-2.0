@@ -40,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const menuGroups: MenuGroup[] = menuByRole[activeRole] || menuByRole.aluno;
 
-  // Chat e Mural já existem no menu do Polo; aqui entram só as telas próprias do aluno.
+  // Chat e Mural já existem nos menus de Polo e Escola; aqui entram só as telas próprias do aluno.
   const itensAreaAluno: MenuItem[] = user?.tambem_aluno
     ? menuByRole.aluno.flatMap((group) => group.items).filter((item) => item.path.startsWith('/aluno/'))
     : [];

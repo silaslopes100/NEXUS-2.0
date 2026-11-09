@@ -1515,8 +1515,8 @@ class PostgresPolosEscolasRepository:
                     acao,
                     entidade,
                     str(entidade_id) if entidade_id else None,
-                    json.dumps(dados_antes) if dados_antes is not None else None,
-                    json.dumps(dados_depois) if dados_depois is not None else None,
+                    json.dumps(dados_antes, default=str) if dados_antes is not None else None,
+                    json.dumps(dados_depois, default=str) if dados_depois is not None else None,
                     ip,
                 ),
             )

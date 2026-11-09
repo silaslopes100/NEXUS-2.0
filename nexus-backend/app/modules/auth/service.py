@@ -67,7 +67,7 @@ class AuthService:
             permissoes=permissoes,
             ultimo_login_em=user_data.get("ultimo_login_em"),
             tambem_aluno=(
-                perfil_canonico(user_data.get("perfil_nome")) == "polo"
+                perfil_canonico(user_data.get("perfil_nome")) in ("polo", "escola")
                 and bool(user_data.get("possui_cadastro_aluno"))
             ),
         )

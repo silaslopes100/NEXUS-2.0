@@ -24,8 +24,10 @@ def _usuario(perfil: str, tambem_aluno: bool) -> UserResponse:
         ("polo", True, True),
         ("coordenador_polo", True, True),
         ("polo", False, False),
+        ("escola", True, True),
+        ("secretario_escola", True, True),
+        ("escola", False, False),
         ("aluno", True, False),
-        ("escola", True, False),
         ("admin", True, False),
     ],
 )
@@ -45,6 +47,17 @@ async def test_polo_que_tambem_e_aluno_acessa_rotas_de_aluno():
     usuario = _usuario("polo", tambem_aluno=True)
 
     assert await require_role(["aluno"])(current_user=usuario) is usuario
+
+
+@pytest.mark.asyncio
+async def test_secretario_que_tambem_e_aluno_acessa_apenas_rotas_de_aluno():
+    usuario = _usuario("escola", tambem_aluno=True)
+
+    assert await require_role(["aluno"])(current_user=usuario) is usuario
+    with pytest.raises(HTTPException) as exc_info:
+        await require_role(["admin", "polo"])(current_user=usuario)
+
+    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,9 @@
 ﻿"""Testes do módulo `polos_escolas` (NEXUS 2.0) — arquitetura em camadas + InMemoryRepository."""
 from __future__ import annotations
 
-from datetime import date
+from contextlib import contextmanager
+from datetime import date, datetime
+import json
 
 import pytest
 import pytest_asyncio
@@ -10,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
+from app.modules.polos_escolas import repository as polos_repository_module
 from app.modules.polos_escolas.repository import (
     InMemoryPolosEscolasRepository,
     set_polos_escolas_repository,
@@ -366,6 +369,33 @@ async def test_filtro_de_perfil_encontra_nomes_equivalentes(client: AsyncClient,
         "/usuarios-vinculaveis", params={"perfil": "secretario_escola"}, headers=_bearer("admin-1")
     )
     assert {item["id"] for item in resposta.json()["items"]} == {"sec-curto", "sec-longo"}
+
+
+@pytest.mark.asyncio
+async def test_auditoria_postgres_aceita_datas_da_linha_do_banco(monkeypatch):
+    executions = []
+
+    class Cursor:
+        def execute(self, sql, params=()):
+            executions.append(params)
+
+    @contextmanager
+    def database_cursor():
+        yield Cursor()
+
+    monkeypatch.setattr(polos_repository_module, "get_db_cursor", database_cursor)
+
+    polos_repository_module.PostgresPolosEscolasRepository().record_audit_log(
+        usuario_id="admin-1",
+        acao="polo_atualizado",
+        entidade="polos",
+        entidade_id="polo-1",
+        dados_antes={"nome": "Polo", "atualizado_em": datetime(2026, 11, 9, 12, 30)},
+        dados_depois={"nome": "Polo novo"},
+    )
+
+    assert json.loads(executions[0][4]) == {"nome": "Polo", "atualizado_em": "2026-11-09 12:30:00"}
+    assert json.loads(executions[0][5]) == {"nome": "Polo novo"}
 
 
 @pytest.mark.asyncio
