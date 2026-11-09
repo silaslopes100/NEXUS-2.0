@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from contextlib import contextmanager
+from importlib import import_module
 
 import pytest
 import pytest_asyncio
@@ -12,6 +13,8 @@ from app.core.security import create_access_token
 from app.main import app
 from app.modules.alunos import perfil as perfil_module
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
+
+admin_router_module = import_module("app.modules.admin.router")
 
 
 class ProfileDatabase:
@@ -310,6 +313,48 @@ async def test_student_uploads_and_reads_own_profile_photo(
         headers=_headers("aluno-2", "aluno"),
     )
     assert other_user_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_and_student_share_the_same_profile_photo(
+    client, profile_database, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(perfil_module, "PHOTO_DIRECTORY", tmp_path)
+    monkeypatch.setattr(admin_router_module, "get_db_cursor", profile_database.cursor_context)
+    student_headers = _headers("aluno-1", "aluno")
+    admin_headers = _headers("admin-1", "admin")
+
+    student_upload = await client.post(
+        "/alunos/meu-perfil/foto",
+        headers=student_headers,
+        files={"foto": ("aluno.png", _image_bytes(), "image/png")},
+    )
+    assert student_upload.status_code == 200
+    student_filename = profile_database.users["aluno-1"]["foto_url"]
+
+    admin_read = await client.get(
+        "/admin/usuarios/aluno-1/foto",
+        headers=admin_headers,
+    )
+    assert admin_read.status_code == 200
+    assert Image.open(io.BytesIO(admin_read.content)).format == "PNG"
+
+    admin_upload = await client.post(
+        "/admin/usuarios/aluno-1/foto",
+        headers=admin_headers,
+        files={"foto": ("admin.png", _image_bytes("PNG"), "image/png")},
+    )
+    assert admin_upload.status_code == 200
+    admin_filename = profile_database.users["aluno-1"]["foto_url"]
+    assert admin_filename != student_filename
+    assert not (tmp_path / student_filename).exists()
+
+    student_read = await client.get(
+        "/alunos/meu-perfil/foto",
+        headers=student_headers,
+    )
+    assert student_read.status_code == 200
+    assert Image.open(io.BytesIO(student_read.content)).format == "PNG"
 
 
 @pytest.mark.asyncio

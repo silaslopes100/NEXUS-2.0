@@ -57,6 +57,24 @@ export const adminApi = {
     return response.data;
   },
 
+  async getUsuarioFoto(id: string): Promise<Blob> {
+    const response = await apiClient.get<Blob>(`/admin/usuarios/${id}/foto`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  async uploadUsuarioFoto(id: string, foto: File): Promise<{ foto_url: string }> {
+    const formData = new FormData();
+    formData.append('foto', foto);
+    const response = await apiClient.post<{ foto_url: string }>(
+      `/admin/usuarios/${id}/foto`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data;
+  },
+
   async getResumoUsuario(id: string): Promise<ResumoMetricasUsuario> {
     const response = await apiClient.get<ResumoMetricasUsuario>(`/admin/usuarios/${id}/resumo`);
     return response.data;
