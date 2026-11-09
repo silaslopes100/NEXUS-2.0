@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.database import close_connection_pool
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
+from app.modules.alunos.perfil import router as aluno_perfil_router
 from app.modules.certificados import router as certificados_router
 from app.modules.comunicacao import router as comunicacao_router
 from app.modules.cupons import router as cupons_router
@@ -21,9 +22,9 @@ from app.modules.professores import router as professores_router
 from app.modules.transferencias import router as transferencias_router
 from app.modules.turmas import router as turmas_router
 
-# Nota: os módulos legados `alunos`, `licencas`, `financeiro` e `presencas`
-# foram absorvidos pelo módulo `polos_escolas` (ver
-# docs/Requisitos_Nexus2.0(Polo_Escola).md) e não são mais registrados aqui.
+# Nota: os módulos legados de gestão `alunos`, `licencas`, `financeiro` e
+# `presencas` foram absorvidos por `polos_escolas`. O router isolado de perfil
+# self-service do aluno é registrado separadamente, sem expor o CRUD legado.
 
 
 @asynccontextmanager
@@ -50,6 +51,7 @@ app.add_middleware(
 
 # Inclusão dos Módulos do Sistema
 app.include_router(auth_router)
+app.include_router(aluno_perfil_router)
 app.include_router(admin_router)
 # `professores` precisa ser registrado antes de `polos_escolas` para que o
 # PUT /professores/{id} completo (retorno com dados do docente) tenha

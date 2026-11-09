@@ -7,6 +7,7 @@ import {
   FolderKanban,
   CalendarDays,
   UserCheck,
+  UserRound,
   Laptop,
   Award,
   FileCheck2,
@@ -424,6 +425,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
     {
       groupTitle: 'Ambiente do Aluno',
       items: [
+        {
+          title: 'Meu Perfil',
+          path: '/aluno/perfil',
+          icon: UserRound,
+        },
         {
           title: 'Meu Aprendizado (Dashboard)',
           path: '/aluno/dashboard',
