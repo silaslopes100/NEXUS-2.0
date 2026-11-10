@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  ArrowLeftRight,
   UserPlus,
   Search,
   Filter,
@@ -335,6 +336,19 @@ export const UsuariosInternosPage: React.FC = () => {
                           <p className="text-[11px] text-slate-400">
                             {u.telefone || u.celular || 'Sem telefone'}
                           </p>
+                          {u.transferencia_pendente && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                navigate('/admin/transferencias');
+                              }}
+                              className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/20"
+                            >
+                              <ArrowLeftRight className="w-3 h-3" />
+                              Transferência pendente
+                            </button>
+                          )}
                         </div>
                       </div>
                     </td>

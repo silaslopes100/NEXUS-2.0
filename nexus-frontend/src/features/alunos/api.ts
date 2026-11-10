@@ -80,6 +80,134 @@ export const alunosApi = {
   },
 };
 
+export type Observacao = 'formado' | 'churn' | 'transferido' | 'revalidado' | 'sem_movimentacao';
+
+export interface AlunoGestao {
+  id: string;
+  usuario_id: string;
+  numero_matricula?: string | null;
+  nome: string;
+  email?: string | null;
+  modalidade?: string | null;
+  status: string;
+  polo_id?: string | null;
+  polo_nome?: string | null;
+  escola_id?: string | null;
+  escola_nome?: string | null;
+  turmas: string[];
+  percentual_presenca: number;
+  ultimo_acesso_em?: string | null;
+  disciplinas_em_curso: number;
+  observacoes: Observacao[];
+  reingresso_polo_destino_id?: string | null;
+  reingresso_escola_destino_id?: string | null;
+}
+
+export interface AlunoGestaoLista {
+  total: number;
+  items: AlunoGestao[];
+  limit: number;
+  offset: number;
+}
+
+export interface DisciplinaAcademica {
+  id: string;
+  nome: string;
+  semestre?: number | null;
+  carga_horaria?: number | null;
+  nota?: number | null;
+  situacao: string;
+  em_curso: boolean;
+  total_conteudos: number;
+  conteudos_concluidos: number;
+  progresso?: number | null;
+}
+
+export interface CursoAcademico {
+  id: string;
+  nome: string;
+  disciplinas: DisciplinaAcademica[];
+}
+
+export interface Academico {
+  aluno_id: string;
+  aluno_nome: string;
+  numero_matricula?: string | null;
+  cursos: CursoAcademico[];
+}
+
+export interface ReingressoPayload {
+  modalidade: 'polo' | 'ead';
+  polo_destino_id?: string;
+  escola_destino_id?: string;
+  taxa_confirmada: boolean;
+}
+
+export interface ReingressoResultado {
+  aluno_id: string;
+  numero_matricula: string;
+  licencas_debitadas: number;
+}
+
+export interface ConteudoAprendizado {
+  id: string;
+  titulo?: string | null;
+  tipo_midia?: string | null;
+  url_arquivo?: string | null;
+  concluido: boolean;
+}
+
+export interface CursoAprendizado {
+  id: string;
+  nome: string;
+  disciplinas: { id: string; nome: string; conteudos: ConteudoAprendizado[] }[];
+}
+
+export const alunosGestaoApi = {
+  listar: async (params: {
+    polo_id?: string;
+    escola_id?: string;
+    somente_ead?: boolean;
+    observacao?: Observacao;
+    q?: string;
+    limit: number;
+    offset: number;
+  }): Promise<AlunoGestaoLista> => {
+    const { data } = await apiClient.get<AlunoGestaoLista>('/alunos/gestao', { params });
+    return data;
+  },
+
+  academico: async (alunoId: string): Promise<Academico> => {
+    const { data } = await apiClient.get<Academico>(`/alunos/gestao/${alunoId}/academico`);
+    return data;
+  },
+
+  confirmarChurn: async (alunoId: string): Promise<void> => {
+    await apiClient.post(`/alunos/gestao/${alunoId}/churn`);
+  },
+
+  reingressar: async (
+    alunoId: string,
+    payload: ReingressoPayload
+  ): Promise<ReingressoResultado> => {
+    const { data } = await apiClient.post<ReingressoResultado>(
+      `/alunos/gestao/${alunoId}/reingresso`,
+      payload
+    );
+    return data;
+  },
+
+  aprendizado: async (): Promise<CursoAprendizado[]> => {
+    const { data } = await apiClient.get<CursoAprendizado[]>('/alunos/aprendizado');
+    return data;
+  },
+
+  marcarConteudo: async (conteudoId: string, concluido: boolean): Promise<void> => {
+    const url = `/alunos/aprendizado/conteudos/${conteudoId}/concluido`;
+    await (concluido ? apiClient.put(url) : apiClient.delete(url));
+  },
+};
+
 export const apiErrorMessage = (err: unknown, fallback: string): string => {
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
   if (typeof detail === 'string') return detail;

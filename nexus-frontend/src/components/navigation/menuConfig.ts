@@ -166,7 +166,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Transferências',
           path: '/admin/transferencias',
           icon: ArrowLeftRight,
-          isPlaceholder: true,
         },
       ],
     },
@@ -260,7 +259,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Transferências',
           path: '/polo/transferencias',
           icon: ArrowLeftRight,
-          isPlaceholder: true,
         },
       ],
     },
@@ -331,6 +329,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           path: '/escola/turmas',
           icon: CalendarDays,
           isPlaceholder: true,
+        },
+        {
+          title: 'Transferências',
+          path: '/escola/transferencias',
+          icon: ArrowLeftRight,
         },
         {
           title: 'Presenças & Frequência',
@@ -447,7 +450,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Minhas Disciplinas',
           path: '/aluno/disciplinas',
           icon: BookOpen,
-          isPlaceholder: true,
         },
         {
           title: 'Notas & Histórico Unificado',
@@ -478,6 +480,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           path: '/aluno/compras',
           icon: CreditCard,
           isPlaceholder: true,
+        },
+        {
+          title: 'Minhas Transferências',
+          path: '/aluno/transferencias',
+          icon: ArrowLeftRight,
         },
         {
           title: 'Chat com Professores',

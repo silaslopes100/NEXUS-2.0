@@ -162,7 +162,13 @@ class PostgresAdminRepository:
             SELECT u.id, u.nome, u.sobrenome, u.email, u.cpf, u.telefone, u.celular,
                    u.foto_url, u.status, u.ultimo_login_em, u.polo_id, u.escola_id,
                    u.perfil_id, p.nome as perfil_nome, u.criado_em, u.atualizado_em,
-                   po.nome as polo_nome, es.nome as escola_nome
+                   po.nome as polo_nome, es.nome as escola_nome,
+                   EXISTS (
+                       SELECT 1
+                       FROM solicitacoes_transferencia st
+                       JOIN alunos a ON a.id = st.aluno_id
+                       WHERE a.usuario_id = u.id AND st.status = 'pendente'
+                   ) AS transferencia_pendente
             FROM usuarios u
             LEFT JOIN perfis p ON u.perfil_id = p.id
             LEFT JOIN polos po ON u.polo_id = po.id

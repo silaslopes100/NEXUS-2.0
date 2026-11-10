@@ -28,6 +28,7 @@ export interface User {
   permissoes: string[];
   ultimo_login_em?: string | null;
   tambem_aluno?: boolean;
+  aluno_desistente?: boolean;
 }
 
 export interface LoginResponse {

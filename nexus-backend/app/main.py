@@ -10,6 +10,8 @@ from app.core.database import close_connection_pool
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.alunos.perfil import router as aluno_perfil_router
+from app.modules.alunos_gestao import router as alunos_gestao_router
+from app.modules.alunos_gestao import router_aprendizado as aluno_aprendizado_router
 from app.modules.certificados import router as certificados_router
 from app.modules.comunicacao import router as comunicacao_router
 from app.modules.cupons import router as cupons_router
@@ -52,6 +54,8 @@ app.add_middleware(
 # Inclusão dos Módulos do Sistema
 app.include_router(auth_router)
 app.include_router(aluno_perfil_router)
+app.include_router(alunos_gestao_router)
+app.include_router(aluno_aprendizado_router)
 app.include_router(admin_router)
 # `professores` precisa ser registrado antes de `polos_escolas` para que o
 # PUT /professores/{id} completo (retorno com dados do docente) tenha

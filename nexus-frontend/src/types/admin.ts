@@ -30,6 +30,7 @@ export interface UsuarioAdmin {
   ultimo_login_em?: string | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
+  transferencia_pendente?: boolean;
 }
 
 export interface AlunoVinculoFicha {

@@ -41,6 +41,8 @@ class UserResponse(BaseModel):
     ultimo_login_em: Optional[datetime] = None
     # Usuário de perfil Polo ou Escola que também possui cadastro de aluno.
     tambem_aluno: bool = False
+    # Aluno em Churn: precisa regularizar a situação antes de nova matrícula.
+    aluno_desistente: bool = False
 
 
 class LoginRequest(BaseModel):

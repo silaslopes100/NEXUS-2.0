@@ -26,6 +26,9 @@ import { TurmasPage } from '@/features/turmas/pages/TurmasPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { CursosPage } from '@/features/cursos/pages/CursosPage';
 import { DisciplinasPage } from '@/features/cursos/pages/DisciplinasPage';
+import { TransferenciasPage } from '@/features/transferencias/pages/TransferenciasPage';
+import { MinhasDisciplinasPage } from '@/features/alunos/pages/MinhasDisciplinasPage';
+import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -72,7 +75,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/financeiro" element={<ModulePlaceholderPage />} />
           <Route path="/admin/cupons" element={<ModulePlaceholderPage />} />
           <Route path="/admin/pedidos-livros" element={<ModulePlaceholderPage />} />
-          <Route path="/admin/transferencias" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/transferencias" element={<TransferenciasPage />} />
           <Route path="/admin/auditoria" element={<LogsAuditoriaPage />} />
           <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="/admin/execucoes-batch" element={<ExecucoesBatchPage />} />
@@ -89,7 +92,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/alunos" element={<AlunosPage />} />
           <Route path="/polo/turmas" element={<TurmasPage />} />
           <Route path="/polo/certificados" element={<ModulePlaceholderPage />} />
-          <Route path="/polo/transferencias" element={<ModulePlaceholderPage />} />
+          <Route path="/polo/transferencias" element={<TransferenciasPage />} />
           <Route path="/polo/licencas" element={<LicencasPage />} />
           <Route path="/polo/comprar-licencas" element={<ModulePlaceholderPage />} />
           <Route path="/polo/livros" element={<ModulePlaceholderPage />} />
@@ -101,6 +104,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/escola/cursos" element={<CursosPage />} />
           <Route path="/escola/alunos" element={<AlunosPage />} />
           <Route path="/escola/turmas" element={<TurmasPage />} />
+          <Route path="/escola/transferencias" element={<TransferenciasPage />} />
           <Route path="/escola/presencas" element={<ModulePlaceholderPage />} />
           <Route path="/escola/licencas" element={<LicencasPage />} />
           <Route path="/escola/livros" element={<ModulePlaceholderPage />} />
@@ -122,14 +126,15 @@ export const AppRoutes: React.FC = () => {
           <Route path="/aluno/dashboard" element={<AlunoDashboardPage />} />
           <Route element={<RequireRole roles={['aluno']} />}>
             <Route path="/aluno/perfil" element={<PerfilAlunoPage />} />
+            <Route path="/aluno/transferencias" element={<TransferenciasPage modo="aluno" />} />
+            <Route path="/aluno/disciplinas" element={<MinhasDisciplinasPage />} />
           </Route>
           <Route path="/aluno/ava" element={<ModulePlaceholderPage />} />
-          <Route path="/aluno/disciplinas" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/historico" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/presenca" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/livros" element={<ModulePlaceholderPage />} />
-          <Route path="/aluno/compras" element={<ModulePlaceholderPage />} />
+          <Route path="/aluno/compras" element={<ComprasEadPage />} />
         </Route>
 
         {/* Módulos Compartilhados (Chat e Feed) */}

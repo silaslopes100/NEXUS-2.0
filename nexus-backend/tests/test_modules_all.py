@@ -15,6 +15,8 @@ from app.modules import cursos_disciplinas as cursos_disciplinas_module
 from app.modules import turmas as turmas_module
 from app.modules.polos_escolas import repository as polos_repository_module
 from app.modules.polos_escolas.repository import InMemoryPolosEscolasRepository
+from app.modules.transferencias import repository as transferencias_repository_module
+from app.modules.transferencias.repository import InMemoryTransferenciasRepository
 
 
 @pytest.fixture
@@ -738,20 +740,50 @@ async def test_modulo_pedidos_livros(client: AsyncClient):
 
 # 17. Transferências
 @pytest.mark.asyncio
-async def test_modulo_transferencias(client: AsyncClient):
+async def test_modulo_transferencias(client: AsyncClient, monkeypatch):
     t_polo = _token("polo-1", "polo@nexus.com.br", "polo")
     t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
+    aluno_id = "00000000-0000-0000-0000-0000000000a1"
+    polo_destino = "00000000-0000-0000-0000-0000000000b1"
+    escola_destino = "00000000-0000-0000-0000-0000000000c1"
+
+    repo = InMemoryTransferenciasRepository()
+    repo.alunos[aluno_id] = {
+        "id": aluno_id,
+        "usuario_id": "aluno-1",
+        "nome": "Aluno",
+        "polo_id": "polo-1",
+        "escola_id": None,
+        "modalidade": "polo",
+        "status": "ativo",
+        "perfil_nome": "aluno",
+        "referencia_movimentacao": datetime.now(timezone.utc),
+    }
+    repo.polos[polo_destino] = {"id": polo_destino, "nome": "Destino", "status": "ativo"}
+    repo.escolas[escola_destino] = {
+        "id": escola_destino,
+        "nome": "Escola",
+        "polo_id": polo_destino,
+        "status": "ativo",
+    }
+    monkeypatch.setattr(transferencias_repository_module, "_repo_instance", repo)
 
     s_res = await client.post(
         "/transferencias",
-        json={"aluno_id": "aluno-1", "polo_origem_id": "polo-1", "polo_destino_id": "polo-2"},
+        json={
+            "aluno_id": aluno_id,
+            "tipo": "troca_polo",
+            "polo_destino_id": polo_destino,
+            "escola_destino_id": escola_destino,
+        },
         headers={"Authorization": f"Bearer {t_polo}"},
     )
     assert s_res.status_code == 201
     transf_id = s_res.json()["id"]
 
     r_res = await client.put(
-        f"/transferencias/{transf_id}/resolver?aprovado=true",
+        f"/transferencias/{transf_id}/resolver",
+        json={"aprovado": True},
         headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert r_res.status_code == 200

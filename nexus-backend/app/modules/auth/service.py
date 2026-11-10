@@ -70,6 +70,7 @@ class AuthService:
                 perfil_canonico(user_data.get("perfil_nome")) in ("polo", "escola")
                 and bool(user_data.get("possui_cadastro_aluno"))
             ),
+            aluno_desistente=bool(user_data.get("aluno_desistente")),
         )
 
     def login(

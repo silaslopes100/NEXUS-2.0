@@ -196,15 +196,25 @@ DDL: List[str] = [
     numero_matricula VARCHAR(32) UNIQUE,
     data_nascimento DATE,
     status VARCHAR(16) DEFAULT 'ativo',
-    ultima_movimentacao_em TIMESTAMPTZ""",
+    ultima_movimentacao_em TIMESTAMPTZ,
+    revalidado_em TIMESTAMPTZ""",
     ),
     _tbl(
         "alunos_desistentes",
         """    aluno_id UUID NOT NULL REFERENCES alunos(id) ON DELETE CASCADE,
     motivo TEXT,
     data_marcacao TIMESTAMPTZ DEFAULT now(),
-    taxa_regularizacao_paga BOOLEAN DEFAULT false""",
+    taxa_regularizacao_paga BOOLEAN DEFAULT false,
+    reingresso_em TIMESTAMPTZ,
+    matricula_anterior VARCHAR(32)""",
     ),
+    """CREATE TABLE IF NOT EXISTS conteudo_progresso (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aluno_id UUID NOT NULL REFERENCES alunos(id) ON DELETE CASCADE,
+    conteudo_id UUID NOT NULL REFERENCES disciplina_conteudos(id) ON DELETE CASCADE,
+    concluido_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (aluno_id, conteudo_id)
+);""",
     # ---------- 3.7 EAD ----------
     _tbl(
         "matriculas_ead",
@@ -348,8 +358,17 @@ DDL: List[str] = [
     polo_destino_id UUID REFERENCES polos(id) ON DELETE SET NULL,
     solicitado_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
     status VARCHAR(16) DEFAULT 'pendente',
-    resolvido_em TIMESTAMPTZ""",
+    resolvido_em TIMESTAMPTZ,
+    modalidade_origem VARCHAR(16),
+    modalidade_destino VARCHAR(16),
+    escola_origem_id UUID REFERENCES escolas(id) ON DELETE SET NULL,
+    escola_destino_id UUID REFERENCES escolas(id) ON DELETE SET NULL,
+    observacao TEXT,
+    motivo_rejeicao TEXT,
+    resolvido_por UUID REFERENCES usuarios(id) ON DELETE SET NULL""",
     ),
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_solicitacoes_transferencia_aluno_pendente "
+    "ON solicitacoes_transferencia (aluno_id) WHERE status = 'pendente';",
     # ---------- 3.14 Chat ----------
     _tbl(
         "conversas",

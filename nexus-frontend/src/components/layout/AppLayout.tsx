@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Menu, Bell, Search } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
+import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
+import { PendenciasSino } from '@/features/transferencias/components/PendenciasSino';
 
 export const AppLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -50,10 +51,14 @@ export const AppLayout: React.FC = () => {
             </div>
 
             {/* Notifications Pill */}
-            <button className="p-2 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-300 hover:text-nexus-yellow hover:border-nexus-yellow/30 transition-colors relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-nexus-yellow rounded-full ring-2 ring-slate-900" />
-            </button>
+            {normalizeUserRole(roleName) === 'admin' ? (
+              <PendenciasSino />
+            ) : (
+              <button className="p-2 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-300 hover:text-nexus-yellow hover:border-nexus-yellow/30 transition-colors relative">
+                <Bell className="w-4 h-4" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-nexus-yellow rounded-full ring-2 ring-slate-900" />
+              </button>
+            )}
 
             {/* User Profile Tag */}
             <div className="flex items-center gap-2.5 pl-2 border-l border-slate-800">

@@ -104,6 +104,7 @@ class UsuarioAdminResponse(BaseModel):
     ultimo_login_em: Optional[datetime] = None
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
+    transferencia_pendente: bool = False
 
 
 class UsuarioListResponse(BaseModel):

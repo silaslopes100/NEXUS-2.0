@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
+from app.core.config import settings
 from app.core.database import get_db_cursor
 from app.modules.auth.dependencies import get_current_user, require_role
 
@@ -46,6 +47,22 @@ _matriculas_ead_db: Dict[str, Dict[str, Any]] = {}
 _compras_ead_db: Dict[str, Dict[str, Any]] = {}
 _avisos_ead_db: Dict[str, Dict[str, Any]] = {}
 
+MENSAGEM_REGULARIZACAO = (
+    "Você já tem cadastro, mas precisa regularizar sua situação, "
+    "entre em contato conosco pelo WhatsApp (11)1936-6880"
+)
+
+
+def _bloquear_aluno_em_churn(aluno_id: str) -> None:
+    """RN-04: aluno em Churn só volta a se matricular depois de regularizado."""
+    if not settings.PG_DSN:
+        return
+    with get_db_cursor() as cur:
+        cur.execute("SELECT status FROM alunos WHERE id::text = %s", (aluno_id,))
+        aluno = cur.fetchone()
+    if aluno and aluno["status"] == "desistente":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=MENSAGEM_REGULARIZACAO)
+
 
 @router.get("/matriculas", response_model=List[MatriculaEadSchema], dependencies=[Depends(require_role(["admin", "aluno", "polo"]))])
 async def list_matriculas_ead(aluno_id: Optional[str] = None):
@@ -67,6 +84,7 @@ async def list_matriculas_ead(aluno_id: Optional[str] = None):
 
 @router.post("/matriculas", response_model=MatriculaEadSchema, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(["admin", "polo", "aluno"]))])
 async def create_matricula_ead(dados: MatriculaEadSchema):
+    _bloquear_aluno_em_churn(dados.aluno_id)
     new_id = str(uuid.uuid4())
     m_dict = dados.model_dump()
     m_dict["id"] = new_id
@@ -97,6 +115,7 @@ async def list_compras_ead(aluno_id: Optional[str] = None):
 
 @router.post("/compras", response_model=CompraDisciplinaEadSchema, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(["admin", "aluno", "polo"]))])
 async def create_compra_ead(dados: CompraDisciplinaEadSchema):
+    _bloquear_aluno_em_churn(dados.aluno_id)
     new_id = str(uuid.uuid4())
     c_dict = dados.model_dump()
     c_dict["id"] = new_id

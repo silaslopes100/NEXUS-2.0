@@ -74,6 +74,7 @@ class AdminService:
             ultimo_login_em=user_data.get("ultimo_login_em"),
             criado_em=user_data.get("criado_em"),
             atualizado_em=user_data.get("atualizado_em"),
+            transferencia_pendente=bool(user_data.get("transferencia_pendente")),
         )
 
     # ---------- CRUD de Usuários ----------

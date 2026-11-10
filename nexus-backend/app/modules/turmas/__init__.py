@@ -206,6 +206,12 @@ def _auditar(
     )
 
 
+def _turma_ja_iniciada(turma: Dict[str, Any]) -> bool:
+    """RN-04: sem data de início não há como garantir que a turma começa do zero."""
+    inicio = turma.get("data_inicio")
+    return inicio is None or inicio < date.today()
+
+
 def _buscar_turma(cur: Any, turma_id: str, bloquear: bool = False) -> Optional[Dict[str, Any]]:
     cur.execute(_TURMA_SELECT + " WHERE t.id = %s" + (" FOR UPDATE OF t" if bloquear else ""), (turma_id,))
     row = cur.fetchone()
@@ -775,6 +781,8 @@ async def list_alunos_disponiveis(
         elif turma.get("polo_id"):
             conditions.append("a.polo_id = %s")
             params.append(str(turma["polo_id"]))
+        if _turma_ja_iniciada(turma):
+            conditions.append("a.revalidado_em IS NULL")
         if termo:
             conditions.append(
                 f"(lower({_ALUNO_NOME_SQL}) LIKE %s OR lower(coalesce(a.numero_matricula, '')) LIKE %s)"
@@ -815,10 +823,18 @@ async def matricular_aluno_turma(
 
     with get_db_cursor() as cur:
         turma = _exigir_no_escopo(_buscar_turma(cur, uid), current_user)
-        cur.execute("SELECT id, polo_id, escola_id FROM alunos WHERE id::text = %s", (aluno_id,))
+        cur.execute(
+            "SELECT id, polo_id, escola_id, revalidado_em FROM alunos WHERE id::text = %s",
+            (aluno_id,),
+        )
         aluno = cur.fetchone()
         if aluno is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+        if aluno.get("revalidado_em") and _turma_ja_iniciada(turma):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="Aluno revalidado só pode entrar em turmas que comecem do zero.",
+            )
         campo = "escola_id" if turma.get("escola_id") else "polo_id"
         if turma.get(campo) and str(aluno[campo]) != str(turma[campo]):
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Aluno não pertence ao polo/escola da turma.")
