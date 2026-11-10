@@ -11,11 +11,13 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from psycopg2.errors import UniqueViolation
+from vercel import blob
 
+from app.core.config import settings
 from app.core.database import get_db_cursor
 from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
 from app.modules.auth.schemas import UserResponse
@@ -30,7 +32,7 @@ router = APIRouter(
 
 PHOTO_DIRECTORY = Path(__file__).resolve().parents[3] / "uploads" / "profile_photos"
 PHOTO_URL = "/alunos/meu-perfil/foto"
-MAX_PHOTO_BYTES = 5 * 1024 * 1024
+MAX_PHOTO_BYTES = 4 * 1024 * 1024
 MAX_PHOTO_PIXELS = 20_000_000
 PHOTO_FORMATS = {
     "image/jpeg": "JPEG",
@@ -39,6 +41,11 @@ PHOTO_FORMATS = {
 }
 PHOTO_EXTENSIONS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
 _PHOTO_FILENAME = re.compile(r"^[a-f0-9]{32}\.(?:jpg|png|webp)$")
+PHOTO_MEDIA_TYPES = {
+    "jpg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+}
 
 _PROFILE_FIELDS = """
     id, nome, sobrenome, email, telefone, celular, foto_url,
@@ -90,6 +97,29 @@ def _stored_photo_path(filename: Optional[str]) -> Optional[Path]:
     if not filename or not _PHOTO_FILENAME.fullmatch(filename):
         return None
     return PHOTO_DIRECTORY / filename
+
+
+def _uses_blob_storage() -> bool:
+    return settings.ENVIRONMENT.lower() == "production"
+
+
+def _blob_photo_path(filename: str) -> str:
+    if not _PHOTO_FILENAME.fullmatch(filename):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foto de perfil não encontrada",
+        )
+    return f"profile_photos/{filename}"
+
+
+def _photo_media_type(filename: Optional[str]) -> str:
+    photo_path = _stored_photo_path(filename)
+    if not photo_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foto de perfil não encontrada",
+        )
+    return PHOTO_MEDIA_TYPES[photo_path.suffix[1:]]
 
 
 def _prepare_photo(content: bytes, content_type: str) -> tuple[bytes, str]:
@@ -144,8 +174,17 @@ def _prepare_photo(content: bytes, content_type: str) -> tuple[bytes, str]:
         ) from exc
 
 
-def _write_photo(content: bytes, extension: str) -> str:
+async def _write_photo(content: bytes, extension: str) -> str:
     filename = f"{uuid.uuid4().hex}.{extension}"
+    if _uses_blob_storage():
+        await blob.put_blob(
+            _blob_photo_path(filename),
+            content,
+            access="private",
+            content_type=PHOTO_MEDIA_TYPES[extension],
+        )
+        return filename
+
     PHOTO_DIRECTORY.mkdir(parents=True, exist_ok=True)
     destination = PHOTO_DIRECTORY / filename
     temporary = PHOTO_DIRECTORY / f".{filename}.tmp"
@@ -158,9 +197,46 @@ def _write_photo(content: bytes, extension: str) -> str:
     return filename
 
 
-def _remove_photo(filename: Optional[str]) -> None:
-    path = _stored_photo_path(filename)
-    if not path:
+async def _read_photo(filename: Optional[str]) -> bytes:
+    if not filename or not _PHOTO_FILENAME.fullmatch(filename):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foto de perfil não encontrada",
+        )
+    photo_path = PHOTO_DIRECTORY / filename
+
+    if _uses_blob_storage():
+        try:
+            result = await blob.get_blob(_blob_photo_path(filename), access="private")
+        except blob.BlobNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Foto de perfil não encontrada",
+            ) from None
+        return result.body
+
+    try:
+        return photo_path.read_bytes()
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foto de perfil não encontrada",
+        ) from None
+
+
+async def _remove_photo(filename: Optional[str]) -> None:
+    if not filename or not _PHOTO_FILENAME.fullmatch(filename):
+        return
+    path = PHOTO_DIRECTORY / filename
+    if _uses_blob_storage():
+        try:
+            await blob.delete_blob(_blob_photo_path(filename))
+        except blob.BlobError:
+            logger.warning(
+                "Não foi possível remover foto antiga do aluno: %s",
+                filename,
+                exc_info=True,
+            )
         return
     try:
         path.unlink(missing_ok=True)
@@ -169,7 +245,12 @@ def _remove_photo(filename: Optional[str]) -> None:
 
 
 def _profile_response(row: dict) -> PerfilAlunoResponse:
-    photo_path = _stored_photo_path(row.get("foto_url"))
+    filename = row.get("foto_url")
+    photo_path = _stored_photo_path(filename)
+    photo_exists = bool(
+        photo_path
+        and (_uses_blob_storage() or photo_path.is_file())
+    )
     return PerfilAlunoResponse(
         id=str(row["id"]),
         nome=row.get("nome") or "",
@@ -178,8 +259,8 @@ def _profile_response(row: dict) -> PerfilAlunoResponse:
         telefone=row.get("telefone"),
         celular=row.get("celular"),
         foto_url=(
-            f"{PHOTO_URL}?v={row['foto_url']}"
-            if photo_path and photo_path.is_file()
+            f"{PHOTO_URL}?v={filename}"
+            if photo_exists
             else None
         ),
         endereco=EnderecoAluno(
@@ -216,7 +297,7 @@ async def get_meu_perfil(
 @router.get("/meu-perfil/foto")
 async def get_meu_perfil_foto(
     current_user: UserResponse = Depends(get_current_user),
-) -> FileResponse:
+) -> Response:
     with get_db_cursor() as cur:
         cur.execute(
             "SELECT foto_url FROM usuarios WHERE id = %s",
@@ -224,21 +305,11 @@ async def get_meu_perfil_foto(
         )
         row = cur.fetchone()
 
-    photo_path = _stored_photo_path(row.get("foto_url") if row else None)
-    if not photo_path or not photo_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Foto de perfil não encontrada",
-        )
-
-    media_type = {
-        ".jpg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }[photo_path.suffix]
-    return FileResponse(
-        photo_path,
-        media_type=media_type,
+    filename = row.get("foto_url") if row else None
+    content = await _read_photo(filename)
+    return Response(
+        content=content,
+        media_type=_photo_media_type(filename),
         headers={"Cache-Control": "private, no-store"},
     )
 
@@ -258,11 +329,11 @@ async def upload_meu_perfil_foto(
     if len(content) > MAX_PHOTO_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="A imagem deve ter no máximo 5 MB.",
+            detail="A imagem deve ter no máximo 4 MB.",
         )
 
     processed_content, extension = _prepare_photo(content, foto.content_type or "")
-    new_filename = _write_photo(processed_content, extension)
+    new_filename = await _write_photo(processed_content, extension)
     previous_filename: Optional[str] = None
     try:
         with get_db_cursor() as cur:
@@ -302,11 +373,11 @@ async def upload_meu_perfil_foto(
                 ),
             )
     except Exception:
-        _remove_photo(new_filename)
+        await _remove_photo(new_filename)
         raise
 
     if previous_filename != new_filename:
-        _remove_photo(previous_filename)
+        await _remove_photo(previous_filename)
     return FotoAlunoResponse(foto_url=f"{PHOTO_URL}?v={new_filename}")
 
 

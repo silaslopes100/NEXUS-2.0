@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from app.core.database import get_db_cursor
 from app.modules.alunos import perfil as perfil_aluno
@@ -113,26 +113,16 @@ async def get_usuario_ficha(
     "/usuarios/{usuario_id}/foto",
     summary="Retorna a foto compartilhada do usuário com acesso administrativo",
 )
-async def get_usuario_foto(usuario_id: str) -> FileResponse:
+async def get_usuario_foto(usuario_id: str) -> Response:
     with get_db_cursor() as cur:
         cur.execute("SELECT foto_url FROM usuarios WHERE id = %s", (usuario_id,))
         row = cur.fetchone()
 
-    photo_path = perfil_aluno._stored_photo_path(row.get("foto_url") if row else None)
-    if not photo_path or not photo_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Foto de perfil não encontrada",
-        )
-
-    media_type = {
-        ".jpg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }[photo_path.suffix]
-    return FileResponse(
-        photo_path,
-        media_type=media_type,
+    filename = row.get("foto_url") if row else None
+    content = await perfil_aluno._read_photo(filename)
+    return Response(
+        content=content,
+        media_type=perfil_aluno._photo_media_type(filename),
         headers={"Cache-Control": "private, no-store"},
     )
 
@@ -156,14 +146,14 @@ async def upload_usuario_foto(
     if len(content) > perfil_aluno.MAX_PHOTO_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="A imagem deve ter no máximo 5 MB.",
+            detail="A imagem deve ter no máximo 4 MB.",
         )
 
     processed_content, extension = perfil_aluno._prepare_photo(
         content,
         foto.content_type or "",
     )
-    new_filename = perfil_aluno._write_photo(processed_content, extension)
+    new_filename = await perfil_aluno._write_photo(processed_content, extension)
     previous_filename: Optional[str] = None
     try:
         with get_db_cursor() as cur:
@@ -203,11 +193,11 @@ async def upload_usuario_foto(
                 ),
             )
     except Exception:
-        perfil_aluno._remove_photo(new_filename)
+        await perfil_aluno._remove_photo(new_filename)
         raise
 
     if previous_filename != new_filename:
-        perfil_aluno._remove_photo(previous_filename)
+        await perfil_aluno._remove_photo(previous_filename)
     return {"foto_url": f"/admin/usuarios/{usuario_id}/foto?v={new_filename}"}
 
 

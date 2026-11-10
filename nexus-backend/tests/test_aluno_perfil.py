@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 from contextlib import contextmanager
 from importlib import import_module
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -316,6 +318,31 @@ async def test_student_uploads_and_reads_own_profile_photo(
 
 
 @pytest.mark.asyncio
+async def test_profile_photo_helpers_use_private_vercel_blob(monkeypatch):
+    put_blob = AsyncMock()
+    get_blob = AsyncMock(return_value=SimpleNamespace(body=b"processed-image"))
+    delete_blob = AsyncMock()
+    monkeypatch.setattr(perfil_module, "_uses_blob_storage", lambda: True)
+    monkeypatch.setattr(perfil_module.blob, "put_blob", put_blob)
+    monkeypatch.setattr(perfil_module.blob, "get_blob", get_blob)
+    monkeypatch.setattr(perfil_module.blob, "delete_blob", delete_blob)
+
+    filename = await perfil_module._write_photo(b"processed-image", "png")
+    pathname = f"profile_photos/{filename}"
+
+    put_blob.assert_awaited_once_with(
+        pathname,
+        b"processed-image",
+        access="private",
+        content_type="image/png",
+    )
+    assert await perfil_module._read_photo(filename) == b"processed-image"
+    get_blob.assert_awaited_once_with(pathname, access="private")
+    await perfil_module._remove_photo(filename)
+    delete_blob.assert_awaited_once_with(pathname)
+
+
+@pytest.mark.asyncio
 async def test_admin_and_student_share_the_same_profile_photo(
     client, profile_database, monkeypatch, tmp_path
 ):
@@ -385,7 +412,7 @@ async def test_student_photo_upload_rejects_unsupported_and_invalid_images(clien
 
 
 @pytest.mark.asyncio
-async def test_student_photo_upload_rejects_files_over_five_megabytes(client):
+async def test_student_photo_upload_rejects_files_over_four_megabytes(client):
     response = await client.post(
         "/alunos/meu-perfil/foto",
         headers=_headers("aluno-1", "aluno"),

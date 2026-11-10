@@ -165,9 +165,9 @@ export const PerfilAlunoPage: React.FC = () => {
       setPhotoError('Escolha uma imagem JPEG, PNG ou WebP.');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 4 * 1024 * 1024) {
       setSelectedPhoto(null);
-      setPhotoError('A imagem deve ter no máximo 5 MB.');
+      setPhotoError('A imagem deve ter no máximo 4 MB.');
       return;
     }
     setSelectedPhoto(file);
@@ -263,7 +263,7 @@ export const PerfilAlunoPage: React.FC = () => {
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-white">{[perfil.nome, perfil.sobrenome].filter(Boolean).join(' ')}</p>
-          <p className="mt-1 text-xs text-slate-400">Foto de perfil · JPEG, PNG ou WebP · máximo 5 MB</p>
+          <p className="mt-1 text-xs text-slate-400">Foto de perfil · JPEG, PNG ou WebP · máximo 4 MB</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">
               <ImagePlus className="h-4 w-4" />

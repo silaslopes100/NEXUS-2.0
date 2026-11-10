@@ -198,8 +198,8 @@ export const UsuarioFichaPage: React.FC = () => {
     const foto = event.target.files?.[0];
     event.target.value = '';
     if (!foto || !ficha) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(foto.type) || foto.size > 5 * 1024 * 1024) {
-      setFeedback({ type: 'error', message: 'Envie uma imagem JPEG, PNG ou WebP de até 5 MB.' });
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(foto.type) || foto.size > 4 * 1024 * 1024) {
+      setFeedback({ type: 'error', message: 'Envie uma imagem JPEG, PNG ou WebP de até 4 MB.' });
       return;
     }
     try {

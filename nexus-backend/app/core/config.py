@@ -12,8 +12,14 @@ load_dotenv(Path.cwd() / ".env", override=False)
 
 
 class Settings:
+    # --- Ambiente ---
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+
     # --- Segurança e JWT ---
-    SECRET_KEY: str = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "nexus-2.0-secret-key-change-in-production-2026"))
+    _secret_key: str = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY", "")
+    if ENVIRONMENT.lower() == "production" and not _secret_key:
+        raise RuntimeError("JWT_SECRET or SECRET_KEY must be configured in production.")
+    SECRET_KEY: str = _secret_key or "nexus-2.0-secret-key-change-in-production-2026"
     ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
@@ -25,6 +31,21 @@ class Settings:
 
     # --- Banco de dados ---
     PG_DSN: str = os.getenv("PG_DSN", os.getenv("DATABASE_URL", ""))
+    if ENVIRONMENT.lower() == "production" and not PG_DSN:
+        raise RuntimeError("PG_DSN or DATABASE_URL must be configured in production.")
+
+    # --- CORS ---
+    _cors_origins: str = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:5173",
+    )
+    CORS_ORIGINS: list[str] = [
+        origin.strip() for origin in _cors_origins.split(",") if origin.strip()
+    ]
+    if ENVIRONMENT.lower() == "production" and not CORS_ORIGINS:
+        raise RuntimeError("CORS_ORIGINS must be configured in production.")
+    if ENVIRONMENT.lower() == "production" and "*" in CORS_ORIGINS:
+        raise RuntimeError("CORS_ORIGINS must list explicit production origins.")
 
     # --- E-mail / SMTP ---
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
@@ -33,9 +54,5 @@ class Settings:
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "noreply@nexus2.com.br")
     SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "NEXUS 2.0")
-
-    # --- Ambiente ---
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-
 
 settings = Settings()
