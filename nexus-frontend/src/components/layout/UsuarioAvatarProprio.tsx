@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { authApi } from '@/features/auth/api';
 
 interface UsuarioAvatarProprioProps {
+  usuarioId?: string;
   fotoUrl?: string | null;
   nome?: string | null;
   className: string;
 }
 
 export const UsuarioAvatarProprio: React.FC<UsuarioAvatarProprioProps> = ({
+  usuarioId,
   fotoUrl,
   nome,
   className,
@@ -17,7 +19,7 @@ export const UsuarioAvatarProprio: React.FC<UsuarioAvatarProprioProps> = ({
   const inicial = nomeExibido.charAt(0).toUpperCase();
 
   useEffect(() => {
-    if (!fotoUrl) {
+    if (!usuarioId) {
       setFoto(null);
       return;
     }
@@ -29,7 +31,7 @@ export const UsuarioAvatarProprio: React.FC<UsuarioAvatarProprioProps> = ({
       if (cancelled) {
         URL.revokeObjectURL(objectUrl);
       } else {
-        setFoto({ key: fotoUrl, url: objectUrl });
+        setFoto({ key: `${usuarioId}:${fotoUrl || ''}`, url: objectUrl });
       }
     }).catch(() => {
       if (!cancelled) setFoto(null);
@@ -39,9 +41,10 @@ export const UsuarioAvatarProprio: React.FC<UsuarioAvatarProprioProps> = ({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [fotoUrl]);
+  }, [usuarioId, fotoUrl]);
 
-  const fotoUrlAtiva = foto && foto.key === fotoUrl ? foto.url : null;
+  const fotoKey = `${usuarioId}:${fotoUrl || ''}`;
+  const fotoUrlAtiva = foto && foto.key === fotoKey ? foto.url : null;
 
   return (
     <div

@@ -358,6 +358,17 @@ async def test_authenticated_user_reads_only_their_own_photo(
 
 
 @pytest.mark.asyncio
+async def test_authenticated_photo_endpoint_returns_not_found_without_photo(client):
+    response = await client.get(
+        "/auth/me/foto",
+        headers=_headers("aluno-1", "aluno"),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Foto de perfil não encontrada"
+
+
+@pytest.mark.asyncio
 async def test_profile_photo_helpers_use_private_vercel_blob(monkeypatch):
     put_blob = AsyncMock()
     get_blob = AsyncMock(return_value=SimpleNamespace(body=b"processed-image"))

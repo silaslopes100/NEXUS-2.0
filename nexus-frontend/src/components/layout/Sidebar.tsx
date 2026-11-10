@@ -264,6 +264,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
           >
             <UsuarioAvatarProprio
+              usuarioId={user?.id}
               fotoUrl={user?.foto_url}
               nome={user?.nome}
               className="w-9 h-9 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-md"

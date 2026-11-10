@@ -72,6 +72,7 @@ export const AppLayout: React.FC = () => {
                 </p>
               </div>
               <UsuarioAvatarProprio
+                usuarioId={user?.id}
                 fotoUrl={user?.foto_url}
                 nome={user?.nome}
                 className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-nexus-yellow"

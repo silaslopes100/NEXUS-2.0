@@ -112,7 +112,7 @@ const MetricaCard: React.FC<{
 export const UsuarioFichaPage: React.FC = () => {
   const { usuarioId } = useParams<{ usuarioId: string }>();
   const navigate = useNavigate();
-  const { user: loggedAdmin } = useAuthStore();
+  const { user: loggedAdmin, setUser } = useAuthStore();
 
   const [ficha, setFicha] = useState<UsuarioFicha | null>(null);
   const [resumo, setResumo] = useState<ResumoMetricasUsuario | null>(null);
@@ -205,6 +205,9 @@ export const UsuarioFichaPage: React.FC = () => {
     try {
       const resultado = await adminApi.uploadUsuarioFoto(ficha.id, foto);
       setFicha((atual) => atual ? { ...atual, foto_url: resultado.foto_url } : atual);
+      if (loggedAdmin?.id === ficha.id) {
+        setUser({ ...loggedAdmin, foto_url: resultado.foto_url });
+      }
       setFeedback({ type: 'success', message: 'Foto atualizada para o usuário e o aluno.' });
     } catch (err: unknown) {
       setFeedback({ type: 'error', message: mensagemErro(err, 'Não foi possível atualizar a foto.') });
