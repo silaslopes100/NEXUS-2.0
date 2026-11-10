@@ -18,6 +18,24 @@ from app.modules.professores.schemas import (
 )
 
 
+_CAMPOS_CADASTRO_DOCENTE = (
+    "materias",
+    "data_inicio",
+    "valor_hora_aula",
+    "pix",
+    "conteudo_programatico",
+    "quantidade_aulas",
+    "horas_totais",
+)
+
+
+def _registro_a_completar(row: Dict[str, Any]) -> bool:
+    """Inativo ou sem nenhum dado docente preenchido (criado só pelo perfil)."""
+    if row.get("status") != "ativo":
+        return True
+    return not any(row.get(campo) for campo in _CAMPOS_CADASTRO_DOCENTE)
+
+
 class ProfessoresService:
     def __init__(self, repo: Optional[ProfessoresRepositoryInterface] = None) -> None:
         self._repo = repo
@@ -84,13 +102,20 @@ class ProfessoresService:
         if not usuario:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário vinculado não encontrado")
 
-        if self.repo.get_professor_by_usuario_id(dados.usuario_id):
+        existente = self.repo.get_professor_by_usuario_id(dados.usuario_id)
+        if existente and not _registro_a_completar(existente):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="Este usuário já está vinculado a um professor",
             )
 
-        professor_id = self.repo.create_professor(dados.model_dump())
+        if existente:
+            # Registro criado automaticamente pela tela de Usuários (ou desativado):
+            # completa-o em vez de duplicar.
+            professor_id = str(existente["id"])
+            self.repo.update_professor(professor_id, {**dados.model_dump(), "status": "ativo"})
+        else:
+            professor_id = self.repo.create_professor(dados.model_dump())
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="professor_cadastrado",
@@ -99,6 +124,7 @@ class ProfessoresService:
             dados_depois={"usuario_id": dados.usuario_id, "polo_id": dados.polo_id},
             ip=ip,
         )
+        self._garantir_perfil_professor(dados.usuario_id, actor_id, ip)
         return self.get_professor(professor_id)
 
     def update_professor(
@@ -136,6 +162,8 @@ class ProfessoresService:
                 dados_depois=update_dict,
                 ip=ip,
             )
+        if novo_usuario_id:
+            self._garantir_perfil_professor(str(novo_usuario_id), actor_id, ip)
         return self.get_professor(professor_id)
 
     def delete_professor(
@@ -164,6 +192,23 @@ class ProfessoresService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _garantir_perfil_professor(
+        self, usuario_id: str, actor_id: Optional[str], ip: Optional[str]
+    ) -> None:
+        """Quem está no Corpo Docente tem perfil `professor` em Usuários."""
+        anterior = self.repo.set_usuario_perfil(usuario_id, "professor")
+        if anterior is None:
+            return
+        self.repo.record_audit_log(
+            usuario_id=actor_id,
+            acao="usuario_perfil_alterado",
+            entidade="usuarios",
+            entidade_id=usuario_id,
+            dados_antes={"perfil": anterior or None},
+            dados_depois={"perfil": "professor"},
+            ip=ip,
+        )
 
     def _build_response(self, row: Dict[str, Any]) -> ProfessorResponse:
         valor = row.get("valor_hora_aula")

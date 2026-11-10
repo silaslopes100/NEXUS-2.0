@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Download, Loader2, X } from 'lucide-react';
 import { Academico, alunosGestaoApi, apiErrorMessage } from '@/features/alunos/api';
 import { BarraProgresso } from '@/features/alunos/components/DisciplinasExpandidas';
 
@@ -18,6 +18,7 @@ export const BoletimModal: React.FC<Props> = ({ alunoId, onClose }) => {
   const [dados, setDados] = useState<Academico | null>(null);
   const [cursoId, setCursoId] = useState('');
   const [erro, setErro] = useState('');
+  const [baixando, setBaixando] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -37,6 +38,31 @@ export const BoletimModal: React.FC<Props> = ({ alunoId, onClose }) => {
   }, [alunoId]);
 
   const curso = dados?.cursos.find((item) => item.id === cursoId);
+
+  const baixarPdf = async () => {
+    if (!dados) return;
+    setBaixando(true);
+    setErro('');
+    try {
+      const blob = await alunosGestaoApi.boletimPdf(alunoId, cursoId || undefined);
+      const identificador = (dados.numero_matricula || dados.aluno_nome || alunoId)
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^A-Za-z0-9_-]+/g, '_');
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `boletim-${identificador}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setErro(apiErrorMessage(err, 'Não foi possível gerar o PDF do boletim.'));
+    } finally {
+      setBaixando(false);
+    }
+  };
 
   return (
     <div
@@ -63,14 +89,27 @@ export const BoletimModal: React.FC<Props> = ({ alunoId, onClose }) => {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            aria-label="Fechar boletim"
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            {dados && dados.cursos.length > 0 && (
+              <button
+                type="button"
+                onClick={baixarPdf}
+                disabled={baixando}
+                className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {baixando ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                <span>{baixando ? 'Gerando...' : 'Baixar PDF'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Fechar boletim"
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </header>
 
         {erro && (

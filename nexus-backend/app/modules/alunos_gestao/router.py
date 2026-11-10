@@ -1,11 +1,13 @@
 """Rotas da Central de Alunos."""
 from __future__ import annotations
 
+import re
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from app.modules.alunos_gestao.pdf import gerar_boletim_pdf
 from app.modules.alunos_gestao.repository import (
     AlunosGestaoRepositoryInterface,
     get_alunos_gestao_repository,
@@ -76,6 +78,25 @@ async def academico_aluno(
     service: AlunosGestaoService = Depends(get_alunos_gestao_service),
 ):
     return service.academico(ator_de(current_user), str(aluno_id))
+
+
+@router.get("/{aluno_id}/boletim/pdf", dependencies=[Depends(require_role(_GESTAO))])
+async def boletim_pdf(
+    aluno_id: uuid.UUID,
+    curso_id: Optional[uuid.UUID] = None,
+    current_user: UserResponse = Depends(get_current_user),
+    service: AlunosGestaoService = Depends(get_alunos_gestao_service),
+):
+    academico = service.academico(ator_de(current_user), str(aluno_id))
+    curso = str(curso_id) if curso_id else None
+    if curso and not any(item.id == curso for item in academico.cursos):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado no boletim do aluno")
+    identificador = re.sub(r"[^A-Za-z0-9_-]", "_", academico.numero_matricula or academico.aluno_id)
+    return Response(
+        content=gerar_boletim_pdf(academico, curso),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="boletim-{identificador}.pdf"'},
+    )
 
 
 @router.post(

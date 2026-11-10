@@ -728,3 +728,39 @@ async def test_update_usuario_limpa_vinculo_polo_escola_com_string_vazia(client:
     assert data["polo_nome"] is None
     assert admin_repo.usuarios["aluno-1"]["polo_id"] is None
     assert admin_repo.usuarios["aluno-1"]["escola_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_perfil_professor_sincroniza_corpo_docente(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    headers = {"Authorization": f"Bearer {_get_admin_token()}"}
+
+    criado = await client.post(
+        "/admin/usuarios",
+        json={
+            "nome": "Nova",
+            "sobrenome": "Docente",
+            "email": "nova.docente@nexus.com.br",
+            "senha": "senhaSegura123",
+            "perfil_nome": "professor",
+            "status": "ativo",
+        },
+        headers=headers,
+    )
+    assert criado.status_code == 201, criado.text
+    user_id = criado.json()["id"]
+    vinculo = admin_repo.get_professor_vinculo_by_usuario_id(user_id)
+    assert vinculo is not None and vinculo["status"] == "ativo"
+
+    virou_aluno = await client.put(
+        f"/admin/usuarios/{user_id}", json={"perfil_nome": "aluno"}, headers=headers
+    )
+    assert virou_aluno.status_code == 200, virou_aluno.text
+    assert admin_repo.get_professor_vinculo_by_usuario_id(user_id)["status"] == "inativo"
+
+    voltou = await client.put(
+        f"/admin/usuarios/{user_id}", json={"perfil_nome": "professor"}, headers=headers
+    )
+    assert voltou.status_code == 200, voltou.text
+    assert admin_repo.get_professor_vinculo_by_usuario_id(user_id)["status"] == "ativo"
+    assert sum(1 for p in admin_repo.professores.values() if p["usuario_id"] == user_id) == 1

@@ -101,7 +101,8 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
     setErro('');
 
     let usuarioId = usuarioSelecionado?.id;
-    if (!usuarioId && vinculo === 'novo') {
+    const criarNovoUsuario = !usuarioId && vinculo === 'novo';
+    if (criarNovoUsuario) {
       if (!novoUsuario.nome.trim() || !novoUsuario.email.trim()) {
         setErro('Informe nome e e-mail do novo usuário docente.');
         return;
@@ -110,15 +111,14 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
         setErro('A senha inicial deve possuir no mínimo 6 caracteres.');
         return;
       }
-    }
-    if (!usuarioId) {
+    } else if (!usuarioId) {
       setErro('Selecione um usuário existente ou cadastre um novo usuário docente.');
       return;
     }
 
     setIsSaving(true);
     try {
-      if (!usuarioSelecionado && vinculo === 'novo') {
+      if (criarNovoUsuario) {
         const usuario = await adminApi.createUsuario({
           nome: novoUsuario.nome.trim(),
           email: novoUsuario.email.trim(),

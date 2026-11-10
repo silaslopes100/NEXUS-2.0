@@ -18,6 +18,7 @@ _PERFIS = {
     "p-polo": {"id": "p-polo", "nome": "polo", "descricao": "Gestor de Polo"},
     "p-coordpolo": {"id": "p-coordpolo", "nome": "coordenador_polo", "descricao": "Coordenador de Polo"},
     "p-professor": {"id": "p-professor", "nome": "professor", "descricao": "Professor"},
+    "p-aluno": {"id": "p-aluno", "nome": "aluno", "descricao": "Aluno"},
 }
 
 
@@ -29,6 +30,7 @@ def repos():
     professores_repo = InMemoryProfessoresRepository()
     # Em produção os dois repositorios leem a mesma tabela `usuarios`.
     professores_repo.usuarios = auth_repo.usuarios
+    professores_repo.perfis = auth_repo.perfis
     professores_repo.polos["polo-1"] = {"id": "polo-1", "nome": "Polo Central"}
 
     auth_repo.usuarios["admin-1"] = {
@@ -250,3 +252,50 @@ async def test_validacoes_e_permissoes(client: AsyncClient):
         headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert nao_encontrado.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_vincular_usuario_aluno_muda_perfil_para_professor(client: AsyncClient, repos):
+    auth_repo, professores_repo = repos
+    auth_repo.usuarios["aluno-1"] = {
+        **auth_repo.usuarios["prof-1"],
+        "id": "aluno-1",
+        "email": "aluno@nexus.com.br",
+        "perfil_id": "p-aluno",
+    }
+
+    res = await client.post(
+        "/professores/",
+        json=_payload(usuario_id="aluno-1"),
+        headers={"Authorization": f"Bearer {_token('admin-1')}"},
+    )
+
+    assert res.status_code == 201, res.text
+    assert auth_repo.usuarios["aluno-1"]["perfil_id"] == "p-professor"
+    assert any(
+        log["acao"] == "usuario_perfil_alterado" and log["entidade_id"] == "aluno-1"
+        for log in professores_repo.logs_auditoria
+    )
+
+
+@pytest.mark.asyncio
+async def test_cadastro_completa_registro_criado_pelo_perfil(client: AsyncClient, repos):
+    _, professores_repo = repos
+    professores_repo.professores["auto-1"] = {
+        "id": "auto-1",
+        "usuario_id": "prof-1",
+        "status": "ativo",
+        "materias": [],
+        "quantidade_aulas": 0,
+        "horas_totais": 0,
+    }
+    headers = {"Authorization": f"Bearer {_token('admin-1')}"}
+
+    res = await client.post("/professores/", json=_payload(), headers=headers)
+    duplicado = await client.post("/professores/", json=_payload(), headers=headers)
+
+    assert res.status_code == 201, res.text
+    assert res.json()["id"] == "auto-1"
+    assert res.json()["materias"] == ["Matemática", "Física"]
+    assert len(professores_repo.professores) == 1
+    assert duplicado.status_code == 400

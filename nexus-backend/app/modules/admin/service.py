@@ -345,6 +345,9 @@ class AdminService:
             ip=client_ip,
         )
 
+        self._sincronizar_corpo_docente(
+            new_id, perfil_id, dados.polo_id, dados.escola_id, actor_user_id, client_ip
+        )
         return self.get_usuario(new_id)
 
     def update_usuario(
@@ -442,7 +445,54 @@ class AdminService:
             ip=client_ip,
         )
 
+        if "perfil_id" in update_dict:
+            self._sincronizar_corpo_docente(
+                user_id,
+                update_dict["perfil_id"],
+                update_dict.get("polo_id", old_user.get("polo_id")),
+                update_dict.get("escola_id", old_user.get("escola_id")),
+                actor_user_id,
+                client_ip,
+            )
         return self.get_usuario(user_id)
+
+    def _sincronizar_corpo_docente(
+        self,
+        user_id: str,
+        perfil_id: Optional[str],
+        polo_id: Optional[str],
+        escola_id: Optional[str],
+        actor_user_id: Optional[str],
+        client_ip: Optional[str],
+    ) -> None:
+        """Perfil `professor` em Usuários ⇔ registro ativo no Corpo Docente."""
+        perfil = self.repo.get_perfil_by_id(str(perfil_id)) if perfil_id else None
+        eh_professor = bool(perfil) and str(perfil.get("nome") or "").lower() == "professor"
+        vinculo = self.repo.get_professor_vinculo_by_usuario_id(user_id)
+
+        if eh_professor and not vinculo:
+            novo_id = self.repo.create_professor_vinculo(
+                user_id, str(polo_id) if polo_id else None, str(escola_id) if escola_id else None
+            )
+            acao, entidade_id, novo_status = "professor_cadastrado", novo_id, "ativo"
+        elif eh_professor and vinculo.get("status") != "ativo":
+            acao, entidade_id, novo_status = "professor_reativado", str(vinculo["id"]), "ativo"
+            self.repo.set_professor_status(entidade_id, novo_status)
+        elif not eh_professor and vinculo and vinculo.get("status") == "ativo":
+            acao, entidade_id, novo_status = "professor_desativado", str(vinculo["id"]), "inativo"
+            self.repo.set_professor_status(entidade_id, novo_status)
+        else:
+            return
+
+        if entidade_id:
+            self.repo.record_audit_log(
+                usuario_id=actor_user_id,
+                acao=acao,
+                entidade="professores",
+                entidade_id=entidade_id,
+                dados_depois={"usuario_id": str(user_id), "status": novo_status, "origem": "usuarios"},
+                ip=client_ip,
+            )
 
     def update_usuario_permissoes(
         self,

@@ -39,6 +39,10 @@ class ProfessoresRepositoryInterface(Protocol):
 
     def update_professor(self, professor_id: str, data: Dict[str, Any]) -> None: ...
 
+    def set_usuario_perfil(self, usuario_id: str, perfil_nome: str) -> Optional[str]:
+        """Define o perfil do usuário; retorna o nome do perfil anterior (ou None se não mudou)."""
+        ...
+
     def record_audit_log(
         self,
         usuario_id: Optional[str],
@@ -168,6 +172,28 @@ class PostgresProfessoresRepository:
                 tuple(params),
             )
 
+    def set_usuario_perfil(self, usuario_id: str, perfil_nome: str) -> Optional[str]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT pa.nome AS anterior, pn.id AS novo_id
+                FROM usuarios u
+                LEFT JOIN perfis pa ON pa.id = u.perfil_id
+                JOIN perfis pn ON lower(pn.nome) = lower(%s)
+                WHERE u.id = %s
+                LIMIT 1
+                """,
+                (perfil_nome, str(usuario_id)),
+            )
+            row = cur.fetchone()
+            if not row or (row["anterior"] or "").lower() == perfil_nome.lower():
+                return None
+            cur.execute(
+                "UPDATE usuarios SET perfil_id = %s, atualizado_em = now() WHERE id = %s",
+                (row["novo_id"], str(usuario_id)),
+            )
+            return row["anterior"] or ""
+
     # ---------- Auditoria ----------
 
     def record_audit_log(
@@ -205,6 +231,7 @@ class InMemoryProfessoresRepository:
     def __init__(self) -> None:
         self.professores: Dict[str, Dict[str, Any]] = {}
         self.usuarios: Dict[str, Dict[str, Any]] = {}
+        self.perfis: Dict[str, Dict[str, Any]] = {}
         self.polos: Dict[str, Dict[str, Any]] = {}
         self.escolas: Dict[str, Dict[str, Any]] = {}
         self.logs_auditoria: List[Dict[str, Any]] = []
@@ -284,6 +311,20 @@ class InMemoryProfessoresRepository:
         row = self.professores.get(str(professor_id))
         if row:
             row.update(data)
+
+    def set_usuario_perfil(self, usuario_id: str, perfil_nome: str) -> Optional[str]:
+        usuario = self.usuarios.get(str(usuario_id))
+        novo = next(
+            (p for p in self.perfis.values() if str(p.get("nome")).lower() == perfil_nome.lower()),
+            None,
+        )
+        if not usuario or not novo:
+            return None
+        anterior = self.perfis.get(str(usuario.get("perfil_id")), {}).get("nome") or ""
+        if anterior.lower() == perfil_nome.lower():
+            return None
+        usuario["perfil_id"] = novo["id"]
+        return anterior
 
     def record_audit_log(
         self,

@@ -182,6 +182,14 @@ export const alunosGestaoApi = {
     return data;
   },
 
+  boletimPdf: async (alunoId: string, cursoId?: string): Promise<Blob> => {
+    const { data } = await apiClient.get<Blob>(`/alunos/gestao/${alunoId}/boletim/pdf`, {
+      params: cursoId ? { curso_id: cursoId } : undefined,
+      responseType: 'blob',
+    });
+    return data;
+  },
+
   confirmarChurn: async (alunoId: string): Promise<void> => {
     await apiClient.post(`/alunos/gestao/${alunoId}/churn`);
   },

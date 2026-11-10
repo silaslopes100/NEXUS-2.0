@@ -447,3 +447,37 @@ async def test_admin_gera_nova_matricula_pela_rota(client):
 
     assert resposta.status_code == 200
     assert resposta.json()["licencas_debitadas"] == 0
+
+
+def test_boletim_pdf_gera_arquivo_com_acentos(service, repo):
+    from app.modules.alunos_gestao.pdf import gerar_boletim_pdf
+
+    repo.linhas_academico[ATIVO] = [
+        _linha("Eclesiologia — Introdução", situacao="aprovado", nota=10),
+        _linha("Capítulo 1- Antropologia " * 5),
+    ]
+    academico = service.academico(ADMIN, ATIVO)
+
+    assert gerar_boletim_pdf(academico).startswith(b"%PDF")
+    assert gerar_boletim_pdf(academico, "c-1").startswith(b"%PDF")
+    assert gerar_boletim_pdf(academico, "inexistente").startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_rota_boletim_pdf_baixa_arquivo_e_valida_curso(client, repo):
+    curso = str(uuid.UUID(int=41))
+    repo.linhas_academico[ATIVO] = [{**_linha("Bibliologia"), "curso_id": curso}]
+    headers = _headers("polo-1", "polo")
+
+    resposta = await client.get(
+        f"/alunos/gestao/{ATIVO}/boletim/pdf", params={"curso_id": curso}, headers=headers
+    )
+    inexistente = await client.get(
+        f"/alunos/gestao/{ATIVO}/boletim/pdf", params={"curso_id": str(uuid.uuid4())}, headers=headers
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "application/pdf"
+    assert "attachment" in resposta.headers["content-disposition"]
+    assert resposta.content.startswith(b"%PDF")
+    assert inexistente.status_code == 404

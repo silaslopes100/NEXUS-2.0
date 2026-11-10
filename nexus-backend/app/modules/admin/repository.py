@@ -36,6 +36,10 @@ class AdminRepositoryInterface(Protocol):
     # Ficha cadastral & métricas
     def get_aluno_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]: ...
     def get_professor_vinculo_by_usuario_id(self, user_id: str) -> Optional[Dict[str, Any]]: ...
+    def create_professor_vinculo(
+        self, user_id: str, polo_id: Optional[str], escola_id: Optional[str]
+    ) -> Optional[str]: ...
+    def set_professor_status(self, professor_id: str, status: str) -> None: ...
     def get_metricas_aluno(self, aluno_id: str) -> Dict[str, Any]: ...
     def get_metricas_professor(self, professor_id: str) -> Dict[str, Any]: ...
     def contagens_unidade(
@@ -375,6 +379,30 @@ class PostgresAdminRepository:
             cur.execute("SELECT * FROM professores WHERE usuario_id = %s LIMIT 1", (str(user_id),))
             row = cur.fetchone()
             return dict(row) if row else None
+
+    def create_professor_vinculo(
+        self, user_id: str, polo_id: Optional[str], escola_id: Optional[str]
+    ) -> Optional[str]:
+        """Cria o registro docente mínimo; retorna o id, ou None se já existia."""
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO professores (id, usuario_id, polo_id, escola_id, status, criado_em, atualizado_em)
+                VALUES (%s, %s, %s, %s, 'ativo', now(), now())
+                ON CONFLICT (usuario_id) DO NOTHING
+                RETURNING id
+                """,
+                (str(uuid.uuid4()), str(user_id), polo_id, escola_id),
+            )
+            row = cur.fetchone()
+            return str(row["id"]) if row else None
+
+    def set_professor_status(self, professor_id: str, status: str) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "UPDATE professores SET status = %s, atualizado_em = now() WHERE id = %s",
+                (status, str(professor_id)),
+            )
 
     def get_metricas_aluno(self, aluno_id: str) -> Dict[str, Any]:
         result: Dict[str, Any] = {
@@ -900,6 +928,26 @@ class InMemoryAdminRepository:
             if str(p.get("usuario_id")) == str(user_id):
                 return p.copy()
         return None
+
+    def create_professor_vinculo(
+        self, user_id: str, polo_id: Optional[str], escola_id: Optional[str]
+    ) -> Optional[str]:
+        if self.get_professor_vinculo_by_usuario_id(user_id):
+            return None
+        new_id = str(uuid.uuid4())
+        self.professores[new_id] = {
+            "id": new_id,
+            "usuario_id": str(user_id),
+            "polo_id": polo_id,
+            "escola_id": escola_id,
+            "status": "ativo",
+            "materias": [],
+        }
+        return new_id
+
+    def set_professor_status(self, professor_id: str, status: str) -> None:
+        if str(professor_id) in self.professores:
+            self.professores[str(professor_id)]["status"] = status
 
     def get_metricas_aluno(self, aluno_id: str) -> Dict[str, Any]:
         aid = str(aluno_id)
