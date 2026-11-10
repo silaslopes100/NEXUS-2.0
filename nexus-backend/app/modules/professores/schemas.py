@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,6 +15,7 @@ class ProfessorCreateRequest(BaseModel):
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
     materias: List[str] = Field(default_factory=list, description="Disciplinas/docências do professor")
+    disciplina_ids: List[UUID] = Field(default_factory=list, description="IDs das disciplinas vinculadas")
     data_inicio: Optional[date] = None
     quantidade_aulas: int = 0
     horas_totais: int = 0
@@ -29,6 +31,7 @@ class ProfessorUpdateRequest(BaseModel):
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
     materias: Optional[List[str]] = None
+    disciplina_ids: Optional[List[UUID]] = None
     data_inicio: Optional[date] = None
     quantidade_aulas: Optional[int] = None
     horas_totais: Optional[int] = None
@@ -52,6 +55,7 @@ class ProfessorResponse(BaseModel):
     escola_id: Optional[str] = None
     escola_nome: Optional[str] = None
     materias: List[str] = Field(default_factory=list)
+    disciplina_ids: List[str] = Field(default_factory=list)
     data_inicio: Optional[date] = None
     quantidade_aulas: int = 0
     horas_totais: int = 0

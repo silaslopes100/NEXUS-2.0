@@ -3,6 +3,7 @@ import {
   AlertCircle,
   BookOpen,
   CheckCircle2,
+  Eye,
   Loader2,
   Pencil,
   Plus,
@@ -16,6 +17,7 @@ import {
   cursosApiErrorMessage,
   Disciplina,
   DisciplinaInput,
+  ProfessorVinculadoDisciplina,
 } from '@/features/cursos/api';
 
 type DisciplinaForm = {
@@ -59,6 +61,11 @@ export const DisciplinasPage: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [visualizando, setVisualizando] = useState<Disciplina | null>(null);
+  const [professoresVinculados, setProfessoresVinculados] = useState<ProfessorVinculadoDisciplina[]>([]);
+  const [carregandoProfessores, setCarregandoProfessores] = useState(false);
+  const [erroProfessores, setErroProfessores] = useState('');
+  const [tentativaProfessores, setTentativaProfessores] = useState(0);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
@@ -83,6 +90,37 @@ export const DisciplinasPage: React.FC = () => {
   useEffect(() => {
     void carregarDados();
   }, []);
+
+  useEffect(() => {
+    if (!visualizando) {
+      setProfessoresVinculados([]);
+      setErroProfessores('');
+      setCarregandoProfessores(false);
+      return;
+    }
+
+    let active = true;
+    setCarregandoProfessores(true);
+    setErroProfessores('');
+    cursosApi.listarProfessoresDisciplina(visualizando.id)
+      .then((items) => {
+        if (active) setProfessoresVinculados(items);
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setErroProfessores(
+            cursosApiErrorMessage(err, 'Não foi possível carregar os professores vinculados.')
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setCarregandoProfessores(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [visualizando, tentativaProfessores]);
 
   const cursoPorId = useMemo(
     () => new Map(cursos.map((curso) => [curso.id, curso.nome])),
@@ -310,6 +348,17 @@ export const DisciplinasPage: React.FC = () => {
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
+                          aria-label={`Visualizar professores de ${disciplina.nome}`}
+                          onClick={() => {
+                            setTentativaProfessores(0);
+                            setVisualizando(disciplina);
+                          }}
+                          className="rounded-lg border border-blue-500/30 p-2 text-blue-300 hover:bg-blue-500/10"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          type="button"
                           aria-label={`Editar ${disciplina.nome}`}
                           onClick={() => abrirEdicao(disciplina)}
                           className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -347,6 +396,96 @@ export const DisciplinasPage: React.FC = () => {
           </div>
         ) : null}
       </section>
+
+      {visualizando && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setVisualizando(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="disciplina-professores-titulo"
+            className="my-auto w-full max-w-3xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+          >
+            <header className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                  Professores vinculados
+                </p>
+                <h2 id="disciplina-professores-titulo" className="mt-1 text-xl font-bold text-white">
+                  {visualizando.nome}
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar professores vinculados"
+                onClick={() => setVisualizando(null)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            {carregandoProfessores ? (
+              <div role="status" className="flex items-center justify-center gap-2 py-12 text-blue-300">
+                <Loader2 className="animate-spin" size={18} />
+                Carregando professores...
+              </div>
+            ) : erroProfessores ? (
+              <div className="flex flex-col items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p role="alert" className="text-sm text-red-200">{erroProfessores}</p>
+                <button
+                  type="button"
+                  onClick={() => setTentativaProfessores((tentativa) => tentativa + 1)}
+                  className="shrink-0 text-sm font-semibold text-blue-300 hover:underline"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : professoresVinculados.length === 0 ? (
+              <p className="rounded-xl border border-slate-800 bg-slate-950 p-6 text-center text-sm text-slate-400">
+                Nenhum professor vinculado a esta disciplina.
+              </p>
+            ) : (
+              <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+                {professoresVinculados.map((professor) => (
+                  <article
+                    key={professor.professor_id}
+                    className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:grid-cols-2"
+                  >
+                    <div className="sm:col-span-2">
+                      <h3 className="font-semibold text-white">{professor.nome}</h3>
+                      <p className="text-sm text-slate-400">{professor.email || 'E-mail não informado'}</p>
+                    </div>
+                    <p className="text-sm text-slate-300">
+                      <span className="text-slate-500">Polo: </span>
+                      {professor.polo_nome || 'Não vinculado'}
+                    </p>
+                    <p className="text-sm text-slate-300">
+                      <span className="text-slate-500">Escola: </span>
+                      {professor.escola_nome || 'Não vinculada'}
+                    </p>
+                    <p className="text-sm text-slate-300">
+                      <span className="text-slate-500">Valor hora/aula: </span>
+                      {professor.valor_hora_aula == null
+                        ? 'Não informado'
+                        : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+                            .format(professor.valor_hora_aula)}
+                    </p>
+                    <p className="text-sm text-slate-300">
+                      <span className="text-slate-500">Quantidade de aulas: </span>
+                      {professor.quantidade_aulas}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       {isFormOpen && (
         <div

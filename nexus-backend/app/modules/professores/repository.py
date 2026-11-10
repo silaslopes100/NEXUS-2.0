@@ -9,11 +9,21 @@ from app.core.database import get_db_cursor
 
 _SELECT_BASE = """
     SELECT prof.*, u.nome, u.email,
-           p.nome AS polo_nome, e.nome AS escola_nome
+           p.nome AS polo_nome, e.nome AS escola_nome,
+           COALESCE(vinculos.disciplina_ids, ARRAY[]::text[]) AS disciplina_ids,
+           COALESCE(vinculos.disciplina_nomes, ARRAY[]::text[]) AS disciplina_nomes
     FROM professores prof
     LEFT JOIN usuarios u ON u.id = prof.usuario_id
     LEFT JOIN polos p ON p.id = prof.polo_id
     LEFT JOIN escolas e ON e.id = prof.escola_id
+    LEFT JOIN LATERAL (
+        SELECT
+            array_agg(vinculo.disciplina_id::text ORDER BY vinculo.disciplina_id::text) AS disciplina_ids,
+            array_agg(DISTINCT disciplina.nome ORDER BY disciplina.nome) AS disciplina_nomes
+        FROM professor_disciplina_vinculos vinculo
+        JOIN disciplinas disciplina ON disciplina.id = vinculo.disciplina_id
+        WHERE vinculo.professor_id = prof.id
+    ) vinculos ON TRUE
 """
 
 
@@ -34,6 +44,8 @@ class ProfessoresRepositoryInterface(Protocol):
     def get_professor_by_usuario_id(self, usuario_id: str) -> Optional[Dict[str, Any]]: ...
 
     def get_usuario_by_id(self, usuario_id: str) -> Optional[Dict[str, Any]]: ...
+
+    def get_invalid_disciplina_ids(self, disciplina_ids: List[str]) -> List[str]: ...
 
     def create_professor(self, data: Dict[str, Any]) -> str: ...
 
@@ -84,8 +96,14 @@ class PostgresProfessoresRepository:
             conds.append("prof.escola_id = %s")
             params.append(str(escola_id))
         if disciplina and disciplina.strip():
-            conds.append("prof.materias::text ILIKE %s")
-            params.append(f"%{disciplina.strip()}%")
+            conds.append(
+                "(prof.materias::text ILIKE %s OR EXISTS ("
+                "SELECT 1 FROM professor_disciplina_vinculos vinculo "
+                "JOIN disciplinas disciplina ON disciplina.id = vinculo.disciplina_id "
+                "WHERE vinculo.professor_id = prof.id AND disciplina.nome ILIKE %s))"
+            )
+            term = f"%{disciplina.strip()}%"
+            params.extend([term, term])
         if status_filter:
             conds.append("prof.status = %s")
             params.append(status_filter)
@@ -125,6 +143,15 @@ class PostgresProfessoresRepository:
             row = cur.fetchone()
             return dict(row) if row else None
 
+    def get_invalid_disciplina_ids(self, disciplina_ids: List[str]) -> List[str]:
+        ids = list(dict.fromkeys(str(item) for item in disciplina_ids))
+        if not ids:
+            return []
+        with get_db_cursor() as cur:
+            cur.execute("SELECT id::text FROM disciplinas WHERE id = ANY(%s::uuid[])", (ids,))
+            encontrados = {str(row["id"]) for row in cur.fetchall()}
+        return [disciplina_id for disciplina_id in ids if disciplina_id not in encontrados]
+
     def create_professor(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
         with get_db_cursor() as cur:
@@ -150,6 +177,7 @@ class PostgresProfessoresRepository:
                     data.get("conteudo_programatico"),
                 ),
             )
+            self._sync_disciplina_ids(cur, new_id, data.get("disciplina_ids") or [])
         return new_id
 
     def update_professor(self, professor_id: str, data: Dict[str, Any]) -> None:
@@ -158,19 +186,41 @@ class PostgresProfessoresRepository:
         fields: List[str] = []
         params: List[Any] = []
         for key, value in data.items():
+            if key == "disciplina_ids":
+                continue
             if key == "materias":
                 fields.append("materias = %s")
                 params.append(json.dumps(value or []))
             else:
                 fields.append(f"{key} = %s")
                 params.append(value)
-        fields.append("atualizado_em = now()")
-        params.append(str(professor_id))
         with get_db_cursor() as cur:
-            cur.execute(
-                f"UPDATE professores SET {', '.join(fields)} WHERE id = %s",
-                tuple(params),
+            if fields:
+                fields.append("atualizado_em = now()")
+                params.append(str(professor_id))
+                cur.execute(
+                    f"UPDATE professores SET {', '.join(fields)} WHERE id = %s",
+                    tuple(params),
+                )
+            if "disciplina_ids" in data:
+                self._sync_disciplina_ids(cur, str(professor_id), data.get("disciplina_ids") or [])
+
+    @staticmethod
+    def _sync_disciplina_ids(cur: Any, professor_id: str, disciplina_ids: List[str]) -> None:
+        ids = list(dict.fromkeys(str(item) for item in disciplina_ids))
+        cur.execute(
+            "DELETE FROM professor_disciplina_vinculos WHERE professor_id = %s",
+            (str(professor_id),),
+        )
+        if ids:
+            cur.executemany(
+                """
+                INSERT INTO professor_disciplina_vinculos (professor_id, disciplina_id)
+                VALUES (%s, %s)
+                """,
+                [(str(professor_id), disciplina_id) for disciplina_id in ids],
             )
+
 
     def set_usuario_perfil(self, usuario_id: str, perfil_nome: str) -> Optional[str]:
         with get_db_cursor() as cur:
@@ -230,6 +280,7 @@ class InMemoryProfessoresRepository:
 
     def __init__(self) -> None:
         self.professores: Dict[str, Dict[str, Any]] = {}
+        self.professor_disciplina_vinculos: Dict[str, List[str]] = {}
         self.usuarios: Dict[str, Dict[str, Any]] = {}
         self.perfis: Dict[str, Dict[str, Any]] = {}
         self.polos: Dict[str, Dict[str, Any]] = {}
@@ -242,6 +293,7 @@ class InMemoryProfessoresRepository:
         escola = self.escolas.get(str(row.get("escola_id")), {}) if row.get("escola_id") else {}
         return {
             **row,
+            "disciplina_ids": list(self.professor_disciplina_vinculos.get(str(row.get("id")), [])),
             "nome": usuario.get("nome"),
             "email": usuario.get("email"),
             "polo_nome": polo.get("nome"),
@@ -293,6 +345,9 @@ class InMemoryProfessoresRepository:
         row = self.usuarios.get(str(usuario_id))
         return dict(row) if row else None
 
+    def get_invalid_disciplina_ids(self, disciplina_ids: List[str]) -> List[str]:
+        return []
+
     def create_professor(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
         self.professores[new_id] = {
@@ -305,12 +360,19 @@ class InMemoryProfessoresRepository:
             "atualizado_em": None,
             **{k: v for k, v in data.items() if k not in ("materias", "quantidade_aulas", "horas_totais")},
         }
+        self.professor_disciplina_vinculos[new_id] = list(dict.fromkeys(
+            str(item) for item in (data.get("disciplina_ids") or [])
+        ))
         return new_id
 
     def update_professor(self, professor_id: str, data: Dict[str, Any]) -> None:
         row = self.professores.get(str(professor_id))
         if row:
-            row.update(data)
+            row.update({key: value for key, value in data.items() if key != "disciplina_ids"})
+            if "disciplina_ids" in data:
+                self.professor_disciplina_vinculos[str(professor_id)] = list(dict.fromkeys(
+                    str(item) for item in (data.get("disciplina_ids") or [])
+                ))
 
     def set_usuario_perfil(self, usuario_id: str, perfil_nome: str) -> Optional[str]:
         usuario = self.usuarios.get(str(usuario_id))

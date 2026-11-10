@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { GraduationCap, Loader2, Search, UserCheck, UserPlus, X } from 'lucide-react';
 import { adminApi } from '@/features/admin/api';
+import { cursosApi, Disciplina } from '@/features/cursos/api';
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { UsuarioAdmin } from '@/types/admin';
 import { Professor, UnidadeOption } from '@/types/professor';
@@ -15,21 +16,22 @@ interface Props {
 const inputCls =
   'w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-nexus-yellow';
 
+const normalizarMateria = (nome: string): string => nome.trim().toLocaleLowerCase();
+
 interface UsuarioVinculado {
   id: string;
   nome: string;
   email?: string | null;
 }
 
-const parseMaterias = (texto: string): string[] =>
-  texto
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-
 export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onSuccess }) => {
   const [erro, setErro] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
+  const [carregandoDisciplinas, setCarregandoDisciplinas] = useState(true);
+  const [erroDisciplinas, setErroDisciplinas] = useState('');
+  const [buscaDisciplina, setBuscaDisciplina] = useState('');
+  const [tentativaDisciplinas, setTentativaDisciplinas] = useState(0);
 
   // Vínculo com o usuário (busca de existente ou cadastro manual)
   const [vinculo, setVinculo] = useState<'existente' | 'novo'>('existente');
@@ -46,7 +48,14 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
   const [form, setForm] = useState({
     polo_id: professor?.polo_id || '',
     escola_id: professor?.escola_id || '',
-    materiasTexto: (professor?.materias || []).join(', '),
+    disciplina_ids: [...(professor?.disciplina_ids || [])],
+    materias: (professor?.materias || []).reduce<string[]>((materias, materia) => {
+      const nome = materia.trim();
+      if (nome && !materias.some((item) => normalizarMateria(item) === normalizarMateria(nome))) {
+        materias.push(nome);
+      }
+      return materias;
+    }, []),
     data_inicio: professor?.data_inicio ? professor.data_inicio.slice(0, 10) : '',
     quantidade_aulas: professor?.quantidade_aulas ?? 0,
     horas_totais: professor?.horas_totais ?? 0,
@@ -56,6 +65,39 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
     status: professor?.status || 'ativo',
   });
   const [escolas, setEscolas] = useState<UnidadeOption[]>([]);
+
+  useEffect(() => {
+    if (!disciplinas.length || form.disciplina_ids.length || !form.materias.length) return;
+    const materiasLegadas = new Set(form.materias.map(normalizarMateria));
+    const idsCorrespondentes = [...materiasLegadas]
+      .map((materia) => disciplinas.find((disciplina) => normalizarMateria(disciplina.nome) === materia)?.id)
+      .filter((id): id is string => Boolean(id));
+    if (idsCorrespondentes.length) {
+      setForm((atual) => ({ ...atual, disciplina_ids: [...new Set(idsCorrespondentes)] }));
+    }
+  }, [disciplinas, form.disciplina_ids.length, form.materias]);
+
+  useEffect(() => {
+    let active = true;
+    setCarregandoDisciplinas(true);
+    setErroDisciplinas('');
+    cursosApi.listarDisciplinas()
+      .then((itens) => {
+        if (active) setDisciplinas(itens);
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setErroDisciplinas(apiErrorMessage(err, 'Não foi possível carregar as disciplinas cadastradas.'));
+        }
+      })
+      .finally(() => {
+        if (active) setCarregandoDisciplinas(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [tentativaDisciplinas]);
 
   useEffect(() => {
     if (!form.polo_id) {
@@ -100,6 +142,11 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
     event.preventDefault();
     setErro('');
 
+    if (carregandoDisciplinas || erroDisciplinas) {
+      setErro('Aguarde o carregamento das disciplinas antes de salvar.');
+      return;
+    }
+
     let usuarioId = usuarioSelecionado?.id;
     const criarNovoUsuario = !usuarioId && vinculo === 'novo';
     if (criarNovoUsuario) {
@@ -133,7 +180,8 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
         usuario_id: usuarioId as string,
         polo_id: form.polo_id || null,
         escola_id: form.escola_id || null,
-        materias: parseMaterias(form.materiasTexto),
+        materias: form.materias,
+        disciplina_ids: form.disciplina_ids,
         data_inicio: form.data_inicio || null,
         quantidade_aulas: Number(form.quantidade_aulas) || 0,
         horas_totais: Number(form.horas_totais) || 0,
@@ -154,6 +202,42 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const opcoesDisciplinas = useMemo(() => {
+    const opcoesPorNome = new Map<string, { id: string | null; nome: string; legado: boolean }>();
+    for (const disciplina of disciplinas) {
+      const nome = disciplina.nome.trim();
+      if (!nome) continue;
+      const chave = normalizarMateria(nome);
+      if (!opcoesPorNome.has(chave)) {
+        opcoesPorNome.set(chave, { id: disciplina.id, nome, legado: false });
+      }
+    }
+    for (const materia of form.materias) {
+      const nome = materia.trim();
+      const chave = normalizarMateria(nome);
+      if (nome && !opcoesPorNome.has(chave)) {
+        opcoesPorNome.set(chave, { id: null, nome, legado: true });
+      }
+    }
+    return [...opcoesPorNome.values()]
+      .filter(({ nome }) => normalizarMateria(nome).includes(normalizarMateria(buscaDisciplina)))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [disciplinas, form.materias, buscaDisciplina]);
+
+  const alternarDisciplina = (id: string | null, nome: string, selecionada: boolean) => {
+    setForm((atual) => ({
+      ...atual,
+      disciplina_ids: id
+        ? selecionada
+          ? [...new Set([...atual.disciplina_ids, id])]
+          : atual.disciplina_ids.filter((disciplinaId) => disciplinaId !== id)
+        : atual.disciplina_ids,
+      materias: selecionada
+        ? [...atual.materias.filter((materia) => normalizarMateria(materia) !== normalizarMateria(nome)), nome]
+        : atual.materias.filter((materia) => normalizarMateria(materia) !== normalizarMateria(nome)),
+    }));
   };
 
   return (
@@ -356,13 +440,59 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-300">Disciplinas</label>
             <input
-              type="text"
-              value={form.materiasTexto}
-              onChange={(e) => setForm({ ...form, materiasTexto: e.target.value })}
-              placeholder="Ex: Matemática, Física, Cálculo"
+              type="search"
+              value={buscaDisciplina}
+              onChange={(e) => setBuscaDisciplina(e.target.value)}
+              placeholder="Buscar disciplina..."
               className={inputCls}
+              disabled={carregandoDisciplinas || Boolean(erroDisciplinas)}
             />
-            <p className="text-[11px] text-slate-500">Separe as disciplinas por vírgula.</p>
+            <div className="max-h-36 space-y-1 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-2">
+              {carregandoDisciplinas ? (
+                <p className="flex items-center gap-2 p-2 text-xs text-slate-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Carregando disciplinas...
+                </p>
+              ) : erroDisciplinas ? (
+                <div className="flex items-center justify-between gap-2 p-2">
+                  <p role="alert" className="text-xs text-red-300">{erroDisciplinas}</p>
+                  <button
+                    type="button"
+                    onClick={() => setTentativaDisciplinas((tentativa) => tentativa + 1)}
+                    className="shrink-0 text-xs font-semibold text-nexus-yellow hover:underline"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : opcoesDisciplinas.length ? (
+                opcoesDisciplinas.map(({ id, nome, legado }) => (
+                  <label
+                    key={id || nome.toLocaleLowerCase()}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.disciplina_ids.includes(id || '') || form.materias.some(
+                        (materia) => normalizarMateria(materia) === normalizarMateria(nome)
+                      )}
+                      onChange={(event) => alternarDisciplina(id, nome, event.target.checked)}
+                      className="accent-yellow-400"
+                    />
+                    <span>{nome}</span>
+                    {legado && <span className="text-[10px] text-slate-500">já vinculada</span>}
+                  </label>
+                ))
+              ) : (
+                <p className="p-2 text-xs text-slate-400">
+                  {buscaDisciplina
+                    ? 'Nenhuma disciplina corresponde à busca.'
+                    : 'Nenhuma disciplina cadastrada.'}
+                </p>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              {form.materias.length} disciplina{form.materias.length === 1 ? '' : 's'} selecionada{form.materias.length === 1 ? '' : 's'}.
+            </p>
           </div>
 
           {/* Carga horária e contraprestação */}
@@ -459,7 +589,7 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || carregandoDisciplinas || Boolean(erroDisciplinas)}
               className="px-5 py-2.5 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

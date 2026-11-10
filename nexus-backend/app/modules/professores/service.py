@@ -20,6 +20,7 @@ from app.modules.professores.schemas import (
 
 _CAMPOS_CADASTRO_DOCENTE = (
     "materias",
+    "disciplina_ids",
     "data_inicio",
     "valor_hora_aula",
     "pix",
@@ -113,8 +114,10 @@ class ProfessoresService:
             # Registro criado automaticamente pela tela de Usuários (ou desativado):
             # completa-o em vez de duplicar.
             professor_id = str(existente["id"])
+            self._validar_disciplinas(dados.disciplina_ids)
             self.repo.update_professor(professor_id, {**dados.model_dump(), "status": "ativo"})
         else:
+            self._validar_disciplinas(dados.disciplina_ids)
             professor_id = self.repo.create_professor(dados.model_dump())
         self.repo.record_audit_log(
             usuario_id=actor_id,
@@ -153,6 +156,8 @@ class ProfessoresService:
                 )
 
         if update_dict:
+            if "disciplina_ids" in update_dict:
+                self._validar_disciplinas(update_dict["disciplina_ids"])
             self.repo.update_professor(professor_id, update_dict)
             self.repo.record_audit_log(
                 usuario_id=actor_id,
@@ -193,6 +198,14 @@ class ProfessoresService:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _validar_disciplinas(self, disciplina_ids: list[Any]) -> None:
+        invalidas = self.repo.get_invalid_disciplina_ids([str(item) for item in disciplina_ids])
+        if invalidas:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Uma ou mais disciplinas vinculadas não foram encontradas.",
+            )
+
     def _garantir_perfil_professor(
         self, usuario_id: str, actor_id: Optional[str], ip: Optional[str]
     ) -> None:
@@ -212,6 +225,11 @@ class ProfessoresService:
 
     def _build_response(self, row: Dict[str, Any]) -> ProfessorResponse:
         valor = row.get("valor_hora_aula")
+        materias: list[str] = []
+        for materia in [*(row.get("materias") or []), *(row.get("disciplina_nomes") or [])]:
+            nome = str(materia).strip()
+            if nome and nome.casefold() not in {item.casefold() for item in materias}:
+                materias.append(nome)
         return ProfessorResponse(
             id=str(row["id"]),
             usuario_id=str(row["usuario_id"]) if row.get("usuario_id") else None,
@@ -221,7 +239,8 @@ class ProfessoresService:
             polo_nome=row.get("polo_nome"),
             escola_id=str(row["escola_id"]) if row.get("escola_id") else None,
             escola_nome=row.get("escola_nome"),
-            materias=row.get("materias") or [],
+            materias=materias,
+            disciplina_ids=[str(item) for item in (row.get("disciplina_ids") or [])],
             data_inicio=row.get("data_inicio"),
             quantidade_aulas=int(row.get("quantidade_aulas") or 0),
             horas_totais=int(row.get("horas_totais") or 0),

@@ -103,6 +103,17 @@ class DisciplinaConteudoSchema(BaseModel):
     ordem: int = 0
 
 
+class ProfessorVinculadoSchema(BaseModel):
+    professor_id: str
+    usuario_id: Optional[str] = None
+    nome: str
+    email: Optional[str] = None
+    polo_nome: Optional[str] = None
+    escola_nome: Optional[str] = None
+    valor_hora_aula: Optional[float] = None
+    quantidade_aulas: int = 0
+
+
 _cursos_db: Dict[str, Dict[str, Any]] = {}
 _disciplinas_db: Dict[str, Dict[str, Any]] = {}
 _conteudos_db: Dict[str, Dict[str, Any]] = {}
@@ -404,6 +415,62 @@ async def list_disciplinas(
         return [dict(r) for r in cur.fetchall()]
 
 
+@router.get(
+    "/disciplinas/{disciplina_id}/professores",
+    response_model=List[ProfessorVinculadoSchema],
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def list_professores_disciplina(disciplina_id: uuid.UUID):
+    uid = str(disciplina_id)
+    if not settings.PG_DSN:
+        if uid not in _disciplinas_db:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
+        return []
+
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id FROM disciplinas WHERE id = %s LIMIT 1", (uid,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
+
+        cur.execute(
+            """
+            WITH professores_vinculados AS (
+                SELECT professor_id
+                FROM professor_disciplina_vinculos
+                WHERE disciplina_id = %s
+                UNION
+                SELECT prof.id
+                FROM professores prof
+                JOIN disciplinas disc ON disc.id = %s
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    CASE
+                        WHEN jsonb_typeof(prof.materias) = 'array' THEN prof.materias
+                        ELSE '[]'::jsonb
+                    END
+                ) AS materia(nome)
+                WHERE lower(trim(materia.nome)) = lower(trim(disc.nome))
+            )
+            SELECT
+                prof.id::text AS professor_id,
+                prof.usuario_id::text AS usuario_id,
+                concat_ws(' ', usuario.nome, usuario.sobrenome) AS nome,
+                usuario.email,
+                polo.nome AS polo_nome,
+                escola.nome AS escola_nome,
+                prof.valor_hora_aula,
+                COALESCE(prof.quantidade_aulas, 0) AS quantidade_aulas
+            FROM professores_vinculados vinculo
+            JOIN professores prof ON prof.id = vinculo.professor_id
+            LEFT JOIN usuarios usuario ON usuario.id = prof.usuario_id
+            LEFT JOIN polos polo ON polo.id = prof.polo_id
+            LEFT JOIN escolas escola ON escola.id = prof.escola_id
+            ORDER BY usuario.nome, usuario.sobrenome, usuario.email
+            """,
+            (uid, uid),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
 @router.post(
     "/disciplinas",
     response_model=DisciplinaSchema,
@@ -512,6 +579,7 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
             EXISTS (SELECT 1 FROM calendarios_oficiais WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM disciplina_conteudos WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM professor_disciplinas WHERE disciplina_id = %s)
+            OR EXISTS (SELECT 1 FROM professor_disciplina_vinculos WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM compras_disciplina_ead WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM avisos_liberacao_ead WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM notas WHERE disciplina_id = %s)
@@ -526,7 +594,7 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
         if cur.fetchone() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
 
-        cur.execute(references_sql, (uid,) * 10)
+        cur.execute(references_sql, (uid,) * 11)
         row = cur.fetchone()
         if row is None or row["em_uso"]:
             raise HTTPException(

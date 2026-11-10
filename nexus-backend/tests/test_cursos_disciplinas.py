@@ -161,8 +161,102 @@ async def test_delete_disciplina_checks_database_references(
         reference_sql, params = cursor.executions[1]
         assert "professor_disciplinas" in reference_sql
         assert "disciplina_conteudos" in reference_sql
-        assert params == (str(disciplina_id),) * 10
+        assert params == (str(disciplina_id),) * 11
     assert (cursor.executions[-1][0].startswith("DELETE")) is delete_expected
+
+
+@pytest.mark.asyncio
+async def test_list_professores_vinculados_a_disciplina_inclui_dados_do_usuario_e_unidades(
+    monkeypatch,
+):
+    disciplina_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    professores = [
+        {
+            "professor_id": "00000000-0000-0000-0000-000000000002",
+            "usuario_id": "00000000-0000-0000-0000-000000000003",
+            "nome": "Ana Souza",
+            "email": "ana@example.com",
+            "polo_nome": "Polo Central",
+            "escola_nome": "Escola Norte",
+            "valor_hora_aula": 120.5,
+            "quantidade_aulas": 40,
+        },
+        {
+            "professor_id": "00000000-0000-0000-0000-000000000004",
+            "usuario_id": "00000000-0000-0000-0000-000000000005",
+            "nome": "Bruno Lima",
+            "email": "bruno@example.com",
+            "polo_nome": None,
+            "escola_nome": None,
+            "valor_hora_aula": None,
+            "quantidade_aulas": 0,
+        },
+    ]
+
+    class Cursor:
+        def __init__(self):
+            self.executions = []
+            self.fetchone_calls = 0
+
+        def execute(self, sql, params=()):
+            self.executions.append((sql, params))
+
+        def fetchone(self):
+            self.fetchone_calls += 1
+            return {"id": disciplina_id}
+
+        def fetchall(self):
+            return professores
+
+    cursor = Cursor()
+
+    @contextmanager
+    def database_cursor():
+        yield cursor
+
+    monkeypatch.setattr(settings, "PG_DSN", "configured-for-test")
+    monkeypatch.setattr(cursos_disciplinas, "get_db_cursor", database_cursor)
+
+    result = await cursos_disciplinas.list_professores_disciplina(disciplina_id)
+
+    assert len(result) == 2
+    assert result[0] == professores[0]
+    assert result[1]["nome"] == "Bruno Lima"
+    assert result[1]["quantidade_aulas"] == 0
+    query, params = cursor.executions[1]
+    assert "professor_disciplina_vinculos" in query
+    assert "jsonb_array_elements_text" in query
+    assert params == (str(disciplina_id), str(disciplina_id))
+
+
+@pytest.mark.asyncio
+async def test_list_professores_disciplina_retorna_404_quando_disciplina_nao_existe(monkeypatch):
+    disciplina_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+    class Cursor:
+        def __init__(self):
+            self.executions = []
+
+        def execute(self, sql, params=()):
+            self.executions.append((sql, params))
+
+        def fetchone(self):
+            return None
+
+    cursor = Cursor()
+
+    @contextmanager
+    def database_cursor():
+        yield cursor
+
+    monkeypatch.setattr(settings, "PG_DSN", "configured-for-test")
+    monkeypatch.setattr(cursos_disciplinas, "get_db_cursor", database_cursor)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await cursos_disciplinas.list_professores_disciplina(disciplina_id)
+
+    assert exc_info.value.status_code == 404
+    assert len(cursor.executions) == 1
 
 
 COURSE_ID = uuid.UUID("00000000-0000-0000-0000-00000000000a")

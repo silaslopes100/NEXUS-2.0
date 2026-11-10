@@ -1,6 +1,8 @@
 """Testes do módulo `professores` (NEXUS 2.0) — arquitetura em camadas + InMemoryRepository."""
 from __future__ import annotations
 
+import uuid
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -159,6 +161,49 @@ async def test_criar_e_listar_professor(client: AsyncClient):
     )
     assert vazio.status_code == 200
     assert vazio.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_disciplina_pode_ser_vinculada_a_varios_professores(client: AsyncClient, repos):
+    auth_repo, _ = repos
+    auth_repo.usuarios["prof-2"] = {
+        **auth_repo.usuarios["prof-1"],
+        "id": "prof-2",
+        "nome": "Bruno",
+        "email": "bruno@nexus.com.br",
+    }
+    disciplina_a, disciplina_b = str(uuid.uuid4()), str(uuid.uuid4())
+    headers = {"Authorization": f"Bearer {_token('admin-1')}"}
+
+    primeiro = await client.post(
+        "/professores/",
+        json=_payload(disciplina_ids=[disciplina_a, disciplina_b]),
+        headers=headers,
+    )
+    segundo = await client.post(
+        "/professores/",
+        json=_payload(usuario_id="prof-2", disciplina_ids=[disciplina_a]),
+        headers=headers,
+    )
+
+    assert primeiro.status_code == 201
+    assert segundo.status_code == 201
+    assert primeiro.json()["disciplina_ids"] == [disciplina_a, disciplina_b]
+    assert segundo.json()["disciplina_ids"] == [disciplina_a]
+
+    atualizado = await client.put(
+        f"/professores/{primeiro.json()['id']}",
+        json={"disciplina_ids": [disciplina_b]},
+        headers=headers,
+    )
+    assert atualizado.status_code == 200
+    assert atualizado.json()["disciplina_ids"] == [disciplina_b]
+
+    professor_independente = await client.get(
+        f"/professores/{segundo.json()['id']}",
+        headers=headers,
+    )
+    assert professor_independente.json()["disciplina_ids"] == [disciplina_a]
 
 
 @pytest.mark.asyncio

@@ -67,6 +67,17 @@ export interface DisciplinaInput {
   eh_extra_grade: boolean;
 }
 
+export interface ProfessorVinculadoDisciplina {
+  professor_id: string;
+  usuario_id?: string | null;
+  nome: string;
+  email?: string | null;
+  polo_nome?: string | null;
+  escola_nome?: string | null;
+  valor_hora_aula?: number | null;
+  quantidade_aulas: number;
+}
+
 export interface Turma {
   id: string;
   nome: string;
@@ -117,6 +128,15 @@ export const cursosApi = {
     const { data } = await apiClient.get<Disciplina[]>('/cursos-disciplinas/disciplinas', {
       params: cursoId ? { curso_id: cursoId } : undefined,
     });
+    return data;
+  },
+
+  listarProfessoresDisciplina: async (
+    disciplinaId: string
+  ): Promise<ProfessorVinculadoDisciplina[]> => {
+    const { data } = await apiClient.get<ProfessorVinculadoDisciplina[]>(
+      `/cursos-disciplinas/disciplinas/${disciplinaId}/professores`
+    );
     return data;
   },
 

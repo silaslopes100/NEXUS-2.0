@@ -8,6 +8,7 @@ export interface Professor {
   escola_id?: string | null;
   escola_nome?: string | null;
   materias?: string[];
+  disciplina_ids?: string[];
   data_inicio?: string | null;
   quantidade_aulas?: number;
   horas_totais?: number;
@@ -31,6 +32,7 @@ export interface ProfessorCreate {
   polo_id?: string | null;
   escola_id?: string | null;
   materias?: string[];
+  disciplina_ids?: string[];
   data_inicio?: string | null;
   quantidade_aulas?: number;
   horas_totais?: number;
@@ -44,6 +46,7 @@ export interface ProfessorUpdate {
   polo_id?: string | null;
   escola_id?: string | null;
   materias?: string[];
+  disciplina_ids?: string[];
   data_inicio?: string | null;
   quantidade_aulas?: number;
   horas_totais?: number;

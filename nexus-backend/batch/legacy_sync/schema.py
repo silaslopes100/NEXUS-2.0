@@ -172,6 +172,13 @@ DDL: List[str] = [
     conteudo_programatico TEXT""",
     ),
     _tbl(
+        "professor_disciplina_vinculos",
+        """    professor_id UUID NOT NULL REFERENCES professores(id) ON DELETE CASCADE,
+    disciplina_id UUID NOT NULL REFERENCES disciplinas(id) ON DELETE CASCADE,
+    UNIQUE (professor_id, disciplina_id)""",
+        tracking=False,
+    ),
+    _tbl(
         "professor_materiais",
         """    professor_disciplina_id UUID REFERENCES professor_disciplinas(id) ON DELETE CASCADE,
     arquivo_url VARCHAR(500),
