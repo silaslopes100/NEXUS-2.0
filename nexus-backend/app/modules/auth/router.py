@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.responses import Response
 
 from app.modules.auth.dependencies import (
     get_auth_service,
@@ -145,3 +146,28 @@ async def get_me(
     current_user: UserResponse = Depends(get_current_user),
 ) -> UserResponse:
     return current_user
+
+
+@router.get(
+    "/me/foto",
+    summary="Retorna a foto do próprio usuário autenticado",
+)
+async def get_my_photo(
+    current_user: UserResponse = Depends(get_current_user),
+) -> Response:
+    from app.modules.alunos import perfil as perfil_aluno
+
+    with perfil_aluno.get_db_cursor() as cur:
+        cur.execute(
+            "SELECT foto_url FROM usuarios WHERE id = %s",
+            (current_user.id,),
+        )
+        row = cur.fetchone()
+
+    filename = row.get("foto_url") if row else None
+    content = await perfil_aluno._read_photo(filename)
+    return Response(
+        content=content,
+        media_type=perfil_aluno._photo_media_type(filename),
+        headers={"Cache-Control": "private, no-store"},
+    )

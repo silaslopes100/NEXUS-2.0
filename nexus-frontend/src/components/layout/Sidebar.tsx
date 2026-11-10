@@ -17,6 +17,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { authApi } from '@/features/auth/api';
+import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
 
 interface SidebarProps {
   isMobileOpen?: boolean;
@@ -262,9 +263,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               collapsed ? 'justify-center p-2' : ''
             }`}
           >
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-md">
-              {user?.nome ? user.nome.charAt(0).toUpperCase() : 'U'}
-            </div>
+            <UsuarioAvatarProprio
+              fotoUrl={user?.foto_url}
+              nome={user?.nome}
+              className="w-9 h-9 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-md"
+            />
 
             {!collapsed && (
               <div className="flex-1 min-w-0">

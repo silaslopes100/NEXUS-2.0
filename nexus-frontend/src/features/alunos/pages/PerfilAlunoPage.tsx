@@ -243,6 +243,9 @@ export const PerfilAlunoPage: React.FC = () => {
     try {
       const result = await perfilAlunoApi.uploadFoto(selectedPhoto);
       setPerfil({ ...perfil, foto_url: result.foto_url });
+      if (user) {
+        setUser({ ...user, foto_url: result.foto_url });
+      }
       setSelectedPhoto(null);
       setPhotoSuccess('Foto de perfil atualizada.');
     } catch (err) {

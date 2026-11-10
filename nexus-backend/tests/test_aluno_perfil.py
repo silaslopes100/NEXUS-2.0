@@ -318,6 +318,46 @@ async def test_student_uploads_and_reads_own_profile_photo(
 
 
 @pytest.mark.asyncio
+async def test_authenticated_user_reads_only_their_own_photo(
+    client, profile_database, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(perfil_module, "PHOTO_DIRECTORY", tmp_path)
+    student_filename = f"{'a' * 32}.png"
+    admin_filename = f"{'b' * 32}.png"
+    student_photo = _image_bytes("PNG")
+    admin_image = Image.new("RGB", (4, 4), color="red")
+    admin_output = io.BytesIO()
+    admin_image.save(admin_output, format="PNG")
+    admin_photo = admin_output.getvalue()
+    (tmp_path / student_filename).write_bytes(student_photo)
+    (tmp_path / admin_filename).write_bytes(admin_photo)
+    profile_database.users["aluno-1"]["foto_url"] = student_filename
+    profile_database.users["admin-1"] = {
+        "id": "admin-1",
+        "nome": "Admin",
+        "email": "admin@example.com",
+        "foto_url": admin_filename,
+    }
+
+    student_response = await client.get(
+        "/auth/me/foto",
+        headers=_headers("aluno-1", "aluno"),
+    )
+    admin_response = await client.get(
+        "/auth/me/foto?usuario_id=aluno-1",
+        headers=_headers("admin-1", "admin"),
+    )
+    unauthenticated_response = await client.get("/auth/me/foto")
+
+    assert student_response.status_code == 200
+    assert student_response.content == student_photo
+    assert admin_response.status_code == 200
+    assert admin_response.content == admin_photo
+    assert admin_response.headers["cache-control"] == "private, no-store"
+    assert unauthenticated_response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_profile_photo_helpers_use_private_vercel_blob(monkeypatch):
     put_blob = AsyncMock()
     get_blob = AsyncMock(return_value=SimpleNamespace(body=b"processed-image"))

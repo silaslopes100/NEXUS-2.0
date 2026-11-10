@@ -54,4 +54,11 @@ export const authApi = {
     const response = await apiClient.get<User>('/auth/me');
     return response.data;
   },
+
+  async getMyPhoto(): Promise<Blob> {
+    const response = await apiClient.get<Blob>('/auth/me/foto', {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };

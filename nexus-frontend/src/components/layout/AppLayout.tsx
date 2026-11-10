@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Menu, Bell, Search } from 'lucide-react';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 import { PendenciasSino } from '@/features/transferencias/components/PendenciasSino';
+import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
 
 export const AppLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -70,9 +71,11 @@ export const AppLayout: React.FC = () => {
                   {roleName}
                 </p>
               </div>
-              <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-nexus-yellow">
-                {user?.nome ? user.nome.charAt(0).toUpperCase() : 'U'}
-              </div>
+              <UsuarioAvatarProprio
+                fotoUrl={user?.foto_url}
+                nome={user?.nome}
+                className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-nexus-yellow"
+              />
             </div>
           </div>
         </header>
