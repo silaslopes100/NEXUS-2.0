@@ -1,13 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ImagePlus, Loader2, Save, Upload, UserRound } from 'lucide-react';
 import { apiErrorMessage } from '@/features/alunos/api';
 import { perfilAlunoApi, PerfilAluno } from '@/features/alunos/profileApi';
 import {
   formatCep,
   formatPhone,
+  onlyDigits,
   perfilAlunoSchema,
   PerfilAlunoForm,
 } from '@/features/alunos/profileSchema';
+import { lookupAddressByCep } from '@/features/alunos/viacep';
 import { useAuthStore } from '@/stores/authStore';
 
 const emptyForm: PerfilAlunoForm = {
@@ -56,6 +58,12 @@ export const PerfilAlunoPage: React.FC = () => {
   const [photoError, setPhotoError] = useState('');
   const [photoSuccess, setPhotoSuccess] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cepLookup, setCepLookup] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error';
+    message: string;
+  }>({ status: 'idle', message: '' });
+  const cepLookupController = useRef<AbortController | null>(null);
+  const cepLookupRequest = useRef(0);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -74,6 +82,13 @@ export const PerfilAlunoPage: React.FC = () => {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  useEffect(
+    () => () => {
+      cepLookupController.current?.abort();
+    },
+    []
+  );
 
   useEffect(() => {
     if (!selectedPhoto) {
@@ -124,6 +139,53 @@ export const PerfilAlunoPage: React.FC = () => {
     setForm((current) => ({ ...current, [field]: formattedValue }));
     setSuccess('');
     setValidationError('');
+
+    if (field !== 'cep') return;
+
+    const requestId = ++cepLookupRequest.current;
+    cepLookupController.current?.abort();
+    cepLookupController.current = null;
+    setCepLookup({ status: 'idle', message: '' });
+
+    const cep = onlyDigits(formattedValue);
+    if (cep.length !== 8) return;
+
+    const controller = new AbortController();
+    cepLookupController.current = controller;
+    setCepLookup({ status: 'loading', message: 'Consultando CEP...' });
+
+    void lookupAddressByCep(cep, controller.signal)
+      .then((address) => {
+        if (controller.signal.aborted || requestId !== cepLookupRequest.current) return;
+        setForm((current) => {
+          if (onlyDigits(current.cep) !== cep) return current;
+          return {
+            ...current,
+            logradouro: address.logradouro,
+            bairro: address.bairro,
+            cidade: address.cidade,
+            uf: address.uf,
+          };
+        });
+        setCepLookup({
+          status: 'success',
+          message: 'Endereço preenchido pelo ViaCEP. Informe o número e o complemento.',
+        });
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || requestId !== cepLookupRequest.current) return;
+        setCepLookup({
+          status: 'error',
+          message: err instanceof Error
+            ? err.message
+            : 'Não foi possível consultar o ViaCEP. Preencha o endereço manualmente.',
+        });
+      })
+      .finally(() => {
+        if (requestId === cepLookupRequest.current) {
+          cepLookupController.current = null;
+        }
+      });
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -312,7 +374,20 @@ export const PerfilAlunoPage: React.FC = () => {
         <section className="space-y-4 border-t border-slate-800 pt-5">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Endereço residencial</h2>
           <div className="grid gap-4 sm:grid-cols-3">
-            {field('cep', 'CEP', { autoComplete: 'postal-code' })}
+            <div>
+              {field('cep', 'CEP', { autoComplete: 'postal-code' })}
+              {cepLookup.message && (
+                <p
+                  className={`mt-1 text-xs ${
+                    cepLookup.status === 'error' ? 'text-red-300' : 'text-slate-400'
+                  }`}
+                  role={cepLookup.status === 'error' ? 'alert' : 'status'}
+                  aria-live="polite"
+                >
+                  {cepLookup.message}
+                </p>
+              )}
+            </div>
             {field('logradouro', 'Logradouro', { autoComplete: 'address-line1' })}
             {field('numero', 'Número')}
             {field('complemento', 'Complemento', { autoComplete: 'address-line2' })}
