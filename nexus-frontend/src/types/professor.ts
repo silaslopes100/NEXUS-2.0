@@ -27,6 +27,86 @@ export interface ProfessorListResponse {
   offset: number;
 }
 
+export interface ProfessorTurmaResumo {
+  id: string;
+  nome: string;
+  professor_disciplina_id?: string | null;
+  data_inicio?: string | null;
+  data_fim?: string | null;
+  polo_nome?: string | null;
+  escola_nome?: string | null;
+}
+
+export interface ProfessorDisciplinaResumo {
+  id: string;
+  nome: string;
+  curso_nome?: string | null;
+  semestre?: number | null;
+  carga_horaria?: number | null;
+  qtd_aulas_prevista?: number | null;
+  turmas: ProfessorTurmaResumo[];
+}
+
+export interface ProfessorDisciplinaListResponse {
+  items: ProfessorDisciplinaResumo[];
+}
+
+export interface ProfessorTurmaVinculo {
+  id: string;
+  professor_id: string;
+  professor_nome: string;
+  professor_email?: string | null;
+  disciplina_id: string;
+  disciplina_nome: string;
+  turma_id: string;
+}
+
+export interface ProfessorTurmaVinculosResponse {
+  items: ProfessorTurmaVinculo[];
+}
+
+export interface ProfessorConteudoItem {
+  id: string;
+  disciplina_id: string;
+  titulo?: string | null;
+  tipo_midia?: string | null;
+  url_arquivo?: string | null;
+  ordem: number;
+  arquivo_nome?: string | null;
+  arquivo_mime_type?: string | null;
+  arquivo_tamanho_bytes?: number | null;
+  tem_arquivo: boolean;
+}
+
+export interface ProfessorMaterialResumo {
+  id: string;
+  professor_disciplina_id: string;
+  disciplina_id: string;
+  turma_id?: string | null;
+  turma_nome?: string | null;
+  arquivo_url?: string | null;
+  data_aula?: string | null;
+  descricao?: string | null;
+  expira_em?: string | null;
+  arquivo_nome?: string | null;
+  arquivo_mime_type?: string | null;
+  arquivo_tamanho_bytes?: number | null;
+  tem_arquivo: boolean;
+}
+
+export interface ProfessorDisciplinaConteudosResumo {
+  id: string;
+  nome: string;
+  curso_nome?: string | null;
+  turmas: ProfessorTurmaResumo[];
+  conteudos: ProfessorConteudoItem[];
+  materiais: ProfessorMaterialResumo[];
+}
+
+export interface ProfessorConteudosResponse {
+  items: ProfessorDisciplinaConteudosResumo[];
+}
+
 export interface ProfessorCreate {
   usuario_id: string;
   polo_id?: string | null;

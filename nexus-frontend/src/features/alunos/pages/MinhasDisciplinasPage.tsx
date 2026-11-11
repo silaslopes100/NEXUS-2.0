@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, ExternalLink, Loader2 } from 'lucide-react';
+import { BookOpen, Download, ExternalLink, Loader2 } from 'lucide-react';
 import { alunosGestaoApi, apiErrorMessage, CursoAprendizado } from '@/features/alunos/api';
 
 export const MinhasDisciplinasPage: React.FC = () => {
   const [cursos, setCursos] = useState<CursoAprendizado[] | null>(null);
   const [erro, setErro] = useState('');
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
+  const [baixandoId, setBaixandoId] = useState<string | null>(null);
 
   useEffect(() => {
     alunosGestaoApi
@@ -37,6 +38,26 @@ export const MinhasDisciplinasPage: React.FC = () => {
       setErro(apiErrorMessage(err, 'Não foi possível salvar o progresso.'));
     } finally {
       setSalvandoId(null);
+    }
+  };
+
+  const baixarArquivo = async (conteudoId: string, nome: string) => {
+    setErro('');
+    setBaixandoId(conteudoId);
+    try {
+      const arquivo = await alunosGestaoApi.baixarConteudoArquivo(conteudoId);
+      const url = URL.createObjectURL(arquivo);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = nome;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setErro(apiErrorMessage(err, 'Não foi possível baixar este arquivo.'));
+    } finally {
+      setBaixandoId(null);
     }
   };
 
@@ -98,7 +119,22 @@ export const MinhasDisciplinasPage: React.FC = () => {
                           />
                           <span className="truncate">{conteudo.titulo || 'Conteúdo sem título'}</span>
                         </label>
-                        {conteudo.url_arquivo && (
+                        {conteudo.tem_arquivo ? (
+                          <button
+                            type="button"
+                            disabled={baixandoId === conteudo.id}
+                            onClick={() =>
+                              void baixarArquivo(
+                                conteudo.id,
+                                conteudo.arquivo_nome || conteudo.titulo || 'conteudo'
+                              )
+                            }
+                            aria-label={`Baixar ${conteudo.arquivo_nome || conteudo.titulo || 'conteúdo'}`}
+                            className="shrink-0 text-blue-300 hover:text-blue-200 disabled:opacity-50"
+                          >
+                            <Download size={15} />
+                          </button>
+                        ) : conteudo.url_arquivo ? (
                           <a
                             href={conteudo.url_arquivo}
                             target="_blank"
@@ -108,7 +144,7 @@ export const MinhasDisciplinasPage: React.FC = () => {
                           >
                             <ExternalLink size={15} />
                           </a>
-                        )}
+                        ) : null}
                       </li>
                     ))}
                   </ul>

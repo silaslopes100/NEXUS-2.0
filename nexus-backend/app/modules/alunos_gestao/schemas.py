@@ -86,6 +86,10 @@ class ConteudoAprendizadoResponse(BaseModel):
     titulo: Optional[str] = None
     tipo_midia: Optional[str] = None
     url_arquivo: Optional[str] = None
+    arquivo_nome: Optional[str] = None
+    arquivo_mime_type: Optional[str] = None
+    arquivo_tamanho_bytes: Optional[int] = None
+    tem_arquivo: bool = False
     concluido: bool
 
 

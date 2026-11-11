@@ -49,6 +49,9 @@ class AlunosGestaoRepositoryInterface(Protocol):
     ) -> Optional[str]: ...
     def aprendizado(self, aluno_id: str) -> List[Dict[str, Any]]: ...
     def conteudo_do_aluno(self, aluno_id: str, conteudo_id: str) -> bool: ...
+    def arquivo_conteudo_do_aluno(
+        self, aluno_id: str, conteudo_id: str
+    ) -> Optional[Dict[str, Any]]: ...
     def marcar_conteudo(self, aluno_id: str, conteudo_id: str, concluido: bool) -> None: ...
 
 
@@ -447,6 +450,8 @@ class PostgresAlunosGestaoRepository:
                 SELECT c.id AS curso_id, c.nome AS curso_nome,
                        d.id AS disciplina_id, d.nome AS disciplina_nome,
                        dc.id AS conteudo_id, dc.titulo, dc.tipo_midia, dc.url_arquivo,
+                       dc.arquivo_nome, dc.arquivo_mime_type, dc.arquivo_tamanho_bytes,
+                       dc.arquivo_storage_key IS NOT NULL AS tem_arquivo,
                        cp.id IS NOT NULL AS concluido
                 FROM cursos_aluno ca
                 JOIN cursos c ON c.id = ca.curso_id
@@ -471,6 +476,22 @@ class PostgresAlunosGestaoRepository:
             {"aluno": aluno_id, "conteudo": conteudo_id},  # type: ignore[arg-type]
         )
         return row is not None
+
+    def arquivo_conteudo_do_aluno(
+        self, aluno_id: str, conteudo_id: str
+    ) -> Optional[Dict[str, Any]]:
+        return self._um(
+            f"""
+            SELECT dc.arquivo_storage_key, dc.arquivo_nome,
+                   dc.arquivo_mime_type, dc.arquivo_tamanho_bytes
+            FROM disciplina_conteudos dc
+            JOIN disciplinas d ON d.id = dc.disciplina_id
+            WHERE dc.id = %(conteudo)s
+              AND dc.arquivo_storage_key IS NOT NULL
+              AND d.curso_id IN ({_cursos_do_aluno("%(aluno)s")})
+            """,
+            {"aluno": aluno_id, "conteudo": conteudo_id},
+        )
 
     def marcar_conteudo(self, aluno_id: str, conteudo_id: str, concluido: bool) -> None:
         with get_db_cursor() as cur:
@@ -623,6 +644,26 @@ class InMemoryAlunosGestaoRepository:
             linha.get("conteudo_id") == conteudo_id
             for linha in self.linhas_aprendizado.get(aluno_id, [])
         )
+
+    def arquivo_conteudo_do_aluno(
+        self, aluno_id: str, conteudo_id: str
+    ) -> Optional[Dict[str, Any]]:
+        row = next(
+            (
+                linha
+                for linha in self.linhas_aprendizado.get(aluno_id, [])
+                if str(linha.get("conteudo_id")) == str(conteudo_id)
+            ),
+            None,
+        )
+        if not row or not row.get("arquivo_storage_key"):
+            return None
+        return {
+            "arquivo_storage_key": row["arquivo_storage_key"],
+            "arquivo_nome": row.get("arquivo_nome"),
+            "arquivo_mime_type": row.get("arquivo_mime_type"),
+            "arquivo_tamanho_bytes": row.get("arquivo_tamanho_bytes"),
+        }
 
     def marcar_conteudo(self, aluno_id: str, conteudo_id: str, concluido: bool) -> None:
         if concluido:

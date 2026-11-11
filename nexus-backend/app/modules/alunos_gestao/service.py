@@ -244,10 +244,23 @@ class AlunosGestaoService:
                         titulo=linha.get("titulo"),
                         tipo_midia=linha.get("tipo_midia"),
                         url_arquivo=linha.get("url_arquivo"),
+                        arquivo_nome=linha.get("arquivo_nome"),
+                        arquivo_mime_type=linha.get("arquivo_mime_type"),
+                        arquivo_tamanho_bytes=linha.get("arquivo_tamanho_bytes"),
+                        tem_arquivo=bool(linha.get("tem_arquivo")),
                         concluido=bool(linha.get("concluido")),
                     )
                 )
         return list(cursos.values())
+
+    def arquivo_conteudo(self, usuario_id: str, conteudo_id: str) -> Dict[str, Any]:
+        aluno = self._aluno_do_usuario(usuario_id)
+        if aluno.get("status") != "ativo":
+            raise _erro(status.HTTP_403_FORBIDDEN, "Regularize sua situação para continuar os estudos")
+        arquivo = self.repo.arquivo_conteudo_do_aluno(str(aluno["id"]), conteudo_id)
+        if not arquivo:
+            raise _erro(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado nos seus cursos")
+        return arquivo
 
     def marcar_conteudo(self, usuario_id: str, conteudo_id: str, concluido: bool) -> None:
         aluno = self._aluno_do_usuario(usuario_id)

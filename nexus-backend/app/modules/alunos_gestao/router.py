@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from app.core.file_storage import academic_file_response
 from app.modules.alunos_gestao.pdf import gerar_boletim_pdf
 from app.modules.alunos_gestao.repository import (
     AlunosGestaoRepositoryInterface,
@@ -135,6 +136,16 @@ async def meu_aprendizado(
     service: AlunosGestaoService = Depends(get_alunos_gestao_service),
 ):
     return service.aprendizado(current_user.id)
+
+
+@router_aprendizado.get("/conteudos/{conteudo_id}/arquivo")
+async def baixar_arquivo_conteudo_aluno(
+    conteudo_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+    service: AlunosGestaoService = Depends(get_alunos_gestao_service),
+):
+    arquivo = service.arquivo_conteudo(current_user.id, str(conteudo_id))
+    return await academic_file_response(arquivo)
 
 
 @router_aprendizado.put("/conteudos/{conteudo_id}/concluido", response_model=MessageResponse)

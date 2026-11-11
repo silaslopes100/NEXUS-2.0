@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
 
+from app.modules.auth.roles import perfil_do_usuario
+from app.modules.auth.schemas import UserResponse
 from app.modules.professores.repository import (
     ProfessoresRepositoryInterface,
     get_professores_repository,
@@ -12,8 +14,16 @@ from app.modules.professores.repository import (
 from app.modules.professores.schemas import (
     MessageResponse,
     ProfessorCreateRequest,
+    ProfessorConteudosResponse,
+    ProfessorDisciplinaListResponse,
+    ProfessorMaterialResumo,
+    ProfessorConteudoItem,
     ProfessorListResponse,
+    ProfessorDisciplinaConteudosResumo,
     ProfessorResponse,
+    ProfessorTurmaVinculoResumo,
+    ProfessorTurmaVinculosResponse,
+    ProfessorTurmaResumo,
     ProfessorUpdateRequest,
 )
 
@@ -88,6 +98,352 @@ class ProfessoresService:
         if not row:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
         return self._build_response(row)
+
+    def list_minhas_disciplinas_turmas(self, usuario_id: str) -> ProfessorDisciplinaListResponse:
+        rows = self.repo.list_disciplinas_turmas_by_usuario(usuario_id)
+        disciplinas: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            disciplina_id = str(row["disciplina_id"])
+            disciplina = disciplinas.setdefault(
+                disciplina_id,
+                {
+                    "id": disciplina_id,
+                    "nome": row["disciplina_nome"],
+                    "curso_nome": row.get("curso_nome"),
+                    "semestre": row.get("semestre"),
+                    "carga_horaria": row.get("carga_horaria"),
+                    "qtd_aulas_prevista": row.get("qtd_aulas_prevista"),
+                    "turmas": [],
+                },
+            )
+            turma_id = row.get("turma_id")
+            if turma_id and all(str(turma["id"]) != str(turma_id) for turma in disciplina["turmas"]):
+                disciplina["turmas"].append(
+                    {
+                        "id": str(turma_id),
+                        "nome": row["turma_nome"],
+                        "professor_disciplina_id": row.get("professor_disciplina_id"),
+                        "data_inicio": row.get("data_inicio"),
+                        "data_fim": row.get("data_fim"),
+                        "polo_nome": row.get("polo_nome"),
+                        "escola_nome": row.get("escola_nome"),
+                    }
+                )
+        return ProfessorDisciplinaListResponse(items=list(disciplinas.values()))
+
+    def list_meus_conteudos_materiais(self, usuario_id: str) -> ProfessorConteudosResponse:
+        disciplinas: Dict[str, Dict[str, Any]] = {}
+        for row in self.repo.list_disciplinas_turmas_by_usuario(usuario_id):
+                disciplina_id = str(row["disciplina_id"])
+                disciplina = disciplinas.setdefault(
+                    disciplina_id,
+                    {
+                        "id": disciplina_id,
+                        "nome": row["disciplina_nome"],
+                        "curso_nome": row.get("curso_nome"),
+                        "turmas": {},
+                        "conteudos": [],
+                        "materiais": [],
+                    },
+                )
+                turma_id = row.get("turma_id")
+                if turma_id:
+                    turma_key = str(turma_id)
+                    disciplina["turmas"].setdefault(
+                        turma_key,
+                        ProfessorTurmaResumo(
+                            id=turma_key,
+                            nome=row["turma_nome"],
+                            professor_disciplina_id=row.get("professor_disciplina_id"),
+                            data_inicio=row.get("data_inicio"),
+                            data_fim=row.get("data_fim"),
+                            polo_nome=row.get("polo_nome"),
+                            escola_nome=row.get("escola_nome"),
+                        ),
+                    )
+
+        for row in self.repo.list_conteudos_by_usuario(usuario_id):
+                disciplina = disciplinas.get(str(row["disciplina_id"]))
+                if disciplina and row.get("id"):
+                    disciplina["conteudos"].append(
+                        ProfessorConteudoItem(
+                            id=str(row["id"]),
+                            disciplina_id=str(row["disciplina_id"]),
+                            titulo=row.get("titulo"),
+                            tipo_midia=row.get("tipo_midia"),
+                            url_arquivo=row.get("url_arquivo"),
+                            ordem=row.get("ordem") or 0,
+                            arquivo_nome=row.get("arquivo_nome"),
+                            arquivo_mime_type=row.get("arquivo_mime_type"),
+                            arquivo_tamanho_bytes=row.get("arquivo_tamanho_bytes"),
+                            tem_arquivo=bool(row.get("tem_arquivo") or row.get("arquivo_storage_key")),
+                        )
+                    )
+
+        for row in self.repo.list_materiais_by_usuario(usuario_id):
+                disciplina = disciplinas.get(str(row["disciplina_id"]))
+                if disciplina:
+                    disciplina["materiais"].append(ProfessorMaterialResumo(**row))
+
+        items = []
+        for disciplina in disciplinas.values():
+                disciplina["turmas"] = list(disciplina["turmas"].values())
+                items.append(ProfessorDisciplinaConteudosResumo(**disciplina))
+        return ProfessorConteudosResponse(items=items)
+
+    def listar_vinculos_turma(
+        self, turma_id: str, current_user: UserResponse
+    ) -> ProfessorTurmaVinculosResponse:
+        self._turma_no_escopo(turma_id, current_user)
+        scope_column, scope_id = self._escopo_vinculo(current_user)
+        items = [
+            ProfessorTurmaVinculoResumo(**row)
+            for row in self.repo.list_vinculos_ativos_por_turma(
+                turma_id, scope_column, scope_id
+            )
+        ]
+        return ProfessorTurmaVinculosResponse(items=items)
+
+    def criar_vinculo_turma(
+        self,
+        turma_id: str,
+        professor_id: str,
+        disciplina_id: str,
+        current_user: UserResponse,
+        ip: Optional[str] = None,
+    ) -> ProfessorTurmaVinculoResumo:
+        turma = self._turma_no_escopo(turma_id, current_user)
+        if not turma.get("curso_id"):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="A turma precisa estar vinculada a um curso.",
+            )
+
+        professor = self.repo.get_professor(professor_id)
+        if not professor or professor.get("status") != "ativo":
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail="Professor ativo não encontrado.",
+            )
+        self._validar_escopo_professor(professor, current_user)
+        usuario = self.repo.get_usuario_by_id(str(professor.get("usuario_id") or ""))
+        if not usuario or usuario.get("status") != "ativo":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="O usuário associado ao professor está inativo.",
+            )
+
+        curso_disciplina = self.repo.get_disciplina_curso(disciplina_id)
+        if not curso_disciplina:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail="Disciplina não encontrada ou sem curso associado.",
+            )
+        if str(curso_disciplina) != str(turma["curso_id"]):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="A disciplina selecionada não pertence ao curso da turma.",
+            )
+
+        scope_column, scope_id = self._escopo_vinculo(current_user)
+        vinculo_id, resultado = self.repo.create_or_reactivate_vinculo_turma(
+            professor_id, disciplina_id, turma_id, scope_column, scope_id
+        )
+        if resultado == "missing_turma":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Turma não encontrada.")
+        if resultado == "missing_discipline":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada.")
+        if resultado in {"out_of_scope", "professor_out_of_scope"}:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Turma ou professor fora do seu escopo.")
+        if resultado == "course_mismatch":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="A disciplina selecionada não pertence ao curso da turma.",
+            )
+        if resultado == "inactive_professor":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="O professor ou seu usuário está inativo.",
+            )
+        if resultado == "exists":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="Este professor já está vinculado à disciplina nesta turma.",
+            )
+        self.repo.record_audit_log(
+            usuario_id=current_user.id,
+            acao=(
+                "vinculo_professor_turma_reativado"
+                if resultado == "reactivated"
+                else "vinculo_professor_turma_criado"
+            ),
+            entidade="professor_disciplinas",
+            entidade_id=vinculo_id,
+            dados_depois={
+                "professor_id": professor_id,
+                "disciplina_id": disciplina_id,
+                "turma_id": turma_id,
+            },
+            ip=ip,
+        )
+        row = next(
+            (
+                item
+                for item in self.repo.list_vinculos_ativos_por_turma(
+                    turma_id, scope_column, scope_id
+                )
+                if str(item["id"]) == vinculo_id
+            ),
+            None,
+        )
+        if not row:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="O vínculo foi salvo, mas não pôde ser recuperado.",
+            )
+        return ProfessorTurmaVinculoResumo(**row)
+
+    def arquivar_vinculo_turma(
+        self,
+        turma_id: str,
+        vinculo_id: str,
+        current_user: UserResponse,
+        ip: Optional[str] = None,
+    ) -> MessageResponse:
+        self._turma_no_escopo(turma_id, current_user)
+        scope_column, scope_id = self._escopo_vinculo(current_user)
+        antes, resultado = self.repo.archive_vinculo_turma(
+            turma_id, vinculo_id, scope_column, scope_id
+        )
+        if resultado == "missing_turma":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Turma não encontrada.")
+        if resultado == "out_of_scope":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Turma fora do seu escopo.")
+        if not antes:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail="Vínculo ativo não encontrado nesta turma.",
+            )
+        self.repo.record_audit_log(
+            usuario_id=current_user.id,
+            acao="vinculo_professor_turma_arquivado",
+            entidade="professor_disciplinas",
+            entidade_id=vinculo_id,
+            dados_antes=antes,
+            dados_depois={**antes, "ativo": False},
+            ip=ip,
+        )
+        return MessageResponse(message="Vínculo arquivado; materiais e atas foram preservados.")
+
+    @staticmethod
+    def _escopo_vinculo(
+        current_user: UserResponse,
+    ) -> tuple[Optional[str], Optional[str]]:
+        perfil = perfil_do_usuario(current_user)
+        if perfil == "polo":
+            return "polo_id", str(current_user.polo_id)
+        if perfil == "escola":
+            return "escola_id", str(current_user.escola_id)
+        return None, None
+
+    def _turma_no_escopo(
+        self, turma_id: str, current_user: UserResponse
+    ) -> Dict[str, Any]:
+        turma = self.repo.get_turma_vinculo_scope(turma_id)
+        if not turma:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Turma não encontrada.")
+        perfil = perfil_do_usuario(current_user)
+        if perfil == "admin":
+            return turma
+        if perfil == "polo":
+            if not current_user.polo_id:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Polo sem vínculo.")
+            if str(turma.get("polo_id")) != str(current_user.polo_id):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Turma fora do seu escopo.")
+            return turma
+        if perfil == "escola":
+            if not current_user.escola_id:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Escola sem vínculo.")
+            if str(turma.get("escola_id")) != str(current_user.escola_id):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Turma fora do seu escopo.")
+            return turma
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Perfil não autorizado para esta operação.")
+
+    @staticmethod
+    def _validar_escopo_professor(
+        professor: Dict[str, Any], current_user: UserResponse
+    ) -> None:
+        perfil = perfil_do_usuario(current_user)
+        if perfil == "polo" and str(professor.get("polo_id")) != str(current_user.polo_id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Professor fora do seu escopo.")
+        if perfil == "escola" and str(professor.get("escola_id")) != str(current_user.escola_id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Professor fora do seu escopo.")
+
+    def get_conteudo(self, conteudo_id: str) -> Dict[str, Any]:
+        row = self.repo.get_conteudo(conteudo_id)
+        if not row:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Conteúdo não encontrado")
+        return row
+
+    def create_conteudo(self, data: Dict[str, Any]) -> ProfessorConteudoItem:
+        return self._conteudo_response(self.repo.create_conteudo(data))
+
+    def update_conteudo(self, conteudo_id: str, data: Dict[str, Any]) -> ProfessorConteudoItem:
+        row = self.repo.update_conteudo(conteudo_id, data)
+        if not row:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Conteúdo não encontrado")
+        return self._conteudo_response(row)
+
+    def get_material(self, material_id: str) -> Dict[str, Any]:
+        row = self.repo.get_material(material_id)
+        if not row:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Material não encontrado")
+        return row
+
+    def create_material(self, data: Dict[str, Any]) -> ProfessorMaterialResumo:
+        return self._material_response(self.repo.create_material(data))
+
+    def update_material(self, material_id: str, data: Dict[str, Any]) -> ProfessorMaterialResumo:
+        row = self.repo.update_material(material_id, data)
+        if not row:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Material não encontrado")
+        return self._material_response(row)
+
+    def get_vinculo_academico(self, vinculo_id: str) -> Optional[Dict[str, Any]]:
+        return self.repo.get_vinculo_academico(vinculo_id)
+
+    @staticmethod
+    def _conteudo_response(row: Dict[str, Any]) -> ProfessorConteudoItem:
+        return ProfessorConteudoItem(
+            id=str(row["id"]),
+            disciplina_id=str(row["disciplina_id"]),
+            titulo=row.get("titulo"),
+            tipo_midia=row.get("tipo_midia"),
+            url_arquivo=row.get("url_arquivo"),
+            ordem=row.get("ordem") or 0,
+            arquivo_nome=row.get("arquivo_nome"),
+            arquivo_mime_type=row.get("arquivo_mime_type"),
+            arquivo_tamanho_bytes=row.get("arquivo_tamanho_bytes"),
+            tem_arquivo=bool(row.get("tem_arquivo") or row.get("arquivo_storage_key")),
+        )
+
+    @staticmethod
+    def _material_response(row: Dict[str, Any]) -> ProfessorMaterialResumo:
+        return ProfessorMaterialResumo(
+            id=str(row["id"]),
+            professor_disciplina_id=str(row["professor_disciplina_id"]),
+            disciplina_id=str(row["disciplina_id"]),
+            turma_id=str(row["turma_id"]) if row.get("turma_id") else None,
+            turma_nome=row.get("turma_nome"),
+            arquivo_url=row.get("arquivo_url"),
+            data_aula=row.get("data_aula"),
+            descricao=row.get("descricao"),
+            expira_em=row.get("expira_em"),
+            arquivo_nome=row.get("arquivo_nome"),
+            arquivo_mime_type=row.get("arquivo_mime_type"),
+            arquivo_tamanho_bytes=row.get("arquivo_tamanho_bytes"),
+            tem_arquivo=bool(row.get("tem_arquivo") or row.get("arquivo_storage_key")),
+        )
 
     # ------------------------------------------------------------------
     # Escrita

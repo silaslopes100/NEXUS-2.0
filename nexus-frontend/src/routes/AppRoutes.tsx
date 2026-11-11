@@ -24,6 +24,8 @@ import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
 import { PerfilAlunoPage } from '@/features/alunos/pages/PerfilAlunoPage';
 import { TurmasPage } from '@/features/turmas/pages/TurmasPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
+import { MinhasDisciplinasPage as MinhasDisciplinasProfessorPage } from '@/features/professores/pages/MinhasDisciplinasPage';
+import { MinhasConteudosPage as MinhasConteudosProfessorPage } from '@/features/professores/pages/MinhasConteudosPage';
 import { CursosPage } from '@/features/cursos/pages/CursosPage';
 import { DisciplinasPage } from '@/features/cursos/pages/DisciplinasPage';
 import { TransferenciasPage } from '@/features/transferencias/pages/TransferenciasPage';
@@ -113,8 +115,8 @@ export const AppRoutes: React.FC = () => {
         {/* Módulo Professor */}
         <Route element={<RequireRole roles={['admin', 'professor']} />}>
           <Route path="/professor/dashboard" element={<ProfessorDashboardPage />} />
-          <Route path="/professor/disciplinas" element={<ModulePlaceholderPage />} />
-          <Route path="/professor/conteudos" element={<ModulePlaceholderPage />} />
+          <Route path="/professor/disciplinas" element={<MinhasDisciplinasProfessorPage />} />
+          <Route path="/professor/conteudos" element={<MinhasConteudosProfessorPage />} />
           <Route path="/professor/notas" element={<ModulePlaceholderPage />} />
           <Route path="/professor/presencas" element={<ModulePlaceholderPage />} />
           <Route path="/professor/atas" element={<ModulePlaceholderPage />} />

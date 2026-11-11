@@ -8,7 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import settings
 from app.core.database import get_db_cursor
-from app.modules.auth.dependencies import require_role
+from app.modules.auth.dependencies import get_current_user, require_role
+from app.modules.auth.schemas import UserResponse
+from app.modules.professores.access import exigir_vinculo_disciplina
 
 router = APIRouter(prefix="/cursos-disciplinas", tags=["Cursos & Disciplinas (AVA)"])
 
@@ -606,8 +608,16 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/disciplinas/{disciplina_id}/conteudos", response_model=List[DisciplinaConteudoSchema])
-async def list_disciplina_conteudos(disciplina_id: str):
+@router.get(
+    "/disciplinas/{disciplina_id}/conteudos",
+    response_model=List[DisciplinaConteudoSchema],
+    dependencies=[Depends(require_role(["admin", "polo", "escola", "professor", "aluno"]))],
+)
+async def list_disciplina_conteudos(
+    disciplina_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+):
+    exigir_vinculo_disciplina(current_user, disciplina_id)
     if not settings.PG_DSN:
         return [c for c in _conteudos_db.values() if c.get("disciplina_id") == disciplina_id]
 
@@ -620,8 +630,18 @@ async def list_disciplina_conteudos(disciplina_id: str):
         return [dict(r) for r in cur.fetchall()]
 
 
-@router.post("/disciplinas/{disciplina_id}/conteudos", response_model=DisciplinaConteudoSchema, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(["admin", "professor"]))])
-async def create_disciplina_conteudo(disciplina_id: str, dados: DisciplinaConteudoSchema):
+@router.post(
+    "/disciplinas/{disciplina_id}/conteudos",
+    response_model=DisciplinaConteudoSchema,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role(["admin", "professor"]))],
+)
+async def create_disciplina_conteudo(
+    disciplina_id: str,
+    dados: DisciplinaConteudoSchema,
+    current_user: UserResponse = Depends(get_current_user),
+):
+    exigir_vinculo_disciplina(current_user, disciplina_id)
     new_id = str(uuid.uuid4())
     c_dict = dados.model_dump()
     c_dict["id"] = new_id

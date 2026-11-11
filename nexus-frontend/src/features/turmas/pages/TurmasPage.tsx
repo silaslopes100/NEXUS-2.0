@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit2, Loader2, Plus, Search, Trash2, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Edit2, GraduationCap, Loader2, Plus, Search, Trash2, Users } from 'lucide-react';
 import { alunosApi, apiErrorMessage, EscolaOption } from '@/features/alunos/api';
 import { Curso, cursosApi } from '@/features/cursos/api';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import { formatarData, Turma, turmasApi } from '@/features/turmas/api';
 import { CalendariosTab } from '@/features/turmas/components/CalendariosTab';
 import { TurmaAlunosPanel } from '@/features/turmas/components/TurmaAlunosPanel';
+import { TurmaProfessoresPanel } from '@/features/turmas/components/TurmaProfessoresPanel';
 import { EscolaOpcao, inputCls, TurmaFormModal } from '@/features/turmas/components/TurmaFormModal';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 
@@ -40,6 +41,7 @@ export const TurmasPage: React.FC = () => {
 
   const [form, setForm] = useState<FormState>({ aberto: false });
   const [turmaAlunos, setTurmaAlunos] = useState<Turma | null>(null);
+  const [turmaProfessores, setTurmaProfessores] = useState<Turma | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
 
@@ -267,6 +269,15 @@ export const TurmasPage: React.FC = () => {
                           <span className="flex justify-end gap-2">
                             <button
                               type="button"
+                              aria-label={`Professores de ${turma.nome}`}
+                              onClick={() => setTurmaProfessores(turma)}
+                              title="Gerenciar professores"
+                              className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800"
+                            >
+                              <GraduationCap size={14} />
+                            </button>
+                            <button
+                              type="button"
                               aria-label={`Alunos de ${turma.nome}`}
                               onClick={() => setTurmaAlunos(turma)}
                               className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800"
@@ -349,6 +360,15 @@ export const TurmasPage: React.FC = () => {
           onClose={(houveAlteracao) => {
             setTurmaAlunos(null);
             if (houveAlteracao) recarregar();
+          }}
+        />
+      )}
+      {turmaProfessores && (
+        <TurmaProfessoresPanel
+          turma={turmaProfessores}
+          onClose={() => {
+            setTurmaProfessores(null);
+            recarregar();
           }}
         />
       )}

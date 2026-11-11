@@ -67,6 +67,91 @@ class ProfessorResponse(BaseModel):
     atualizado_em: Optional[datetime] = None
 
 
+class ProfessorTurmaResumo(BaseModel):
+    id: str
+    nome: str
+    professor_disciplina_id: Optional[str] = None
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    polo_nome: Optional[str] = None
+    escola_nome: Optional[str] = None
+
+
+class ProfessorDisciplinaResumo(BaseModel):
+    id: str
+    nome: str
+    curso_nome: Optional[str] = None
+    semestre: Optional[int] = None
+    carga_horaria: Optional[int] = None
+    qtd_aulas_prevista: Optional[int] = None
+    turmas: List[ProfessorTurmaResumo] = Field(default_factory=list)
+
+
+class ProfessorDisciplinaListResponse(BaseModel):
+    items: List[ProfessorDisciplinaResumo]
+
+
+class ProfessorTurmaVinculoCreateRequest(BaseModel):
+    professor_id: UUID
+    disciplina_id: UUID
+
+
+class ProfessorTurmaVinculoResumo(BaseModel):
+    id: str
+    professor_id: str
+    professor_nome: str
+    professor_email: Optional[str] = None
+    disciplina_id: str
+    disciplina_nome: str
+    turma_id: str
+
+
+class ProfessorTurmaVinculosResponse(BaseModel):
+    items: List[ProfessorTurmaVinculoResumo]
+
+
+class ProfessorConteudoItem(BaseModel):
+    id: str
+    disciplina_id: str
+    titulo: Optional[str] = None
+    tipo_midia: Optional[str] = None
+    url_arquivo: Optional[str] = None
+    ordem: int = 0
+    arquivo_nome: Optional[str] = None
+    arquivo_mime_type: Optional[str] = None
+    arquivo_tamanho_bytes: Optional[int] = None
+    tem_arquivo: bool = False
+
+
+class ProfessorMaterialResumo(BaseModel):
+    id: str
+    professor_disciplina_id: str
+    disciplina_id: str
+    turma_id: Optional[str] = None
+    turma_nome: Optional[str] = None
+    arquivo_url: Optional[str] = None
+    data_aula: Optional[date] = None
+    descricao: Optional[str] = None
+    expira_em: Optional[datetime] = None
+    arquivo_nome: Optional[str] = None
+    arquivo_mime_type: Optional[str] = None
+    arquivo_tamanho_bytes: Optional[int] = None
+    tem_arquivo: bool = False
+
+
+class ProfessorDisciplinaConteudosResumo(BaseModel):
+    id: str
+    nome: str
+    curso_nome: Optional[str] = None
+    turmas: List[ProfessorTurmaResumo] = Field(default_factory=list)
+    conteudos: List[ProfessorConteudoItem] = Field(default_factory=list)
+    materiais: List[ProfessorMaterialResumo] = Field(default_factory=list)
+
+
+class ProfessorConteudosResponse(BaseModel):
+    items: List[ProfessorDisciplinaConteudosResumo]
+
+
 class ProfessorListResponse(BaseModel):
     total: int
     items: List[ProfessorResponse]

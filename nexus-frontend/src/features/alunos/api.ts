@@ -154,6 +154,10 @@ export interface ConteudoAprendizado {
   titulo?: string | null;
   tipo_midia?: string | null;
   url_arquivo?: string | null;
+  arquivo_nome?: string | null;
+  arquivo_mime_type?: string | null;
+  arquivo_tamanho_bytes?: number | null;
+  tem_arquivo: boolean;
   concluido: boolean;
 }
 
@@ -213,6 +217,14 @@ export const alunosGestaoApi = {
   marcarConteudo: async (conteudoId: string, concluido: boolean): Promise<void> => {
     const url = `/alunos/aprendizado/conteudos/${conteudoId}/concluido`;
     await (concluido ? apiClient.put(url) : apiClient.delete(url));
+  },
+
+  baixarConteudoArquivo: async (conteudoId: string): Promise<Blob> => {
+    const { data } = await apiClient.get<Blob>(
+      `/alunos/aprendizado/conteudos/${conteudoId}/arquivo`,
+      { responseType: 'blob' }
+    );
+    return data;
   },
 };
 

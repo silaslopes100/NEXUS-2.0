@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.core.config import settings
@@ -12,7 +13,11 @@ from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
 from app.modules.admin.repository import InMemoryAdminRepository, set_admin_repository
 from app.modules import cursos_disciplinas as cursos_disciplinas_module
+from app.modules import notas_historico as notas_historico_module
+from app.modules import presencas as presencas_module
 from app.modules import turmas as turmas_module
+from app.modules.professores import repository as professores_repository_module
+from app.modules.professores.repository import InMemoryProfessoresRepository
 from app.modules.polos_escolas import repository as polos_repository_module
 from app.modules.polos_escolas.repository import InMemoryPolosEscolasRepository
 from app.modules.transferencias import repository as transferencias_repository_module
@@ -380,6 +385,39 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
         headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert cont_res.status_code == 201
+
+    professores_repo = InMemoryProfessoresRepository()
+    professores_repo.professores["professor-1"] = {
+        "id": "professor-1",
+        "usuario_id": "prof-1",
+    }
+    professores_repo.professor_disciplina_vinculos["professor-1"] = [disc_id]
+    monkeypatch.setattr(professores_repository_module, "_repo_instance", professores_repo)
+    t_professor = _token("prof-1", "prof@nexus.com.br", "professor")
+    conteudos_docente = await client.get(
+        f"/cursos-disciplinas/disciplinas/{disc_id}/conteudos",
+        headers={"Authorization": f"Bearer {t_professor}"},
+    )
+    assert conteudos_docente.status_code == 200
+    assert len(conteudos_docente.json()) == 1
+    novo_conteudo_docente = await client.post(
+        f"/cursos-disciplinas/disciplinas/{disc_id}/conteudos",
+        json={"disciplina_id": disc_id, "titulo": "Material do docente"},
+        headers={"Authorization": f"Bearer {t_professor}"},
+    )
+    assert novo_conteudo_docente.status_code == 201
+    conteudo_de_outra_disciplina = await client.get(
+        "/cursos-disciplinas/disciplinas/disciplina-nao-vinculada/conteudos",
+        headers={"Authorization": f"Bearer {t_professor}"},
+    )
+    assert conteudo_de_outra_disciplina.status_code == 403
+    escrita_de_outra_disciplina = await client.post(
+        "/cursos-disciplinas/disciplinas/disciplina-nao-vinculada/conteudos",
+        json={"disciplina_id": "outra", "titulo": "Não autorizado"},
+        headers={"Authorization": f"Bearer {t_professor}"},
+    )
+    assert escrita_de_outra_disciplina.status_code == 403
+
     exclusao_com_conteudo = await client.delete(
         f"/cursos-disciplinas/disciplinas/{disc_id}",
         headers={"Authorization": f"Bearer {t_admin}"},
@@ -663,22 +701,214 @@ async def test_modulo_ead(client: AsyncClient):
 
 # 10. Notas & Histórico
 @pytest.mark.asyncio
-async def test_modulo_notas_e_historico(client: AsyncClient):
+async def test_modulo_notas_e_historico(client: AsyncClient, monkeypatch):
+    monkeypatch.setattr(settings, "PG_DSN", "")
     t_prof = _token("prof-1", "prof@nexus.com.br", "professor")
     t_aluno = _token("aluno-1", "aluno@nexus.com.br", "aluno")
+    professores_repo = InMemoryProfessoresRepository()
+    professores_repo.professores["professor-1"] = {
+        "id": "professor-1",
+        "usuario_id": "prof-1",
+    }
+    professores_repo.professor_disciplinas = [
+        {
+            "id": "vinculo-1",
+            "professor_id": "professor-1",
+            "disciplina_id": "disciplina-1",
+            "turma_id": "turma-1",
+        }
+    ]
+    monkeypatch.setattr(professores_repository_module, "_repo_instance", professores_repo)
+    monkeypatch.setattr(
+        turmas_module,
+        "_turma_alunos_db",
+        [{"turma_id": "turma-1", "aluno_id": "aluno-1"}],
+    )
+    monkeypatch.setattr(
+        notas_historico_module,
+        "_notas_db",
+        {
+            "nota-alheia": {
+                "id": "nota-alheia",
+                "aluno_id": "aluno-2",
+                "disciplina_id": "disciplina-1",
+                "turma_id": "turma-2",
+                "valor": 7.0,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        notas_historico_module,
+        "_historico_db",
+        {
+            "historico-1": {
+                "id": "historico-1",
+                "aluno_id": "aluno-1",
+                "disciplina_id": "disciplina-1",
+            },
+            "historico-2": {
+                "id": "historico-2",
+                "aluno_id": "aluno-2",
+                "disciplina_id": "disciplina-1",
+            },
+        },
+    )
 
     n_res = await client.post(
         "/notas-historico/notas",
-        json={"aluno_id": "aluno-1", "valor": 9.5, "origem": "ava"},
+        json={
+            "aluno_id": "aluno-1",
+            "disciplina_id": "disciplina-1",
+            "turma_id": "turma-1",
+            "valor": 9.5,
+            "origem": "ava",
+        },
         headers={"Authorization": f"Bearer {t_prof}"},
     )
     assert n_res.status_code == 201
+    nota_de_vinculo_alheio = await client.post(
+        "/notas-historico/notas",
+        json={
+            "aluno_id": "aluno-2",
+            "disciplina_id": "disciplina-2",
+            "turma_id": "turma-2",
+            "valor": 8.0,
+        },
+        headers={"Authorization": f"Bearer {t_prof}"},
+    )
+    assert nota_de_vinculo_alheio.status_code == 403
+    nota_nao_autorizada = await client.post(
+        "/notas-historico/notas",
+        json={
+            "aluno_id": "aluno-2",
+            "disciplina_id": "disciplina-1",
+            "turma_id": "turma-1",
+            "valor": 8.0,
+        },
+        headers={"Authorization": f"Bearer {t_prof}"},
+    )
+    assert nota_nao_autorizada.status_code == 403
+
+    notas_docente = await client.get(
+        "/notas-historico/notas",
+        headers={"Authorization": f"Bearer {t_prof}"},
+    )
+    assert notas_docente.status_code == 200
+    assert [nota["aluno_id"] for nota in notas_docente.json()] == ["aluno-1"]
+
+    historico_docente = await client.get(
+        "/notas-historico/historico/aluno-1",
+        headers={"Authorization": f"Bearer {t_prof}"},
+    )
+    assert historico_docente.status_code == 200
+    assert [item["id"] for item in historico_docente.json()] == ["historico-1"]
+    historico_de_aluno_fora_da_turma = await client.get(
+        "/notas-historico/historico/aluno-2",
+        headers={"Authorization": f"Bearer {t_prof}"},
+    )
+    assert historico_de_aluno_fora_da_turma.status_code == 200
+    assert historico_de_aluno_fora_da_turma.json() == []
 
     h_res = await client.get(
         "/notas-historico/historico/aluno-1",
         headers={"Authorization": f"Bearer {t_aluno}"},
     )
     assert h_res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_presencas_do_professor_sao_limitadas_a_turma_e_alunos_matriculados(
+    auth_setup, monkeypatch
+):
+    monkeypatch.setattr(settings, "PG_DSN", "")
+    professores_repo = InMemoryProfessoresRepository()
+    professores_repo.professores["professor-1"] = {
+        "id": "professor-1",
+        "usuario_id": "prof-1",
+    }
+    professores_repo.professor_disciplinas = [
+        {
+            "id": "vinculo-1",
+            "professor_id": "professor-1",
+            "disciplina_id": "disciplina-1",
+            "turma_id": "turma-1",
+        },
+        {
+            "id": "vinculo-2",
+            "professor_id": "professor-2",
+            "disciplina_id": "disciplina-2",
+            "turma_id": "turma-2",
+        },
+    ]
+    monkeypatch.setattr(professores_repository_module, "_repo_instance", professores_repo)
+    monkeypatch.setattr(
+        turmas_module,
+        "_turma_alunos_db",
+        [{"turma_id": "turma-1", "aluno_id": "aluno-1"}],
+    )
+    monkeypatch.setattr(
+        presencas_module,
+        "_presencas_db",
+        {
+            "presenca-1": {
+                "id": "presenca-1",
+                "aluno_id": "aluno-1",
+                "professor_disciplina_id": "vinculo-1",
+                "presente": True,
+            },
+            "presenca-2": {
+                "id": "presenca-2",
+                "aluno_id": "aluno-2",
+                "professor_disciplina_id": "vinculo-2",
+                "presente": True,
+            },
+        },
+    )
+    t_prof = _token("prof-1", "prof@nexus.com.br", "professor")
+    test_app = FastAPI()
+    test_app.include_router(presencas_module.router)
+    transport = ASGITransport(app=test_app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        listagem = await client.get(
+            "/presencas",
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert listagem.status_code == 200
+        assert [item["id"] for item in listagem.json()] == ["presenca-1"]
+
+        lancamento_valido = await client.post(
+            "/presencas/lancar",
+            json={
+                "aluno_id": "aluno-1",
+                "professor_disciplina_id": "vinculo-1",
+                "presente": True,
+            },
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert lancamento_valido.status_code == 201
+
+        lancamento_de_vinculo_alheio = await client.post(
+            "/presencas/lancar",
+            json={
+                "aluno_id": "aluno-2",
+                "professor_disciplina_id": "vinculo-2",
+                "presente": True,
+            },
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert lancamento_de_vinculo_alheio.status_code == 403
+
+        lancamento_fora_da_turma = await client.post(
+            "/presencas/lancar",
+            json={
+                "aluno_id": "aluno-2",
+                "professor_disciplina_id": "vinculo-1",
+                "presente": True,
+            },
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert lancamento_fora_da_turma.status_code == 403
 
 
 # 11. Certificados

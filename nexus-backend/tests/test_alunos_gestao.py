@@ -9,6 +9,7 @@ import pytest_asyncio
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
+from app.core import file_storage as file_storage_module
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.main import app
@@ -340,6 +341,55 @@ def test_aluno_nao_marca_conteudo_fora_dos_seus_cursos(service, com_conteudo):
     assert _codigo(service.marcar_conteudo, "ativo", str(uuid.uuid4()), True) == 404
 
 
+def test_aluno_baixa_arquivo_apenas_de_conteudo_do_proprio_curso(service, com_conteudo):
+    com_conteudo.linhas_aprendizado[ATIVO][0].update(
+        {
+            "arquivo_storage_key": "academic_materials/0123456789abcdef0123456789abcdef.pdf",
+            "arquivo_nome": "aula.pdf",
+            "arquivo_mime_type": "application/pdf",
+            "arquivo_tamanho_bytes": 4,
+        }
+    )
+
+    arquivo = service.arquivo_conteudo("ativo", CONTEUDO)
+
+    assert arquivo["arquivo_nome"] == "aula.pdf"
+    assert arquivo["arquivo_storage_key"].startswith("academic_materials/")
+    assert _codigo(service.arquivo_conteudo, "ativo", str(uuid.uuid4())) == 404
+    assert _codigo(service.arquivo_conteudo, "churn", CONTEUDO) == 403
+
+
+@pytest.mark.asyncio
+async def test_aluno_baixa_arquivo_autenticado_pela_rota(client, repo, com_conteudo, monkeypatch, tmp_path):
+    repo.alunos[ATIVO]["usuario_id"] = "aluno-1"
+    com_conteudo.linhas_aprendizado[ATIVO][0].update(
+        {
+            "arquivo_storage_key": "academic_materials/0123456789abcdef0123456789abcdef.pdf",
+            "arquivo_nome": "aula.pdf",
+            "arquivo_mime_type": "application/pdf",
+            "arquivo_tamanho_bytes": 4,
+        }
+    )
+    monkeypatch.setattr(file_storage_module, "_uses_blob_storage", lambda: False)
+    monkeypatch.setattr(file_storage_module, "ACADEMIC_FILES_DIRECTORY", tmp_path)
+    arquivo = tmp_path / "0123456789abcdef0123456789abcdef.pdf"
+    arquivo.write_bytes(b"%PDF")
+
+    resposta = await client.get(
+        f"/alunos/aprendizado/conteudos/{CONTEUDO}/arquivo",
+        headers=_headers("aluno-1", "aluno"),
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.content == b"%PDF"
+    assert resposta.headers["cache-control"] == "private, no-store"
+    nao_matriculado = await client.get(
+        f"/alunos/aprendizado/conteudos/{str(uuid.UUID(int=32))}/arquivo",
+        headers=_headers("aluno-1", "aluno"),
+    )
+    assert nao_matriculado.status_code == 404
+
+
 def test_aluno_em_churn_nao_avanca_no_conteudo(service, com_conteudo):
     assert _codigo(service.marcar_conteudo, "churn", CONTEUDO, True) == 403
 
@@ -398,7 +448,11 @@ def test_ead_libera_aluno_ativo(monkeypatch):
 @pytest_asyncio.fixture
 async def client(repo):
     auth = InMemoryAuthRepository()
-    for usuario, perfil, polo in (("admin-1", "p-admin", None), ("polo-1", "p-polo", POLO)):
+    for usuario, perfil, polo in (
+        ("admin-1", "p-admin", None),
+        ("polo-1", "p-polo", POLO),
+        ("aluno-1", "p-aluno", None),
+    ):
         auth.usuarios[usuario] = {
             "id": usuario,
             "nome": usuario,

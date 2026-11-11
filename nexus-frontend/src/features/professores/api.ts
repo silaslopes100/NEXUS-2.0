@@ -3,7 +3,13 @@ import { polosEscolasApi } from '@/features/polos_escolas/api';
 import {
   Professor,
   ProfessorCreate,
+  ProfessorConteudoItem,
+  ProfessorConteudosResponse,
+  ProfessorDisciplinaListResponse,
+  ProfessorMaterialResumo,
   ProfessorListResponse,
+  ProfessorTurmaVinculo,
+  ProfessorTurmaVinculosResponse,
   ProfessorUpdate,
   UnidadeOption,
 } from '@/types/professor';
@@ -26,6 +32,98 @@ export const professoresApi = {
 
   obter: async (id: string): Promise<Professor> => {
     const { data } = await apiClient.get<Professor>(`/professores/${id}`);
+    return data;
+  },
+
+  minhasDisciplinas: async (): Promise<ProfessorDisciplinaListResponse> => {
+    const { data } = await apiClient.get<ProfessorDisciplinaListResponse>(
+      '/professores/me/disciplinas'
+    );
+    return data;
+  },
+
+  listarVinculosTurma: async (turmaId: string): Promise<ProfessorTurmaVinculo[]> => {
+    const { data } = await apiClient.get<ProfessorTurmaVinculosResponse>(
+      `/professores/turmas/${turmaId}/vinculos`
+    );
+    return data.items;
+  },
+
+  vincularProfessorTurma: async (
+    turmaId: string,
+    professorId: string,
+    disciplinaId: string
+  ): Promise<ProfessorTurmaVinculo> => {
+    const { data } = await apiClient.post<ProfessorTurmaVinculo>(
+      `/professores/turmas/${turmaId}/vinculos`,
+      { professor_id: professorId, disciplina_id: disciplinaId }
+    );
+    return data;
+  },
+
+  arquivarVinculoTurma: async (turmaId: string, vinculoId: string): Promise<string> => {
+    const { data } = await apiClient.delete<{ message: string }>(
+      `/professores/turmas/${turmaId}/vinculos/${vinculoId}`
+    );
+    return data.message;
+  },
+
+  meusConteudos: async (): Promise<ProfessorConteudosResponse> => {
+    const { data } = await apiClient.get<ProfessorConteudosResponse>(
+      '/professores/me/conteudos'
+    );
+    return data;
+  },
+
+  criarConteudo: async (form: FormData): Promise<ProfessorConteudoItem> => {
+    const { data } = await apiClient.post<ProfessorConteudoItem>(
+      '/professores/me/conteudos',
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return data;
+  },
+
+  atualizarConteudo: async (id: string, form: FormData): Promise<ProfessorConteudoItem> => {
+    const { data } = await apiClient.put<ProfessorConteudoItem>(
+      `/professores/me/conteudos/${id}`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return data;
+  },
+
+  criarMaterial: async (form: FormData): Promise<ProfessorMaterialResumo> => {
+    const { data } = await apiClient.post<ProfessorMaterialResumo>(
+      '/professores/me/materiais',
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return data;
+  },
+
+  atualizarMaterial: async (id: string, form: FormData): Promise<ProfessorMaterialResumo> => {
+    const { data } = await apiClient.put<ProfessorMaterialResumo>(
+      `/professores/me/materiais/${id}`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return data;
+  },
+
+  baixarConteudo: async (id: string): Promise<Blob> => {
+    const { data } = await apiClient.get<Blob>(
+      `/professores/me/conteudos/${id}/arquivo`,
+      { responseType: 'blob' }
+    );
+    return data;
+  },
+
+  baixarMaterial: async (id: string): Promise<Blob> => {
+    const { data } = await apiClient.get<Blob>(
+      `/professores/me/materiais/${id}/arquivo`,
+      { responseType: 'blob' }
+    );
     return data;
   },
 
