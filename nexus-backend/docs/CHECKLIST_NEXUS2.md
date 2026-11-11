@@ -30,7 +30,7 @@ Documento oficial de acompanhamento do plano técnico e status de entrega dos 18
 | **09** | **Matrículas & Cursos EAD** | `matriculas_ead`, `compras_disciplina_ead`, `avisos_liberacao_ead`, `turma_alunos` | [app/modules/ead/](app/modules/ead/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
 | **10** | **Grades, Notas & Histórico** | `notas`, `historico_unificado` | [app/modules/notas_historico/](app/modules/notas_historico/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
 | **11** | **Certificados & Diplomas** | `certificados` | [app/modules/certificados/](app/modules/certificados/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
-| **12** | **Presenças & Frequência** | `presencas` | [app/modules/presencas/](app/modules/presencas/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
+| **12** | **Presenças & Frequência** | `presencas` | [app/modules/presencas/](app/modules/presencas/) | Chamada em lote e correções docentes/admin | `test_modules_all.py` | ✅ Concluído |
 | **13** | **Licenças & Estoque** | `estoque_licencas`, `licencas_atribuidas` | [app/modules/licencas/](app/modules/licencas/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
 | **14** | **Financeiro & Vendas** | `pedidos_licenca`, `pagamentos` | [app/modules/financeiro/](app/modules/financeiro/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
 | **15** | **Cupons de Desconto** | `cupons` | [app/modules/cupons/](app/modules/cupons/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |

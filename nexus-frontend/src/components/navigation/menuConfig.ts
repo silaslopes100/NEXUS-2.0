@@ -121,7 +121,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Presenças & Frequência',
           path: '/admin/presencas',
           icon: Clock,
-          isPlaceholder: true,
         },
         {
           title: 'Certificados & Diplomas',
@@ -400,7 +399,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Diário de Presença',
           path: '/professor/presencas',
           icon: Clock,
-          isPlaceholder: true,
         },
         {
           title: 'Atas de Aula',

@@ -11,8 +11,10 @@ from app.core import file_storage as file_storage_module
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
+from app.modules.professores import repository as professores_repository_module
 from app.modules.professores.repository import (
     InMemoryProfessoresRepository,
+    PostgresProfessoresRepository,
     set_professores_repository,
 )
 
@@ -91,6 +93,66 @@ async def client(repos):
 
 def _token(user_id: str) -> str:
     return create_access_token({"sub": user_id, "tipo": "access"})
+
+
+def test_professor_tem_disciplina_nao_filtra_coluna_ativo_no_vinculo_administrativo(
+    monkeypatch,
+):
+    class Cursor:
+        query = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, query, params):
+            self.query = query
+
+        def fetchone(self):
+            return {"vinculado": True}
+
+    cursor = Cursor()
+    monkeypatch.setattr(professores_repository_module, "get_db_cursor", lambda: cursor)
+
+    assert PostgresProfessoresRepository().professor_tem_disciplina(
+        "professor-1", "disciplina-1"
+    )
+    consulta_administrativa = cursor.query.split("OR EXISTS", maxsplit=1)[0]
+    assert "FROM professor_disciplina_vinculos vinculo" in consulta_administrativa
+    assert "vinculo.ativo" not in consulta_administrativa
+
+
+@pytest.mark.asyncio
+async def test_professor_cria_conteudo_com_link_externo(client: AsyncClient, repos):
+    _, professores_repo = repos
+    professores_repo.professores["docente-1"] = {
+        "id": "docente-1",
+        "usuario_id": "prof-1",
+    }
+    professores_repo.professor_disciplina_vinculos["docente-1"] = ["disciplina-1"]
+    professores_repo.disciplinas["disciplina-1"] = {
+        "id": "disciplina-1",
+        "nome": "Matemática",
+    }
+
+    resposta = await client.post(
+        "/professores/me/conteudos",
+        data={
+            "disciplina_id": "disciplina-1",
+            "titulo": "Aula 01",
+            "tipo_midia": "video",
+            "ordem": "0",
+            "modo": "link",
+            "url_arquivo": "https://www.youtube.com/watch?v=abcdefghijk",
+        },
+        headers={"Authorization": f"Bearer {_token('prof-1')}"},
+    )
+
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["tipo_midia"] == "video"
+    assert resposta.json()["url_arquivo"] == "https://www.youtube.com/watch?v=abcdefghijk"
 
 
 def _payload(**overrides):

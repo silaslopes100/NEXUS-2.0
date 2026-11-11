@@ -99,8 +99,8 @@ def _token(user_id: str, email: str, role: str) -> str:
     })
 
 
-# Nota: os testes dos módulos legados `professores`, `alunos`, `presencas`,
-# `licencas` e `financeiro`, além do antigo teste de "Polos & Escolas" via
+# Nota: os testes dos módulos legados `professores`, `alunos`, `licencas` e
+# `financeiro`, além do antigo teste de "Polos & Escolas" via
 # `/unidades/*`, foram removidos: essas funcionalidades foram absorvidas pelo
 # módulo `polos_escolas` (ver tests/test_polos_escolas.py e
 # docs/Requisitos_Nexus2.0(Polo_Escola).md).
@@ -828,38 +828,44 @@ async def test_presencas_do_professor_sao_limitadas_a_turma_e_alunos_matriculado
     }
     professores_repo.professor_disciplinas = [
         {
-            "id": "vinculo-1",
+            "id": "00000000-0000-0000-0000-000000000002",
             "professor_id": "professor-1",
             "disciplina_id": "disciplina-1",
-            "turma_id": "turma-1",
+            "turma_id": "00000000-0000-0000-0000-000000000004",
         },
         {
-            "id": "vinculo-2",
+            "id": "00000000-0000-0000-0000-000000000003",
             "professor_id": "professor-2",
             "disciplina_id": "disciplina-2",
-            "turma_id": "turma-2",
+            "turma_id": "00000000-0000-0000-0000-000000000006",
         },
     ]
     monkeypatch.setattr(professores_repository_module, "_repo_instance", professores_repo)
     monkeypatch.setattr(
         turmas_module,
         "_turma_alunos_db",
-        [{"turma_id": "turma-1", "aluno_id": "aluno-1"}],
+        [{
+            "turma_id": "00000000-0000-0000-0000-000000000004",
+            "aluno_id": "00000000-0000-0000-0000-000000000005",
+        }],
     )
+    data_aula = date(2026, 3, 10)
     monkeypatch.setattr(
         presencas_module,
         "_presencas_db",
         {
             "presenca-1": {
                 "id": "presenca-1",
-                "aluno_id": "aluno-1",
-                "professor_disciplina_id": "vinculo-1",
+                "aluno_id": "00000000-0000-0000-0000-000000000005",
+                "professor_disciplina_id": "00000000-0000-0000-0000-000000000002",
+                "numero_aula": 1,
+                "data_aula": data_aula,
                 "presente": True,
             },
             "presenca-2": {
                 "id": "presenca-2",
                 "aluno_id": "aluno-2",
-                "professor_disciplina_id": "vinculo-2",
+                "professor_disciplina_id": "00000000-0000-0000-0000-000000000003",
                 "presente": True,
             },
         },
@@ -877,22 +883,108 @@ async def test_presencas_do_professor_sao_limitadas_a_turma_e_alunos_matriculado
         assert listagem.status_code == 200
         assert [item["id"] for item in listagem.json()] == ["presenca-1"]
 
+        vinculos = await client.get(
+            "/presencas/vinculos",
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert vinculos.status_code == 200
+        assert [item["id"] for item in vinculos.json()] == [
+            "00000000-0000-0000-0000-000000000002"
+        ]
+
+        alunos_chamada = await client.get(
+            "/presencas/vinculos/00000000-0000-0000-0000-000000000002/alunos",
+            params={"data_aula": data_aula.isoformat(), "numero_aula": 1},
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert alunos_chamada.status_code == 200
+        assert alunos_chamada.json() == [{
+            "aluno_id": "00000000-0000-0000-0000-000000000005",
+            "nome": "00000000-0000-0000-0000-000000000005",
+            "numero_matricula": None,
+            "presente": True,
+        }]
+
         lancamento_valido = await client.post(
             "/presencas/lancar",
             json={
-                "aluno_id": "aluno-1",
-                "professor_disciplina_id": "vinculo-1",
+                "aluno_id": "00000000-0000-0000-0000-000000000005",
+                "professor_disciplina_id": "00000000-0000-0000-0000-000000000002",
+                "data_aula": data_aula.isoformat(),
+                "numero_aula": 2,
                 "presente": True,
             },
             headers={"Authorization": f"Bearer {t_prof}"},
         )
         assert lancamento_valido.status_code == 201
+        duplicado = await client.post(
+            "/presencas/lancar",
+            json={
+                "aluno_id": "00000000-0000-0000-0000-000000000005",
+                "professor_disciplina_id": "00000000-0000-0000-0000-000000000002",
+                "data_aula": data_aula.isoformat(),
+                "numero_aula": 2,
+                "presente": True,
+            },
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert duplicado.status_code == 409
+
+        chamada = {
+            "professor_disciplina_id": "00000000-0000-0000-0000-000000000002",
+            "data_aula": data_aula.isoformat(),
+            "numero_aula": 1,
+            "presencas": [{
+                "aluno_id": "00000000-0000-0000-0000-000000000005",
+                "presente": False,
+            }],
+        }
+        chamada_inicial = await client.put(
+            "/presencas/chamadas",
+            json=chamada,
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert chamada_inicial.status_code == 200
+        id_presenca = chamada_inicial.json()["presencas"][0]["id"]
+
+        chamada["presencas"][0]["presente"] = True
+        chamada_corrigida = await client.put(
+            "/presencas/chamadas",
+            json=chamada,
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert chamada_corrigida.status_code == 200
+        assert chamada_corrigida.json()["presencas"][0]["id"] == id_presenca
+        assert chamada_corrigida.json()["presencas"][0]["presente"] is True
+
+        chamada_incompleta = {**chamada, "presencas": []}
+        assert (await client.put(
+            "/presencas/chamadas",
+            json=chamada_incompleta,
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )).status_code == 422
+        chamada_com_aluno_fora = {
+            **chamada,
+            "presencas": [
+                *chamada["presencas"],
+                {
+                    "aluno_id": "00000000-0000-0000-0000-000000000007",
+                    "presente": True,
+                },
+            ],
+        }
+        assert (await client.put(
+            "/presencas/chamadas",
+            json=chamada_com_aluno_fora,
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )).status_code == 422
 
         lancamento_de_vinculo_alheio = await client.post(
             "/presencas/lancar",
             json={
-                "aluno_id": "aluno-2",
-                "professor_disciplina_id": "vinculo-2",
+                "aluno_id": "00000000-0000-0000-0000-000000000007",
+                "professor_disciplina_id": "00000000-0000-0000-0000-000000000003",
+                "data_aula": data_aula.isoformat(),
                 "presente": True,
             },
             headers={"Authorization": f"Bearer {t_prof}"},
@@ -902,16 +994,56 @@ async def test_presencas_do_professor_sao_limitadas_a_turma_e_alunos_matriculado
         lancamento_fora_da_turma = await client.post(
             "/presencas/lancar",
             json={
-                "aluno_id": "aluno-2",
-                "professor_disciplina_id": "vinculo-1",
+                "aluno_id": "00000000-0000-0000-0000-000000000007",
+                "professor_disciplina_id": "00000000-0000-0000-0000-000000000002",
+                "data_aula": data_aula.isoformat(),
                 "presente": True,
             },
             headers={"Authorization": f"Bearer {t_prof}"},
         )
         assert lancamento_fora_da_turma.status_code == 403
 
+        t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
+        chamada_admin = await client.put(
+            "/presencas/chamadas",
+            json=chamada,
+            headers={"Authorization": f"Bearer {t_admin}"},
+        )
+        assert chamada_admin.status_code == 200
+
+        t_aluno = _token("aluno-1", "aluno@nexus.com.br", "aluno")
+        acesso_aluno = await client.get(
+            "/presencas",
+            headers={"Authorization": f"Bearer {t_aluno}"},
+        )
+        assert acesso_aluno.status_code == 403
+
+        professores_repo.professor_disciplinas[0]["ativo"] = False
+        vinculos_arquivados = await client.get(
+            "/presencas/vinculos",
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert vinculos_arquivados.status_code == 200
+        assert vinculos_arquivados.json() == []
+        chamada_vinculo_arquivado = await client.put(
+            "/presencas/chamadas",
+            json=chamada,
+            headers={"Authorization": f"Bearer {t_prof}"},
+        )
+        assert chamada_vinculo_arquivado.status_code == 404
+
 
 # 11. Certificados
+def test_router_de_presencas_esta_registrado_na_aplicacao_principal():
+    rotas = set(app.openapi()["paths"])
+    assert {
+        "/presencas",
+        "/presencas/vinculos",
+        "/presencas/vinculos/{professor_disciplina_id}/alunos",
+        "/presencas/chamadas",
+    }.issubset(rotas)
+
+
 @pytest.mark.asyncio
 async def test_modulo_certificados(client: AsyncClient):
     t_admin = _token("admin-1", "admin@nexus.com.br", "admin")

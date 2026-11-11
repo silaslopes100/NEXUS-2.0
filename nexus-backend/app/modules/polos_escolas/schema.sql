@@ -136,10 +136,14 @@ CREATE TABLE IF NOT EXISTS atas (
 CREATE TABLE IF NOT EXISTS presencas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     aluno_id UUID NOT NULL REFERENCES alunos(id),
-    aula_id UUID NOT NULL REFERENCES aulas(id),
+    aula_id UUID REFERENCES aulas(id),
     materia_id UUID,
+    professor_disciplina_id UUID,
+    numero_aula INTEGER,
+    data_aula DATE,
     presente BOOLEAN NOT NULL DEFAULT false,
-    criado_em TIMESTAMPTZ DEFAULT now()
+    criado_em TIMESTAMPTZ DEFAULT now(),
+    atualizado_em TIMESTAMPTZ DEFAULT now()
 );
 
 -- Requisições de troca de polo / migração de modalidade (RN-05, RN-06)
@@ -227,6 +231,11 @@ CREATE INDEX IF NOT EXISTS idx_aulas_professor ON aulas(professor_id);
 CREATE INDEX IF NOT EXISTS idx_aulas_data ON aulas(data_aula);
 CREATE INDEX IF NOT EXISTS idx_presencas_aluno ON presencas(aluno_id);
 CREATE INDEX IF NOT EXISTS idx_presencas_aula ON presencas(aula_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_presencas_vinculo_aluno_aula
+    ON presencas (professor_disciplina_id, aluno_id, data_aula, numero_aula)
+    WHERE professor_disciplina_id IS NOT NULL
+      AND data_aula IS NOT NULL
+      AND numero_aula IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_requisicoes_aluno ON requisicoes_troca(aluno_id);
 CREATE INDEX IF NOT EXISTS idx_requisicoes_status ON requisicoes_troca(status);
 CREATE INDEX IF NOT EXISTS idx_feed_polo ON feed_noticias(polo_id);

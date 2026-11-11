@@ -331,7 +331,6 @@ class PostgresProfessoresRepository:
                               FROM professor_disciplina_vinculos vinculo
                               WHERE vinculo.professor_id = professor.id
                                 AND vinculo.disciplina_id = %s
-                                AND vinculo.ativo = true
                           )
                           OR EXISTS (
                               SELECT 1
