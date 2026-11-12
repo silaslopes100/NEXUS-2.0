@@ -75,6 +75,9 @@ export interface ProfessorDetalhe {
       nome?: string | null;
       numero_matricula?: string | null;
       email?: string | null;
+      ultimo_acesso?: string | null;
+      ultima_presenca?: string | null;
+      ultima_presenca_numero?: number | null;
     }[];
   }[];
 }

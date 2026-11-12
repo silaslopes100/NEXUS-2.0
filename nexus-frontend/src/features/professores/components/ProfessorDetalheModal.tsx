@@ -4,6 +4,23 @@ import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { ProfessorDetalhe } from '@/types/professor';
 import { LotacoesChips } from '@/features/professores/components/LotacoesChips';
 
+/** "2026-03-10" → "10/03/2026" sem conversão de fuso. */
+const formatarData = (valor?: string | null): string => {
+  const [ano, mes, dia] = (valor || '').slice(0, 10).split('-');
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : '';
+};
+
+const formatarAcesso = (valor?: string | null): string => {
+  if (!valor) return 'Nunca acessou';
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime())
+    ? '—'
+    : data.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+};
+
+const thCls = 'px-3 py-2 text-left font-semibold';
+const tdCls = 'px-3 py-2 whitespace-nowrap';
+
 interface Props {
   professorId: string;
   onClose: () => void;
@@ -107,10 +124,49 @@ export const ProfessorDetalheModal: React.FC<Props> = ({ professorId, onClose })
                       <h5 className="text-sm font-semibold text-white">{escola.nome}</h5>
                       {escola.turmas.map((turma) => (
                         <div key={turma.id} className="mt-2 rounded-lg bg-slate-950 p-3">
-                          <p className="text-sm font-semibold text-slate-200">{turma.nome}</p>
-                          {turma.alunos.length ? <ul className="mt-2 space-y-1 text-xs text-slate-400">{turma.alunos.map((aluno) => (
-                            <li key={aluno.id}>{aluno.nome || 'Sem nome'} · {aluno.numero_matricula || 'Sem matrícula'} · {aluno.email || 'Sem e-mail'}</li>
-                          ))}</ul> : <p className="mt-2 text-xs text-slate-400">Nenhum aluno ativo nesta turma.</p>}
+                          <p className="text-sm font-semibold text-slate-200">
+                            {turma.nome}{' '}
+                            <span className="font-normal text-slate-500">· {turma.alunos.length} aluno(s)</span>
+                          </p>
+                          {turma.alunos.length ? (
+                            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-800">
+                              <table className="w-full text-xs">
+                                <thead className="bg-slate-900 uppercase tracking-wider text-[10px] text-slate-500">
+                                  <tr>
+                                    <th className={thCls}>Nome</th>
+                                    <th className={thCls}>Matrícula</th>
+                                    <th className={thCls}>E-mail</th>
+                                    <th className={thCls}>Último acesso</th>
+                                    <th className={thCls}>Última aula presente</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800 text-slate-300">
+                                  {turma.alunos.map((aluno) => (
+                                    <tr key={aluno.id} className="hover:bg-slate-900/60">
+                                      <td className={`${tdCls} font-medium text-slate-100`}>{aluno.nome || 'Sem nome'}</td>
+                                      <td className={`${tdCls} font-mono`}>{aluno.numero_matricula || '—'}</td>
+                                      <td className={tdCls}>{aluno.email || '—'}</td>
+                                      <td className={`${tdCls} ${aluno.ultimo_acesso ? '' : 'text-slate-500'}`}>
+                                        {formatarAcesso(aluno.ultimo_acesso)}
+                                      </td>
+                                      <td className={tdCls}>
+                                        {aluno.ultima_presenca ? (
+                                          <>
+                                            {formatarData(aluno.ultima_presenca)}
+                                            {aluno.ultima_presenca_numero ? (
+                                              <span className="text-slate-500"> · Aula {aluno.ultima_presenca_numero}</span>
+                                            ) : null}
+                                          </>
+                                        ) : (
+                                          <span className="text-slate-500">—</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : <p className="mt-2 text-xs text-slate-400">Nenhum aluno ativo nesta turma.</p>}
                         </div>
                       ))}
                     </div>

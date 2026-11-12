@@ -129,6 +129,9 @@ class ProfessoresService:
                 turma["alunos"].append({
                     "id": str(aluno_id), "nome": row.get("aluno_nome"),
                     "numero_matricula": row.get("numero_matricula"), "email": row.get("aluno_email"),
+                    "ultimo_acesso": row.get("aluno_ultimo_acesso"),
+                    "ultima_presenca": row.get("ultima_presenca_data"),
+                    "ultima_presenca_numero": row.get("ultima_presenca_numero"),
                 })
         return ProfessorDetalheResponse(professor=professor, disciplinas=disciplinas, turmas=list(turmas.values()))
 

@@ -1296,3 +1296,41 @@ async def test_lotacao_com_turma_ativa_nao_pode_ser_removida(client: AsyncClient
         f"/professores/{professor_id}/lotacoes/{lotacao_b['id']}", headers=_h("admin-1")
     )
     assert liberada.status_code == 200, liberada.text
+
+
+@pytest.mark.asyncio
+async def test_detalhe_mostra_ultimo_acesso_e_ultima_aula_presente(client: AsyncClient, repos):
+    auth_repo, professores_repo, professor_id, disciplina_id, turma_id = _preparar_vinculo_turma(repos)
+    professores_repo.professor_disciplina_vinculos[professor_id] = [disciplina_id]
+    professores_repo.professor_disciplinas.append(
+        {"id": "pd-1", "professor_id": professor_id, "disciplina_id": disciplina_id,
+         "turma_id": turma_id, "ativo": True}
+    )
+    # Vínculo de outro professor na mesma turma: presença nele não conta.
+    professores_repo.professor_disciplinas.append(
+        {"id": "pd-outro", "professor_id": "outro", "disciplina_id": disciplina_id,
+         "turma_id": turma_id, "ativo": True}
+    )
+    for aluno_id, usuario_id, acesso in (("aluno-1", "u-aluno-1", "2026-11-10T14:30:00"), ("aluno-2", "u-aluno-2", None)):
+        auth_repo.usuarios[usuario_id] = {
+            "id": usuario_id, "nome": aluno_id, "email": f"{aluno_id}@nexus.com.br",
+            "status": "ativo", "perfil_id": "p-aluno", "ultimo_login_em": acesso,
+        }
+        professores_repo.alunos[aluno_id] = {"id": aluno_id, "usuario_id": usuario_id, "numero_matricula": aluno_id.upper()}
+        professores_repo.turma_alunos.append({"turma_id": turma_id, "aluno_id": aluno_id})
+    professores_repo.presencas.extend([
+        {"aluno_id": "aluno-1", "professor_disciplina_id": "pd-1", "data_aula": "2026-03-10", "numero_aula": 1, "presente": True},
+        {"aluno_id": "aluno-1", "professor_disciplina_id": "pd-1", "data_aula": "2026-03-17", "numero_aula": 2, "presente": True},
+        {"aluno_id": "aluno-1", "professor_disciplina_id": "pd-1", "data_aula": "2026-03-24", "numero_aula": 1, "presente": False},
+        {"aluno_id": "aluno-1", "professor_disciplina_id": "pd-outro", "data_aula": "2026-04-01", "numero_aula": 1, "presente": True},
+    ])
+
+    resposta = await client.get(f"/professores/{professor_id}/detalhe", headers={"Authorization": f"Bearer {_token('admin-1')}"})
+
+    assert resposta.status_code == 200, resposta.text
+    alunos = {a["id"]: a for a in resposta.json()["turmas"][0]["alunos"]}
+    assert alunos["aluno-1"]["ultimo_acesso"].startswith("2026-11-10T14:30")
+    assert alunos["aluno-1"]["ultima_presenca"] == "2026-03-17"
+    assert alunos["aluno-1"]["ultima_presenca_numero"] == 2
+    assert alunos["aluno-2"]["ultimo_acesso"] is None
+    assert alunos["aluno-2"]["ultima_presenca"] is None

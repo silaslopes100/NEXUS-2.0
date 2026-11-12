@@ -102,6 +102,9 @@ class ProfessorDetalheAluno(BaseModel):
     nome: Optional[str] = None
     numero_matricula: Optional[str] = None
     email: Optional[str] = None
+    ultimo_acesso: Optional[datetime] = None
+    ultima_presenca: Optional[date] = None
+    ultima_presenca_numero: Optional[int] = None
 
 
 class ProfessorDetalheTurma(BaseModel):

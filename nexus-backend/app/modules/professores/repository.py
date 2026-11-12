@@ -804,7 +804,10 @@ class PostgresProfessoresRepository:
                        t.escola_id::text AS escola_id, e.nome AS escola_nome,
                        a.id::text AS aluno_id,
                        NULLIF(trim(concat(u.nome, ' ', u.sobrenome)), '') AS aluno_nome,
-                       a.numero_matricula, u.email AS aluno_email
+                       a.numero_matricula, u.email AS aluno_email,
+                       u.ultimo_login_em AS aluno_ultimo_acesso,
+                       ultima.data_aula AS ultima_presenca_data,
+                       ultima.numero_aula AS ultima_presenca_numero
                 FROM professor_disciplinas pd
                 JOIN professor_disciplinas v
                   ON v.professor_id = pd.professor_id AND v.disciplina_id = pd.disciplina_id
@@ -816,6 +819,17 @@ class PostgresProfessoresRepository:
                   AND COALESCE(ta.status, 'ativo') = 'ativo'
                 LEFT JOIN alunos a ON a.id = ta.aluno_id
                 LEFT JOIN usuarios u ON u.id = a.usuario_id
+                LEFT JOIN LATERAL (
+                    -- Última chamada em que o aluno esteve presente nas aulas
+                    -- deste professor nesta turma.
+                    SELECT pr.data_aula, pr.numero_aula
+                    FROM presencas pr
+                    JOIN professor_disciplinas pdx ON pdx.id = pr.professor_disciplina_id
+                    WHERE pr.aluno_id = a.id AND pr.presente
+                      AND pdx.professor_id = pd.professor_id AND pdx.turma_id = t.id
+                    ORDER BY pr.data_aula DESC NULLS LAST, pr.numero_aula DESC NULLS LAST
+                    LIMIT 1
+                ) ultima ON TRUE
                 WHERE pd.professor_id = %s AND pd.ativo = true
                   AND (%s::uuid IS NULL OR t.polo_id = %s::uuid)
                   AND (%s::uuid IS NULL OR t.escola_id = %s::uuid)
@@ -1173,6 +1187,7 @@ class InMemoryProfessoresRepository:
         self.turmas: Dict[str, Dict[str, Any]] = {}
         self.alunos: Dict[str, Dict[str, Any]] = {}
         self.turma_alunos: List[Dict[str, Any]] = []
+        self.presencas: List[Dict[str, Any]] = []
         self.usuarios: Dict[str, Dict[str, Any]] = {}
         self.perfis: Dict[str, Dict[str, Any]] = {}
         self.polos: Dict[str, Dict[str, Any]] = {}
@@ -1679,15 +1694,31 @@ class InMemoryProfessoresRepository:
                 m for m in self.turma_alunos
                 if str(m.get("turma_id")) == turma_id and (m.get("status") or "ativo") == "ativo"
             ]
+            vinculos_turma = {
+                str(v["id"]) for v in self.professor_disciplinas
+                if str(v.get("professor_id")) == str(professor_id) and str(v.get("turma_id")) == turma_id
+            }
             for matricula in matriculas:
                 aluno_id = str(matricula["aluno_id"])
                 aluno = self.alunos.get(aluno_id, {})
                 usuario = self.usuarios.get(str(aluno.get("usuario_id")), {})
+                presencas = sorted(
+                    (
+                        pr for pr in self.presencas
+                        if str(pr.get("aluno_id")) == aluno_id and pr.get("presente")
+                        and str(pr.get("professor_disciplina_id")) in vinculos_turma
+                    ),
+                    key=lambda pr: (str(pr.get("data_aula") or ""), pr.get("numero_aula") or 0),
+                )
+                ultima = presencas[-1] if presencas else {}
                 rows.append({
                     **base, "aluno_id": aluno_id,
                     "aluno_nome": " ".join(filter(None, [usuario.get("nome"), usuario.get("sobrenome")])) or None,
                     "numero_matricula": aluno.get("numero_matricula"),
                     "aluno_email": usuario.get("email"),
+                    "aluno_ultimo_acesso": usuario.get("ultimo_login_em"),
+                    "ultima_presenca_data": ultima.get("data_aula"),
+                    "ultima_presenca_numero": ultima.get("numero_aula"),
                 })
             if not matriculas:
                 rows.append(base)
