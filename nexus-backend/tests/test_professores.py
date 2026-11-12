@@ -502,7 +502,10 @@ async def test_detalhe_docente_alunos_e_escopo(client: AsyncClient, repos):
     assert body["disciplinas"][0]["curso_nome"] == "Curso A"
     assert {t["id"] for t in body["turmas"]} == {turma_id, "turma-fora"}
     turma = next(t for t in body["turmas"] if t["id"] == turma_id)
-    assert turma["alunos"] == [{"id": "aluno-1", "nome": "Maria Silva", "numero_matricula": "123", "email": "maria@example.test"}]
+    assert turma["alunos"] == [{
+        "id": "aluno-1", "nome": "Maria Silva", "numero_matricula": "123", "email": "maria@example.test",
+        "ultimo_acesso": None, "ultima_presenca": None, "ultima_presenca_numero": None,
+    }]
 
     scoped = await client.get(f"/professores/{professor_id}/detalhe", headers={"Authorization": f"Bearer {_token('gestor-1')}"})
     assert scoped.status_code == 200, scoped.text
@@ -1301,7 +1304,9 @@ async def test_lotacao_com_turma_ativa_nao_pode_ser_removida(client: AsyncClient
 @pytest.mark.asyncio
 async def test_detalhe_mostra_ultimo_acesso_e_ultima_aula_presente(client: AsyncClient, repos):
     auth_repo, professores_repo, professor_id, disciplina_id, turma_id = _preparar_vinculo_turma(repos)
-    professores_repo.professor_disciplina_vinculos[professor_id] = [disciplina_id]
+    professores_repo.professor_disciplinas.append(
+        {"id": "cadastro-1", "professor_id": professor_id, "disciplina_id": disciplina_id, "turma_id": None}
+    )
     professores_repo.professor_disciplinas.append(
         {"id": "pd-1", "professor_id": professor_id, "disciplina_id": disciplina_id,
          "turma_id": turma_id, "ativo": True}
