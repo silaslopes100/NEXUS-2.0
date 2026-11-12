@@ -312,9 +312,9 @@ class PostgresPolosEscolasRepository:
         if perfil_nome:
             conds.append("lower(p.nome) = ANY(%s)")
             params.append(list(nomes_equivalentes(perfil_nome)))
-        if q:
-            conds.append("(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s OR lower(u.cpf) LIKE %s)")
-            like = f"%{q.lower()}%"
+        if q and q.strip():
+            conds.append("(lower(concat_ws(' ', u.nome, u.sobrenome)) LIKE %s OR lower(u.email) LIKE %s OR lower(u.cpf) LIKE %s)")
+            like = f"%{q.strip().lower()}%"
             params.extend([like, like, like])
         if polo_id:
             conds.append("(u.polo_id = %s OR u.polo_id IS NULL)" if incluir_sem_polo else "u.polo_id = %s")
@@ -340,7 +340,7 @@ class PostgresPolosEscolasRepository:
                 FROM usuarios u
                 JOIN perfis p ON p.id = u.perfil_id
                 {where}
-                ORDER BY u.nome ASC
+                ORDER BY u.nome ASC, u.id ASC
                 LIMIT %s OFFSET %s
                 """,
                 tuple(params + [limit, offset]),
@@ -1615,9 +1615,16 @@ class InMemoryPolosEscolasRepository:
         if perfil_nome:
             perfil_ids = {self.perfis[n] for n in nomes_equivalentes(perfil_nome) if n in self.perfis}
             items = [u for u in items if u.get("perfil_id") in perfil_ids]
-        if q:
-            ql = q.lower()
-            items = [u for u in items if ql in (u.get("nome", "") + u.get("email", "") + (u.get("cpf") or "")).lower()]
+        if q and q.strip():
+            ql = q.strip().lower()
+            items = [
+                u for u in items
+                if any(ql in value.lower() for value in (
+                    " ".join(filter(None, (u.get("nome"), u.get("sobrenome")))),
+                    u.get("email") or "",
+                    u.get("cpf") or "",
+                ))
+            ]
         if polo_id:
             items = [
                 u for u in items
@@ -1625,7 +1632,7 @@ class InMemoryPolosEscolasRepository:
             ]
         if escola_id:
             items = [u for u in items if str(u.get("escola_id")) == str(escola_id)]
-        items.sort(key=lambda x: x.get("nome", ""))
+        items.sort(key=lambda x: (x.get("nome") or "", str(x["id"])))
         return len(items), items[offset : offset + limit]
 
     # ---------- Polos ----------

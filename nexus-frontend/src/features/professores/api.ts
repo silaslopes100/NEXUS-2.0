@@ -3,6 +3,7 @@ import { polosEscolasApi } from '@/features/polos_escolas/api';
 import {
   Professor,
   ProfessorCreate,
+  ProfessorDetalhe,
   ProfessorConteudoItem,
   ProfessorConteudosResponse,
   ProfessorDisciplinaListResponse,
@@ -32,6 +33,11 @@ export const professoresApi = {
 
   obter: async (id: string): Promise<Professor> => {
     const { data } = await apiClient.get<Professor>(`/professores/${id}`);
+    return data;
+  },
+
+  detalhe: async (id: string): Promise<ProfessorDetalhe> => {
+    const { data } = await apiClient.get<ProfessorDetalhe>(`/professores/${id}/detalhe`);
     return data;
   },
 

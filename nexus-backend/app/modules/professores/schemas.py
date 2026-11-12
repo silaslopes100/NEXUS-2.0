@@ -67,6 +67,38 @@ class ProfessorResponse(BaseModel):
     atualizado_em: Optional[datetime] = None
 
 
+class ProfessorDetalheDisciplina(BaseModel):
+    id: str
+    nome: str
+    curso_id: Optional[str] = None
+    curso_nome: Optional[str] = None
+    carga_horaria: Optional[int] = None
+    qtd_aulas_prevista: Optional[int] = None
+
+
+class ProfessorDetalheAluno(BaseModel):
+    id: str
+    nome: Optional[str] = None
+    numero_matricula: Optional[str] = None
+    email: Optional[str] = None
+
+
+class ProfessorDetalheTurma(BaseModel):
+    id: str
+    nome: str
+    polo_id: Optional[str] = None
+    polo_nome: Optional[str] = None
+    escola_id: Optional[str] = None
+    escola_nome: Optional[str] = None
+    alunos: List[ProfessorDetalheAluno] = Field(default_factory=list)
+
+
+class ProfessorDetalheResponse(BaseModel):
+    professor: ProfessorResponse
+    disciplinas: List[ProfessorDetalheDisciplina]
+    turmas: List[ProfessorDetalheTurma]
+
+
 class ProfessorTurmaResumo(BaseModel):
     id: str
     nome: str

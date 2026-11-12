@@ -33,6 +33,7 @@ from app.modules.professores.schemas import (
     ProfessorConteudoItem,
     ProfessorConteudosResponse,
     ProfessorDisciplinaListResponse,
+    ProfessorDetalheResponse,
     ProfessorListResponse,
     ProfessorMaterialResumo,
     ProfessorResponse,
@@ -226,6 +227,24 @@ async def listar_vinculos_da_turma(
     service: ProfessoresService = Depends(get_professores_service),
 ):
     return service.listar_vinculos_turma(str(turma_id), current_user)
+
+
+@router.get(
+    "/{professor_id}/detalhe",
+    response_model=ProfessorDetalheResponse,
+    dependencies=[Depends(require_role(_PERFIS_LEITURA))],
+    summary="Detalhe de disciplinas e alunos do professor",
+)
+async def obter_detalhe_professor(
+    professor_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    service: ProfessoresService = Depends(get_professores_service),
+):
+    professor = service.get_professor(professor_id)
+    polo_id, escola_id = _escopo_usuario(current_user)
+    if (polo_id and professor.polo_id != polo_id) or (escola_id and professor.escola_id != escola_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
+    return service.get_detalhe(professor, polo_id, escola_id)
 
 
 @router.post(

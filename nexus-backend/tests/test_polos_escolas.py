@@ -372,6 +372,46 @@ async def test_filtro_de_perfil_encontra_nomes_equivalentes(client: AsyncClient,
 
 
 @pytest.mark.asyncio
+async def test_busca_secretario_por_sobrenome_fora_da_primeira_pagina(client: AsyncClient, repos, dois_polos):
+    auth_repo, _ = repos
+    polo_a, _, escola_a, _ = dois_polos
+    for index in range(201):
+        _criar_usuario(auth_repo, f"sec-{index:03}", "p-secescola", nome=f"Pessoa {index:03}")
+    _criar_usuario(auth_repo, "sec-desejado", "p-escola", nome="Zelia")
+    auth_repo.usuarios["sec-desejado"]["sobrenome"] = "Silva"
+    auth_repo.usuarios["sec-desejado"]["cpf"] = "99988877766"
+
+    primeira = await client.get(
+        "/usuarios-vinculaveis", params={"perfil": "secretario_escola", "limit": 200},
+        headers=_bearer("admin-1"),
+    )
+    assert primeira.json()["total"] == 202
+    assert "sec-desejado" not in {item["id"] for item in primeira.json()["items"]}
+
+    segunda = await client.get(
+        "/usuarios-vinculaveis", params={"perfil": "secretario_escola", "limit": 200, "offset": 200},
+        headers=_bearer("admin-1"),
+    )
+    assert "sec-desejado" in {item["id"] for item in segunda.json()["items"]}
+
+    for termo in ("Zelia Silva", "Silva", "sec-desejado@nexus.com.br", "99988877766"):
+        busca = await client.get(
+            "/usuarios-vinculaveis", params={"perfil": "secretario_escola", "q": termo},
+            headers=_bearer("admin-1"),
+        )
+        assert [item["id"] for item in busca.json()["items"]] == ["sec-desejado"]
+
+    vinculo = await client.put(
+        f"/escolas/{escola_a}", json={"secretario_usuario_id": "sec-desejado"},
+        headers=_bearer("admin-1"),
+    )
+    assert vinculo.status_code == 200, vinculo.text
+    assert vinculo.json()["secretario_id"] == "sec-desejado"
+    assert auth_repo.usuarios["sec-desejado"]["cpf"] == "99988877766"
+    assert auth_repo.usuarios["sec-desejado"]["polo_id"] == polo_a
+
+
+@pytest.mark.asyncio
 async def test_auditoria_postgres_aceita_datas_da_linha_do_banco(monkeypatch):
     executions = []
 

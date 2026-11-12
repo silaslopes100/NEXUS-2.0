@@ -32,10 +32,12 @@ interface PoloOption {
 interface UsuarioVinculavel {
   id: string;
   nome: string;
-  sobrenome?: string;
-  email?: string;
-  cpf?: string;
+  sobrenome?: string | null;
+  email?: string | null;
+  cpf?: string | null;
 }
+
+const USUARIOS_POR_PAGINA = 200;
 
 interface EscolaEditModalProps {
   escola: EscolaItem;
@@ -73,27 +75,51 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
   });
 
   const [usuarios, setUsuarios] = useState<UsuarioVinculavel[]>([]);
-  const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+  const [usuarioSelecionado, setUsuarioSelecionado] = useState<UsuarioVinculavel | null>(
+    escola.secretario_id
+      ? { id: escola.secretario_id, nome: escola.secretario_nome || '', email: escola.secretario_email, cpf: escola.secretario_cpf }
+      : null
+  );
+  const [buscaUsuario, setBuscaUsuario] = useState('');
+  const [offsetUsuarios, setOffsetUsuarios] = useState(0);
+  const [totalUsuarios, setTotalUsuarios] = useState(0);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(true);
+  const [erroUsuarios, setErroUsuarios] = useState('');
+  const [tentativaUsuarios, setTentativaUsuarios] = useState(0);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
+    let active = true;
     const fetchUsuarios = async () => {
-      setLoadingUsuarios(true);
       try {
         const resp = await polosEscolasApi.listarUsuariosVinculaveis({
           perfil: 'secretario_escola',
-          limit: 200,
+          q: buscaUsuario.trim() || undefined,
+          limit: USUARIOS_POR_PAGINA,
+          offset: offsetUsuarios,
         });
-        setUsuarios(resp.items || []);
+        if (active) {
+          setUsuarios(resp.items);
+          setTotalUsuarios(resp.total);
+        }
       } catch (err) {
-        console.error('Erro ao listar usuários:', err);
+        if (active) {
+          setUsuarios([]);
+          setErroUsuarios('Não foi possível carregar os usuários. Tente novamente.');
+        }
       } finally {
-        setLoadingUsuarios(false);
+        if (active) setLoadingUsuarios(false);
       }
     };
-    fetchUsuarios();
-  }, []);
+    setLoadingUsuarios(true);
+    setErroUsuarios('');
+    const timer = window.setTimeout(() => void fetchUsuarios(), 300);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [buscaUsuario, offsetUsuarios, tentativaUsuarios]);
 
   const handleChange = (field: string, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -137,7 +163,7 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">Editar Escola</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
@@ -213,29 +239,64 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
                 <label className="mb-1 block text-sm font-medium text-slate-300">
                   Vincular Usuário Existente
                 </label>
+                <input
+                  type="search"
+                  aria-label="Buscar usuário para secretário"
+                  placeholder="Buscar por nome, sobrenome, e-mail ou CPF"
+                  value={buscaUsuario}
+                  onChange={(e) => {
+                    setBuscaUsuario(e.target.value);
+                    setOffsetUsuarios(0);
+                  }}
+                  className="mb-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                />
                 <select
                   value={form.secretario_usuario_id}
                   onChange={(e) => {
                     const userId = e.target.value;
                     const user = usuarios.find((u) => u.id === userId);
+                    setUsuarioSelecionado(user || null);
                     setForm((prev) => ({
                       ...prev,
                       secretario_usuario_id: userId,
-                      secretario_nome: user?.nome || prev.secretario_nome,
-                      secretario_email: user?.email || prev.secretario_email,
+                      secretario_nome: user ? user.nome : escola.secretario_nome || '',
+                      secretario_email: user ? user.email || '' : escola.secretario_email || '',
+                      secretario_cpf: user ? user.cpf || '' : escola.secretario_cpf || '',
+                      secretario_senha: '',
                     }));
                   }}
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   disabled={loadingUsuarios}
                 >
-                  <option value="">Selecione um usuário (secretario_escola)</option>
+                  <option value="">Selecione um usuário com perfil de escola</option>
+                  {usuarioSelecionado && !usuarios.some((u) => u.id === usuarioSelecionado.id) && (
+                    <option value={usuarioSelecionado.id}>
+                      {usuarioSelecionado.nome} {usuarioSelecionado.sobrenome} ({usuarioSelecionado.email || 'sem e-mail'})
+                    </option>
+                  )}
                   {usuarios.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.nome} {user.sobrenome} ({user.email})
+                      {user.nome} {user.sobrenome} ({user.email || 'sem e-mail'})
                     </option>
                   ))}
                 </select>
                 {loadingUsuarios && <p className="mt-1 text-xs text-slate-500">Carregando usuários...</p>}
+                {erroUsuarios ? (
+                  <p role="alert" className="mt-1 text-xs text-red-300">
+                    {erroUsuarios}{' '}
+                    <button type="button" className="underline" onClick={() => setTentativaUsuarios((valor) => valor + 1)}>
+                      Tentar novamente
+                    </button>
+                  </p>
+                ) : !loadingUsuarios && (
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-400">
+                    <span>{totalUsuarios ? `${offsetUsuarios + 1}–${Math.min(offsetUsuarios + USUARIOS_POR_PAGINA, totalUsuarios)} de ${totalUsuarios}` : 'Nenhum usuário encontrado.'}</span>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={offsetUsuarios === 0} onClick={() => setOffsetUsuarios((valor) => Math.max(0, valor - USUARIOS_POR_PAGINA))} className="disabled:opacity-40">Anterior</button>
+                      <button type="button" disabled={offsetUsuarios + USUARIOS_POR_PAGINA >= totalUsuarios} onClick={() => setOffsetUsuarios((valor) => valor + USUARIOS_POR_PAGINA)} className="disabled:opacity-40">Próxima</button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

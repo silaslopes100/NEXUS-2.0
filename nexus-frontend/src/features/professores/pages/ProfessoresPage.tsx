@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Edit2,
+  Eye,
   Filter,
   GraduationCap,
   Loader2,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { ProfessorModal } from '@/features/professores/components/ProfessorModal';
+import { ProfessorDetalheModal } from '@/features/professores/components/ProfessorDetalheModal';
 import { Professor, UnidadeOption } from '@/types/professor';
 
 const PAGE_SIZE = 20;
@@ -63,6 +65,7 @@ export const ProfessoresPage: React.FC = () => {
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProfessor, setEditingProfessor] = useState<Professor | null>(null);
+  const [detalheProfessorId, setDetalheProfessorId] = useState<string | null>(null);
 
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
@@ -391,6 +394,14 @@ export const ProfessoresPage: React.FC = () => {
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={() => setDetalheProfessorId(p.id)}
+                          className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-nexus-yellow border border-slate-800 transition-colors"
+                          title="Ver detalhe do professor"
+                          aria-label={`Ver detalhe de ${p.nome || 'professor'}`}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => handleOpenEdit(p)}
                           className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-blue-400 border border-slate-800 transition-colors"
                           title="Editar Professor"
@@ -452,6 +463,9 @@ export const ProfessoresPage: React.FC = () => {
             void loadData();
           }}
         />
+      )}
+      {detalheProfessorId && (
+        <ProfessorDetalheModal professorId={detalheProfessorId} onClose={() => setDetalheProfessorId(null)} />
       )}
     </div>
   );

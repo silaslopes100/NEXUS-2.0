@@ -305,7 +305,7 @@ async def test_criar_e_listar_professor(client: AsyncClient):
     assert criado["email"] == "ana.souza@nexus.com.br"
     assert criado["polo_nome"] == "Polo Central"
     assert criado["materias"] == ["Matemática", "Física"]
-    assert criado["horas_totais"] == 80
+    assert criado["horas_totais"] == 0
     assert criado["status"] == "ativo"
 
     l_res = await client.get(
@@ -393,7 +393,7 @@ async def test_atualizar_e_desativar_professor(client: AsyncClient):
     assert u_res.status_code == 200
     atualizado = u_res.json()
     assert atualizado["materias"] == ["Química"]
-    assert atualizado["horas_totais"] == 120
+    assert atualizado["horas_totais"] == 0
     assert atualizado["status"] == "inativo"
 
     d_res = await client.delete(
@@ -408,6 +408,95 @@ async def test_atualizar_e_desativar_professor(client: AsyncClient):
     )
     assert l_res.status_code == 200
     assert l_res.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_totais_docente_seguem_disciplinas_do_cadastro(client: AsyncClient, repos):
+    _, repo = repos
+    disciplina_a, disciplina_b = str(uuid.uuid4()), str(uuid.uuid4())
+    repo.disciplinas[disciplina_a] = {
+        "id": disciplina_a, "nome": "Matemática", "carga_horaria": 40, "qtd_aulas_prevista": 10,
+    }
+    repo.disciplinas[disciplina_b] = {
+        "id": disciplina_b, "nome": "Física", "carga_horaria": None, "qtd_aulas_prevista": 5,
+    }
+    headers = {"Authorization": f"Bearer {_token('admin-1')}"}
+    criado = await client.post(
+        "/professores/", json=_payload(disciplina_ids=[disciplina_a, disciplina_a, disciplina_b]),
+        headers=headers,
+    )
+    assert criado.status_code == 201, criado.text
+    professor_id = criado.json()["id"]
+    assert (criado.json()["horas_totais"], criado.json()["quantidade_aulas"]) == (40, 15)
+
+    repo.disciplinas[disciplina_a].update(carga_horaria=60, qtd_aulas_prevista=12)
+    resposta = await client.get(f"/professores/{professor_id}", headers=headers)
+    assert (resposta.json()["horas_totais"], resposta.json()["quantidade_aulas"]) == (60, 17)
+    lista = await client.get("/professores/", headers=headers)
+    assert (lista.json()["items"][0]["horas_totais"], lista.json()["items"][0]["quantidade_aulas"]) == (60, 17)
+
+    atualizado = await client.put(
+        f"/professores/{professor_id}",
+        json={"disciplina_ids": [], "horas_totais": 999, "quantidade_aulas": 999},
+        headers=headers,
+    )
+    assert atualizado.status_code == 200, atualizado.text
+    assert (atualizado.json()["horas_totais"], atualizado.json()["quantidade_aulas"]) == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_detalhe_docente_alunos_e_escopo(client: AsyncClient, repos):
+    auth, repo, professor_id, disciplina_id, turma_id = _preparar_vinculo_turma(
+        repos, escola_id="escola-1"
+    )
+    repo.escolas["escola-1"] = {"id": "escola-1", "nome": "Escola A"}
+    repo.cursos["curso-1"] = {"id": "curso-1", "nome": "Curso A"}
+    repo.disciplinas[disciplina_id].update(carga_horaria=40, qtd_aulas_prevista=10)
+    repo.professor_disciplina_vinculos[professor_id] = [disciplina_id]
+    repo.professor_disciplinas.extend([
+        {"id": "v-1", "professor_id": professor_id, "disciplina_id": disciplina_id, "turma_id": turma_id, "ativo": True},
+        {"id": "v-2", "professor_id": professor_id, "disciplina_id": disciplina_id, "turma_id": "turma-fora", "ativo": True},
+        {"id": "v-3", "professor_id": professor_id, "disciplina_id": disciplina_id, "turma_id": "turma-arquivada", "ativo": False},
+        {"id": "v-4", "professor_id": professor_id, "disciplina_id": "nao-cadastrada", "turma_id": "turma-sem-disciplina", "ativo": True},
+    ])
+    repo.turmas.update({
+        "turma-fora": {"id": "turma-fora", "nome": "Fora", "polo_id": "polo-2", "escola_id": "escola-2"},
+        "turma-arquivada": {"id": "turma-arquivada", "nome": "Arquivada"},
+        "turma-sem-disciplina": {"id": "turma-sem-disciplina", "nome": "Sem disciplina"},
+    })
+    auth.usuarios["aluno-usuario"] = {"id": "aluno-usuario", "nome": "Maria", "sobrenome": "Silva", "email": "maria@example.test"}
+    repo.alunos["aluno-1"] = {"id": "aluno-1", "usuario_id": "aluno-usuario", "numero_matricula": "123"}
+    repo.turma_alunos.extend([
+        {"turma_id": turma_id, "aluno_id": "aluno-1", "status": "ativo"},
+        {"turma_id": turma_id, "aluno_id": "aluno-1", "status": "ativo"},
+        {"turma_id": turma_id, "aluno_id": "inativo", "status": "inativo"},
+        {"turma_id": "turma-fora", "aluno_id": "aluno-1", "status": "ativo"},
+    ])
+    admin = await client.get(f"/professores/{professor_id}/detalhe", headers={"Authorization": f"Bearer {_token('admin-1')}"})
+    assert admin.status_code == 200, admin.text
+    body = admin.json()
+    assert body["professor"]["horas_totais"] == 40
+    assert body["disciplinas"][0]["curso_nome"] == "Curso A"
+    assert {t["id"] for t in body["turmas"]} == {turma_id, "turma-fora"}
+    turma = next(t for t in body["turmas"] if t["id"] == turma_id)
+    assert turma["alunos"] == [{"id": "aluno-1", "nome": "Maria Silva", "numero_matricula": "123", "email": "maria@example.test"}]
+
+    scoped = await client.get(f"/professores/{professor_id}/detalhe", headers={"Authorization": f"Bearer {_token('gestor-1')}"})
+    assert scoped.status_code == 200, scoped.text
+    assert [t["id"] for t in scoped.json()["turmas"]] == [turma_id]
+    auth.usuarios["escola-gestora"] = {
+        "id": "escola-gestora", "nome": "Gestora", "status": "ativo", "perfil_id": "p-escola",
+        "polo_id": "polo-1", "escola_id": "escola-1",
+    }
+    escola = await client.get(
+        f"/professores/{professor_id}/detalhe",
+        headers={"Authorization": f"Bearer {_token('escola-gestora')}"},
+    )
+    assert escola.status_code == 200, escola.text
+    assert [t["id"] for t in escola.json()["turmas"]] == [turma_id]
+    auth.usuarios["gestor-1"]["polo_id"] = "polo-2"
+    negado = await client.get(f"/professores/{professor_id}/detalhe", headers={"Authorization": f"Bearer {_token('gestor-1')}"})
+    assert negado.status_code == 404
 
 
 @pytest.mark.asyncio

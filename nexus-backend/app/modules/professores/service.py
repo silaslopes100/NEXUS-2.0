@@ -16,6 +16,7 @@ from app.modules.professores.schemas import (
     ProfessorCreateRequest,
     ProfessorConteudosResponse,
     ProfessorDisciplinaListResponse,
+    ProfessorDetalheResponse,
     ProfessorMaterialResumo,
     ProfessorConteudoItem,
     ProfessorListResponse,
@@ -98,6 +99,33 @@ class ProfessoresService:
         if not row:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
         return self._build_response(row)
+
+    def get_detalhe(
+        self, professor: ProfessorResponse, polo_id: Optional[str], escola_id: Optional[str]
+    ) -> ProfessorDetalheResponse:
+        disciplinas = self.repo.list_disciplinas_cadastro(professor.id)
+        turmas: Dict[str, Dict[str, Any]] = {}
+        alunos_por_turma: Dict[str, set[str]] = {}
+        for row in self.repo.list_turmas_alunos(professor.id, polo_id, escola_id):
+            turma_id = str(row["turma_id"])
+            turma = turmas.setdefault(turma_id, {
+                "id": turma_id,
+                "nome": row["turma_nome"],
+                "polo_id": row.get("polo_id"),
+                "polo_nome": row.get("polo_nome"),
+                "escola_id": row.get("escola_id"),
+                "escola_nome": row.get("escola_nome"),
+                "alunos": [],
+            })
+            aluno_id = row.get("aluno_id")
+            vistos = alunos_por_turma.setdefault(turma_id, set())
+            if aluno_id and str(aluno_id) not in vistos:
+                vistos.add(str(aluno_id))
+                turma["alunos"].append({
+                    "id": str(aluno_id), "nome": row.get("aluno_nome"),
+                    "numero_matricula": row.get("numero_matricula"), "email": row.get("aluno_email"),
+                })
+        return ProfessorDetalheResponse(professor=professor, disciplinas=disciplinas, turmas=list(turmas.values()))
 
     def list_minhas_disciplinas_turmas(self, usuario_id: str) -> ProfessorDisciplinaListResponse:
         rows = self.repo.list_disciplinas_turmas_by_usuario(usuario_id)
@@ -471,10 +499,15 @@ class ProfessoresService:
             # completa-o em vez de duplicar.
             professor_id = str(existente["id"])
             self._validar_disciplinas(dados.disciplina_ids)
-            self.repo.update_professor(professor_id, {**dados.model_dump(), "status": "ativo"})
+            self.repo.update_professor(
+                professor_id,
+                {**dados.model_dump(exclude={"horas_totais", "quantidade_aulas"}), "status": "ativo"},
+            )
         else:
             self._validar_disciplinas(dados.disciplina_ids)
-            professor_id = self.repo.create_professor(dados.model_dump())
+            professor_id = self.repo.create_professor(
+                dados.model_dump(exclude={"horas_totais", "quantidade_aulas"})
+            )
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="professor_cadastrado",
@@ -498,7 +531,9 @@ class ProfessoresService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
 
         update_dict: Dict[str, Any] = {
-            k: v for k, v in dados.model_dump(exclude_unset=True).items() if v is not None
+            k: v for k, v in dados.model_dump(
+                exclude_unset=True, exclude={"horas_totais", "quantidade_aulas"}
+            ).items() if v is not None
         }
 
         novo_usuario_id = update_dict.get("usuario_id")

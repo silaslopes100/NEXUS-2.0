@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { GraduationCap, Loader2, Search, UserCheck, UserPlus, X } from 'lucide-react';
 import { adminApi } from '@/features/admin/api';
-import { cursosApi, Disciplina } from '@/features/cursos/api';
+import { cursosApi, Curso, Disciplina } from '@/features/cursos/api';
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { UsuarioAdmin } from '@/types/admin';
 import { Professor, UnidadeOption } from '@/types/professor';
@@ -28,6 +28,7 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
   const [erro, setErro] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
+  const [cursos, setCursos] = useState<Curso[]>([]);
   const [carregandoDisciplinas, setCarregandoDisciplinas] = useState(true);
   const [erroDisciplinas, setErroDisciplinas] = useState('');
   const [buscaDisciplina, setBuscaDisciplina] = useState('');
@@ -57,8 +58,6 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
       return materias;
     }, []),
     data_inicio: professor?.data_inicio ? professor.data_inicio.slice(0, 10) : '',
-    quantidade_aulas: professor?.quantidade_aulas ?? 0,
-    horas_totais: professor?.horas_totais ?? 0,
     valor_hora_aula: professor?.valor_hora_aula ?? '',
     pix: professor?.pix || '',
     conteudo_programatico: professor?.conteudo_programatico || '',
@@ -67,23 +66,15 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
   const [escolas, setEscolas] = useState<UnidadeOption[]>([]);
 
   useEffect(() => {
-    if (!disciplinas.length || form.disciplina_ids.length || !form.materias.length) return;
-    const materiasLegadas = new Set(form.materias.map(normalizarMateria));
-    const idsCorrespondentes = [...materiasLegadas]
-      .map((materia) => disciplinas.find((disciplina) => normalizarMateria(disciplina.nome) === materia)?.id)
-      .filter((id): id is string => Boolean(id));
-    if (idsCorrespondentes.length) {
-      setForm((atual) => ({ ...atual, disciplina_ids: [...new Set(idsCorrespondentes)] }));
-    }
-  }, [disciplinas, form.disciplina_ids.length, form.materias]);
-
-  useEffect(() => {
     let active = true;
     setCarregandoDisciplinas(true);
     setErroDisciplinas('');
-    cursosApi.listarDisciplinas()
-      .then((itens) => {
-        if (active) setDisciplinas(itens);
+    Promise.all([cursosApi.listarDisciplinas(), cursosApi.listar()])
+      .then(([itens, cursosDisponiveis]) => {
+        if (active) {
+          setDisciplinas(itens);
+          setCursos(cursosDisponiveis);
+        }
       })
       .catch((err: unknown) => {
         if (active) {
@@ -183,8 +174,6 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
         materias: form.materias,
         disciplina_ids: form.disciplina_ids,
         data_inicio: form.data_inicio || null,
-        quantidade_aulas: Number(form.quantidade_aulas) || 0,
-        horas_totais: Number(form.horas_totais) || 0,
         valor_hora_aula: form.valor_hora_aula === '' ? null : Number(form.valor_hora_aula),
         pix: form.pix.trim() || null,
         conteudo_programatico: form.conteudo_programatico.trim() || null,
@@ -205,39 +194,46 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
   };
 
   const opcoesDisciplinas = useMemo(() => {
-    const opcoesPorNome = new Map<string, { id: string | null; nome: string; legado: boolean }>();
-    for (const disciplina of disciplinas) {
-      const nome = disciplina.nome.trim();
-      if (!nome) continue;
-      const chave = normalizarMateria(nome);
-      if (!opcoesPorNome.has(chave)) {
-        opcoesPorNome.set(chave, { id: disciplina.id, nome, legado: false });
-      }
-    }
+    const opcoes: { id: string | null; nome: string; legado: boolean; curso: string }[] =
+      disciplinas.filter((disciplina) => disciplina.nome.trim()).map((disciplina) => ({
+        id: disciplina.id,
+        nome: disciplina.nome.trim(),
+        legado: false,
+        curso: cursos.find((curso) => curso.id === disciplina.curso_id)?.nome || 'Sem curso',
+      }));
+    const nomes = new Set(opcoes.map((opcao) => normalizarMateria(opcao.nome)));
     for (const materia of form.materias) {
       const nome = materia.trim();
       const chave = normalizarMateria(nome);
-      if (nome && !opcoesPorNome.has(chave)) {
-        opcoesPorNome.set(chave, { id: null, nome, legado: true });
+      if (nome && !nomes.has(chave)) {
+        opcoes.push({ id: null, nome, legado: true, curso: '' });
+        nomes.add(chave);
       }
     }
-    return [...opcoesPorNome.values()]
+    return opcoes
       .filter(({ nome }) => normalizarMateria(nome).includes(normalizarMateria(buscaDisciplina)))
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  }, [disciplinas, form.materias, buscaDisciplina]);
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.curso.localeCompare(b.curso, 'pt-BR'));
+  }, [disciplinas, cursos, form.materias, buscaDisciplina]);
 
   const alternarDisciplina = (id: string | null, nome: string, selecionada: boolean) => {
-    setForm((atual) => ({
-      ...atual,
-      disciplina_ids: id
+    setForm((atual) => {
+      const disciplinaIds = id
         ? selecionada
           ? [...new Set([...atual.disciplina_ids, id])]
           : atual.disciplina_ids.filter((disciplinaId) => disciplinaId !== id)
-        : atual.disciplina_ids,
-      materias: selecionada
-        ? [...atual.materias.filter((materia) => normalizarMateria(materia) !== normalizarMateria(nome)), nome]
-        : atual.materias.filter((materia) => normalizarMateria(materia) !== normalizarMateria(nome)),
-    }));
+        : atual.disciplina_ids;
+      const manterNome = selecionada || disciplinas.some(
+        (disciplina) => disciplinaIds.includes(disciplina.id) && normalizarMateria(disciplina.nome) === normalizarMateria(nome)
+      );
+      return {
+        ...atual,
+        disciplina_ids: disciplinaIds,
+        materias: [
+          ...atual.materias.filter((materia) => normalizarMateria(materia) !== normalizarMateria(nome)),
+          ...(manterNome ? [nome] : []),
+        ],
+      };
+    });
   };
 
   return (
@@ -465,21 +461,23 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
                   </button>
                 </div>
               ) : opcoesDisciplinas.length ? (
-                opcoesDisciplinas.map(({ id, nome, legado }) => (
+                opcoesDisciplinas.map(({ id, nome, legado, curso }) => (
                   <label
                     key={id || nome.toLocaleLowerCase()}
                     className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
                   >
                     <input
                       type="checkbox"
-                      checked={form.disciplina_ids.includes(id || '') || form.materias.some(
+                      checked={id ? form.disciplina_ids.includes(id) : form.materias.some(
                         (materia) => normalizarMateria(materia) === normalizarMateria(nome)
                       )}
                       onChange={(event) => alternarDisciplina(id, nome, event.target.checked)}
                       className="accent-yellow-400"
                     />
                     <span>{nome}</span>
-                    {legado && <span className="text-[10px] text-slate-500">já vinculada</span>}
+                    <span className="text-[10px] text-slate-500">
+                      {legado ? 'nome antigo, não conta no total' : curso}
+                    </span>
                   </label>
                 ))
               ) : (
@@ -491,7 +489,7 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
               )}
             </div>
             <p className="text-[11px] text-slate-500">
-              {form.materias.length} disciplina{form.materias.length === 1 ? '' : 's'} selecionada{form.materias.length === 1 ? '' : 's'}.
+              {form.disciplina_ids.length} disciplina{form.disciplina_ids.length === 1 ? '' : 's'} vinculada{form.disciplina_ids.length === 1 ? '' : 's'}.
             </p>
           </div>
 
@@ -506,26 +504,9 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
                 className={inputCls}
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300">Quantidade de aulas</label>
-              <input
-                type="number"
-                min={0}
-                value={form.quantidade_aulas}
-                onChange={(e) => setForm({ ...form, quantidade_aulas: Number(e.target.value) })}
-                className={inputCls}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300">Horas totais</label>
-              <input
-                type="number"
-                min={0}
-                value={form.horas_totais}
-                onChange={(e) => setForm({ ...form, horas_totais: Number(e.target.value) })}
-                className={inputCls}
-              />
-            </div>
+            <p className="text-xs text-slate-400 sm:col-span-2 self-center">
+              A carga horária e as aulas previstas são calculadas pelas disciplinas vinculadas.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -92,6 +92,12 @@ class ProfessoresRepositoryInterface(Protocol):
 
     def get_professor(self, professor_id: str) -> Optional[Dict[str, Any]]: ...
 
+    def list_disciplinas_cadastro(self, professor_id: str) -> List[Dict[str, Any]]: ...
+
+    def list_turmas_alunos(
+        self, professor_id: str, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]: ...
+
     def get_professor_by_usuario_id(self, usuario_id: str) -> Optional[Dict[str, Any]]: ...
 
     def get_usuario_by_id(self, usuario_id: str) -> Optional[Dict[str, Any]]: ...
@@ -707,6 +713,53 @@ class PostgresProfessoresRepository:
             row = cur.fetchone()
             return dict(row) if row else None
 
+    def list_disciplinas_cadastro(self, professor_id: str) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT d.id::text AS id, d.nome, d.curso_id::text AS curso_id,
+                       c.nome AS curso_nome, d.carga_horaria, d.qtd_aulas_prevista
+                FROM professor_disciplina_vinculos v
+                JOIN disciplinas d ON d.id = v.disciplina_id
+                LEFT JOIN cursos c ON c.id = d.curso_id
+                WHERE v.professor_id = %s
+                ORDER BY d.nome, d.id
+                """,
+                (str(professor_id),),
+            )
+            return [dict(row) for row in cur.fetchall()]
+
+    def list_turmas_alunos(
+        self, professor_id: str, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT t.id::text AS turma_id, t.nome AS turma_nome,
+                       t.polo_id::text AS polo_id, p.nome AS polo_nome,
+                       t.escola_id::text AS escola_id, e.nome AS escola_nome,
+                       a.id::text AS aluno_id,
+                       NULLIF(trim(concat(u.nome, ' ', u.sobrenome)), '') AS aluno_nome,
+                       a.numero_matricula, u.email AS aluno_email
+                FROM professor_disciplinas pd
+                JOIN professor_disciplina_vinculos v
+                  ON v.professor_id = pd.professor_id AND v.disciplina_id = pd.disciplina_id
+                JOIN turmas t ON t.id = pd.turma_id
+                LEFT JOIN polos p ON p.id = t.polo_id
+                LEFT JOIN escolas e ON e.id = t.escola_id
+                LEFT JOIN turma_alunos ta ON ta.turma_id = t.id
+                  AND COALESCE(ta.status, 'ativo') = 'ativo'
+                LEFT JOIN alunos a ON a.id = ta.aluno_id
+                LEFT JOIN usuarios u ON u.id = a.usuario_id
+                WHERE pd.professor_id = %s AND pd.ativo = true
+                  AND (%s::uuid IS NULL OR t.polo_id = %s::uuid)
+                  AND (%s::uuid IS NULL OR t.escola_id = %s::uuid)
+                ORDER BY polo_nome, escola_nome, turma_nome, aluno_nome, aluno_id
+                """,
+                (str(professor_id), polo_id, polo_id, escola_id, escola_id),
+            )
+            return [dict(row) for row in cur.fetchall()]
+
     def get_professor_by_usuario_id(self, usuario_id: str) -> Optional[Dict[str, Any]]:
         with get_db_cursor() as cur:
             cur.execute(f"{_SELECT_BASE} WHERE prof.usuario_id = %s LIMIT 1", (str(usuario_id),))
@@ -863,6 +916,8 @@ class InMemoryProfessoresRepository:
         self.disciplinas: Dict[str, Dict[str, Any]] = {}
         self.cursos: Dict[str, Dict[str, Any]] = {}
         self.turmas: Dict[str, Dict[str, Any]] = {}
+        self.alunos: Dict[str, Dict[str, Any]] = {}
+        self.turma_alunos: List[Dict[str, Any]] = []
         self.usuarios: Dict[str, Dict[str, Any]] = {}
         self.perfis: Dict[str, Dict[str, Any]] = {}
         self.polos: Dict[str, Dict[str, Any]] = {}
@@ -1246,9 +1301,14 @@ class InMemoryProfessoresRepository:
         usuario = self.usuarios.get(str(row.get("usuario_id")), {})
         polo = self.polos.get(str(row.get("polo_id")), {}) if row.get("polo_id") else {}
         escola = self.escolas.get(str(row.get("escola_id")), {}) if row.get("escola_id") else {}
+        disciplina_ids = list(dict.fromkeys(self.professor_disciplina_vinculos.get(str(row.get("id")), [])))
+        disciplinas = [self.disciplinas[item] for item in disciplina_ids if item in self.disciplinas]
         return {
             **row,
-            "disciplina_ids": list(self.professor_disciplina_vinculos.get(str(row.get("id")), [])),
+            "disciplina_ids": disciplina_ids,
+            "disciplina_nomes": [d.get("nome") for d in disciplinas if d.get("nome")],
+            "horas_totais": sum(d.get("carga_horaria") or 0 for d in disciplinas),
+            "quantidade_aulas": sum(d.get("qtd_aulas_prevista") or 0 for d in disciplinas),
             "nome": usuario.get("nome"),
             "email": usuario.get("email"),
             "polo_nome": polo.get("nome"),
@@ -1290,6 +1350,58 @@ class InMemoryProfessoresRepository:
         row = self.professores.get(str(professor_id))
         return self._join(row) if row else None
 
+    def list_disciplinas_cadastro(self, professor_id: str) -> List[Dict[str, Any]]:
+        rows = []
+        for disciplina_id in dict.fromkeys(self.professor_disciplina_vinculos.get(str(professor_id), [])):
+            disciplina = self.disciplinas.get(str(disciplina_id))
+            if not disciplina:
+                continue
+            curso = self.cursos.get(str(disciplina.get("curso_id")), {})
+            rows.append({**disciplina, "id": str(disciplina_id), "curso_nome": curso.get("nome")})
+        return sorted(rows, key=lambda row: (row.get("nome") or "", row["id"]))
+
+    def list_turmas_alunos(
+        self, professor_id: str, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        disciplina_ids = set(self.professor_disciplina_vinculos.get(str(professor_id), []))
+        turma_ids = {
+            str(v["turma_id"]) for v in self.professor_disciplinas
+            if str(v.get("professor_id")) == str(professor_id)
+            and str(v.get("disciplina_id")) in disciplina_ids and v.get("ativo", True)
+            and v.get("turma_id")
+        }
+        rows = []
+        for turma_id in sorted(turma_ids):
+            turma = self.turmas.get(turma_id)
+            if not turma or (polo_id and str(turma.get("polo_id")) != str(polo_id)):
+                continue
+            if escola_id and str(turma.get("escola_id")) != str(escola_id):
+                continue
+            base = {
+                "turma_id": turma_id, "turma_nome": turma.get("nome"),
+                "polo_id": turma.get("polo_id"),
+                "polo_nome": self.polos.get(str(turma.get("polo_id")), {}).get("nome"),
+                "escola_id": turma.get("escola_id"),
+                "escola_nome": self.escolas.get(str(turma.get("escola_id")), {}).get("nome"),
+            }
+            matriculas = [
+                m for m in self.turma_alunos
+                if str(m.get("turma_id")) == turma_id and (m.get("status") or "ativo") == "ativo"
+            ]
+            for matricula in matriculas:
+                aluno_id = str(matricula["aluno_id"])
+                aluno = self.alunos.get(aluno_id, {})
+                usuario = self.usuarios.get(str(aluno.get("usuario_id")), {})
+                rows.append({
+                    **base, "aluno_id": aluno_id,
+                    "aluno_nome": " ".join(filter(None, [usuario.get("nome"), usuario.get("sobrenome")])) or None,
+                    "numero_matricula": aluno.get("numero_matricula"),
+                    "aluno_email": usuario.get("email"),
+                })
+            if not matriculas:
+                rows.append(base)
+        return rows
+
     def get_professor_by_usuario_id(self, usuario_id: str) -> Optional[Dict[str, Any]]:
         for row in self.professores.values():
             if str(row.get("usuario_id")) == str(usuario_id):
@@ -1323,7 +1435,9 @@ class InMemoryProfessoresRepository:
     def update_professor(self, professor_id: str, data: Dict[str, Any]) -> None:
         row = self.professores.get(str(professor_id))
         if row:
-            row.update({key: value for key, value in data.items() if key != "disciplina_ids"})
+            row.update({key: value for key, value in data.items() if key not in (
+                "disciplina_ids", "horas_totais", "quantidade_aulas"
+            )})
             if "disciplina_ids" in data:
                 self.professor_disciplina_vinculos[str(professor_id)] = list(dict.fromkeys(
                     str(item) for item in (data.get("disciplina_ids") or [])

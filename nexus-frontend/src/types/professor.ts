@@ -27,6 +27,32 @@ export interface ProfessorListResponse {
   offset: number;
 }
 
+export interface ProfessorDetalhe {
+  professor: Professor;
+  disciplinas: {
+    id: string;
+    nome: string;
+    curso_id?: string | null;
+    curso_nome?: string | null;
+    carga_horaria?: number | null;
+    qtd_aulas_prevista?: number | null;
+  }[];
+  turmas: {
+    id: string;
+    nome: string;
+    polo_id?: string | null;
+    polo_nome?: string | null;
+    escola_id?: string | null;
+    escola_nome?: string | null;
+    alunos: {
+      id: string;
+      nome?: string | null;
+      numero_matricula?: string | null;
+      email?: string | null;
+    }[];
+  }[];
+}
+
 export interface ProfessorTurmaResumo {
   id: string;
   nome: string;
