@@ -112,7 +112,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'Matrículas EAD',
+          title: 'EAD',
           path: '/admin/ead',
           icon: Laptop,
           isPlaceholder: true,
