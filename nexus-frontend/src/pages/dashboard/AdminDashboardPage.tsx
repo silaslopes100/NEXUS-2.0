@@ -12,13 +12,36 @@ import {
   Activity,
   KeyRound,
   ArrowUpRight,
+  ClipboardList,
+  AlertTriangle,
+  ChevronRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { AtividadeDocente, aulasApi, dataLocalMenosDias } from '@/features/aulas/api';
+import { formatarData } from '@/features/turmas/api';
+
+const DIAS_ATIVIDADE = 30;
+const DIAS_SEM_REGISTRO = 14;
 
 export const AdminDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
   const [metrics, setMetrics] = useState<AdminDashboardMetrics | null>(null);
   const [metricsError, setMetricsError] = useState(false);
+  const [atividade, setAtividade] = useState<AtividadeDocente | null>(null);
+  const [atividadeErro, setAtividadeErro] = useState(false);
+
+  useEffect(() => {
+    let ativo = true;
+    aulasApi
+      .atividade(DIAS_ATIVIDADE, DIAS_SEM_REGISTRO)
+      .then((dados) => ativo && setAtividade(dados))
+      .catch(() => ativo && setAtividadeErro(true));
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const inicioPeriodo = dataLocalMenosDias(DIAS_ATIVIDADE);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,6 +70,7 @@ export const AdminDashboardPage: React.FC = () => {
       icon: Users,
       change: metricsError ? 'Dados indisponíveis' : 'Alunos ativos / matrículas EAD migradas',
       color: 'text-blue-400',
+      to: '/admin/alunos',
     },
     {
       label: 'Polos / Escolas Ativas',
@@ -54,6 +78,7 @@ export const AdminDashboardPage: React.FC = () => {
       icon: Building2,
       change: metricsError ? 'Dados indisponíveis' : 'Polos ativos / escolas ativas',
       color: 'text-nexus-yellow',
+      to: '/admin/polos-escolas',
     },
     {
       label: 'Professores / Certificados',
@@ -61,6 +86,7 @@ export const AdminDashboardPage: React.FC = () => {
       icon: GraduationCap,
       change: metricsError ? 'Dados indisponíveis' : 'Professores ativos / certificados emitidos',
       color: 'text-emerald-400',
+      to: '/admin/professores',
     },
     {
       label: 'Licenças em Estoque',
@@ -68,6 +94,19 @@ export const AdminDashboardPage: React.FC = () => {
       icon: CreditCard,
       change: metricsError ? 'Dados indisponíveis' : 'Quantidade disponível no estoque geral',
       color: 'text-purple-400',
+      to: '/admin/licencas',
+    },
+    {
+      label: `Aulas registradas (${DIAS_ATIVIDADE} dias)`,
+      val: atividade ? formatMetric(atividade.aulas_registradas) : '—',
+      icon: ClipboardList,
+      change: atividadeErro
+        ? 'Dados indisponíveis'
+        : atividade
+          ? `${formatMetric(atividade.disciplinas_com_aula)} disciplinas · ${formatMetric(atividade.polos_com_aula)} polos`
+          : 'Carregando...',
+      color: 'text-cyan-400',
+      to: `/admin/aulas?de=${inicioPeriodo}`,
     },
   ];
 
@@ -109,13 +148,14 @@ export const AdminDashboardPage: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
         {stats.map((s, idx) => {
           const Icon = s.icon;
           return (
-            <div
+            <Link
               key={idx}
-              className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md hover:border-slate-700 transition-all"
+              to={s.to}
+              className="block p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md hover:border-nexus-yellow/40 hover:bg-slate-900 transition-all"
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -130,10 +170,12 @@ export const AdminDashboardPage: React.FC = () => {
                 <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{s.change}</span>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
+
+      <AtividadeDocentePainel atividade={atividade} erro={atividadeErro} inicioPeriodo={inicioPeriodo} />
 
       <AdminDashboardPreview />
 
@@ -184,3 +226,80 @@ export const AdminDashboardPage: React.FC = () => {
     </div>
   );
 };
+
+/** Painel "Atividade docente": leva direto para a auditoria de aulas já filtrada. */
+const AtividadeDocentePainel: React.FC<{
+  atividade: AtividadeDocente | null;
+  erro: boolean;
+  inicioPeriodo: string;
+}> = ({ atividade, erro, inicioPeriodo }) => (
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <section className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h2 className="flex items-center gap-2 text-base font-bold text-white">
+          <ClipboardList className="w-5 h-5 text-cyan-400" />
+          Disciplinas com mais aulas ({DIAS_ATIVIDADE} dias)
+        </h2>
+        <Link to={`/admin/aulas?de=${inicioPeriodo}`} className="text-xs font-semibold text-nexus-yellow hover:underline">
+          Ver todas
+        </Link>
+      </div>
+      {erro ? (
+        <p className="text-sm text-slate-500">Dados indisponíveis no momento.</p>
+      ) : !atividade ? (
+        <p className="text-sm text-slate-500">Carregando...</p>
+      ) : atividade.top_disciplinas.length === 0 ? (
+        <p className="text-sm text-slate-500">Nenhuma aula registrada no período.</p>
+      ) : (
+        <ul className="divide-y divide-slate-800">
+          {atividade.top_disciplinas.map((d) => (
+            <li key={d.id}>
+              <Link
+                to={`/admin/disciplinas/${d.id}/aulas?de=${inicioPeriodo}`}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-300 hover:text-white"
+              >
+                <span className="truncate">{d.nome}</span>
+                <span className="flex shrink-0 items-center gap-1 font-semibold text-white">
+                  {d.total_aulas} aula(s)
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+
+    <section className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
+      <h2 className="flex items-center gap-2 mb-1 text-base font-bold text-white">
+        <AlertTriangle className="w-5 h-5 text-amber-400" />
+        Polos sem aula registrada há {DIAS_SEM_REGISTRO} dias
+      </h2>
+      <p className="mb-4 text-xs text-slate-500">Polos com turma e professor vinculados, mas sem registro recente.</p>
+      {erro ? (
+        <p className="text-sm text-slate-500">Dados indisponíveis no momento.</p>
+      ) : !atividade ? (
+        <p className="text-sm text-slate-500">Carregando...</p>
+      ) : atividade.polos_sem_registro.length === 0 ? (
+        <p className="text-sm text-emerald-300">Todos os polos com turma registraram aulas recentemente.</p>
+      ) : (
+        <ul className="divide-y divide-slate-800">
+          {atividade.polos_sem_registro.map((p) => (
+            <li key={p.id}>
+              <Link
+                to={`/admin/aulas?polo=${p.id}`}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-300 hover:text-white"
+              >
+                <span className="truncate">{p.nome}</span>
+                <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500">
+                  {p.ultima_aula ? `última em ${formatarData(p.ultima_aula)}` : 'nenhuma aula'}
+                  <ChevronRight className="w-4 h-4" />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  </div>
+);

@@ -585,14 +585,18 @@ class PostgresProfessoresRepository:
 
     def create_material(self, data: Dict[str, Any]) -> Dict[str, Any]:
         material_id = str(uuid.uuid4())
+        # `aula_id` só entra no INSERT quando informado (coluna criada pela migração 008).
+        com_aula = bool(data.get("aula_id"))
+        coluna_aula = ", aula_id" if com_aula else ""
+        valor_aula = ", %s" if com_aula else ""
         with get_db_cursor() as cur:
             cur.execute(
-                """
+                f"""
                 INSERT INTO professor_materiais (
                     id, professor_disciplina_id, arquivo_url, data_aula, descricao,
                     expira_em, arquivo_storage_key, arquivo_nome, arquivo_mime_type,
-                    arquivo_tamanho_bytes, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                    arquivo_tamanho_bytes, criado_em, atualizado_em{coluna_aula}
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now(){valor_aula})
                 """,
                 (
                     material_id,
@@ -605,6 +609,7 @@ class PostgresProfessoresRepository:
                     data.get("arquivo_nome"),
                     data.get("arquivo_mime_type"),
                     data.get("arquivo_tamanho_bytes"),
+                    *([data["aula_id"]] if com_aula else []),
                 ),
             )
         return self.get_material(material_id) or {"id": material_id, **data}

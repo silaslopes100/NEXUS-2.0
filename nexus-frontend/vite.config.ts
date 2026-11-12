@@ -75,6 +75,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      '/aulas': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
       '/licencas': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,

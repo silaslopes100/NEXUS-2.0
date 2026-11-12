@@ -413,6 +413,7 @@ async def criar_meu_material(
     url_arquivo: Optional[str] = Form(None),
     data_aula: Optional[date] = Form(None),
     expira_em: Optional[datetime] = Form(None),
+    aula_id: Optional[uuid.UUID] = Form(None),
     arquivo: Optional[UploadFile] = File(None),
     current_user: UserResponse = Depends(get_current_user),
     service: ProfessoresService = Depends(get_professores_service),
@@ -420,6 +421,13 @@ async def criar_meu_material(
     _validar_vinculo_com_turma(current_user, professor_disciplina_id, service)
     if not descricao.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="A descrição é obrigatória.")
+    if aula_id:
+        # Material do Diário de Aulas: herda a data da aula a que pertence.
+        # Import local: `aulas` depende de `professores.access` (evita ciclo).
+        from app.modules.aulas.service import AulasService
+
+        aula = AulasService().aula_do_material(current_user, str(aula_id), professor_disciplina_id)
+        data_aula = aula["data_aula"]
     source, _ = await _media_source(
         modo,
         url_arquivo,
@@ -433,6 +441,8 @@ async def criar_meu_material(
         "expira_em": expira_em,
         **source,
     }
+    if aula_id:
+        data["aula_id"] = str(aula_id)
     new_storage_key = data.get("arquivo_storage_key")
     try:
         return service.create_material(data)

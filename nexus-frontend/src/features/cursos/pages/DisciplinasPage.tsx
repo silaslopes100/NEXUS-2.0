@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   BookOpen,
+  CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Eye,
   Loader2,
   Pencil,
@@ -19,6 +22,8 @@ import {
   DisciplinaInput,
   ProfessorVinculadoDisciplina,
 } from '@/features/cursos/api';
+import { aulasApi, DisciplinaAulasResumo } from '@/features/aulas/api';
+import { formatarData } from '@/features/turmas/api';
 
 type DisciplinaForm = {
   curso_id: string;
@@ -69,6 +74,9 @@ export const DisciplinasPage: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
+  const [aulasPorDisciplina, setAulasPorDisciplina] = useState<Map<string, DisciplinaAulasResumo>>(
+    new Map()
+  );
 
   const carregarDados = async () => {
     setIsLoading(true);
@@ -89,6 +97,11 @@ export const DisciplinasPage: React.FC = () => {
 
   useEffect(() => {
     void carregarDados();
+    // Auditoria de aulas: complementar, não bloqueia a lista se falhar.
+    aulasApi
+      .resumoDisciplinas()
+      .then((itens) => setAulasPorDisciplina(new Map(itens.map((item) => [item.disciplina_id, item]))))
+      .catch(() => setAulasPorDisciplina(new Map()));
   }, []);
 
   useEffect(() => {
@@ -232,7 +245,7 @@ export const DisciplinasPage: React.FC = () => {
             Disciplinas
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Cadastre e organize as disciplinas e seus vínculos curriculares.
+            Cadastre as disciplinas e acompanhe as aulas que cada polo está dando em cada uma.
           </p>
         </div>
         <button
@@ -313,7 +326,7 @@ export const DisciplinasPage: React.FC = () => {
           </div>
         ) : !error ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="p-4">Disciplina</th>
@@ -321,6 +334,7 @@ export const DisciplinasPage: React.FC = () => {
                   <th className="p-4">Carga horária</th>
                   <th className="p-4">Aulas previstas</th>
                   <th className="p-4">Tipo</th>
+                  <th className="p-4">Aulas registradas</th>
                   <th className="p-4 text-right">Ações</th>
                 </tr>
               </thead>
@@ -345,7 +359,35 @@ export const DisciplinasPage: React.FC = () => {
                     <td className="p-4">{disciplina.qtd_aulas_prevista ?? '—'}</td>
                     <td className="p-4 capitalize">{disciplina.tipo || '—'}</td>
                     <td className="p-4">
+                      {(() => {
+                        const resumo = aulasPorDisciplina.get(disciplina.id);
+                        if (!resumo) return <span className="text-xs text-slate-500">Nenhuma</span>;
+                        return (
+                          <Link
+                            to={`/admin/disciplinas/${disciplina.id}/aulas`}
+                            className="group inline-flex flex-col text-left"
+                          >
+                            <span className="font-semibold text-white group-hover:text-nexus-yellow">
+                              {resumo.total_aulas} aula(s)
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                              <CalendarDays className="h-3 w-3" />
+                              última em {formatarData(resumo.ultima_aula)}
+                            </span>
+                          </Link>
+                        );
+                      })()}
+                    </td>
+                    <td className="p-4">
                       <div className="flex justify-end gap-2">
+                        <Link
+                          to={`/admin/disciplinas/${disciplina.id}/aulas`}
+                          aria-label={`Ver aulas de ${disciplina.nome}`}
+                          title="Ver aulas dadas nos polos"
+                          className="rounded-lg border border-nexus-yellow/30 p-2 text-nexus-yellow hover:bg-nexus-yellow/10"
+                        >
+                          <ClipboardList size={16} />
+                        </Link>
                         <button
                           type="button"
                           aria-label={`Visualizar professores de ${disciplina.nome}`}
@@ -384,7 +426,7 @@ export const DisciplinasPage: React.FC = () => {
                 ))}
                 {disciplinasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-slate-500">
+                    <td colSpan={7} className="p-12 text-center text-slate-500">
                       {disciplinas.length
                         ? 'Nenhuma disciplina corresponde aos filtros.'
                         : 'Nenhuma disciplina cadastrada.'}

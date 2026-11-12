@@ -12,7 +12,7 @@ from app.modules.auth.dependencies import get_current_user, require_role
 from app.modules.auth.schemas import UserResponse
 from app.modules.professores.access import exigir_vinculo_disciplina
 
-router = APIRouter(prefix="/cursos-disciplinas", tags=["Cursos & Disciplinas (AVA)"])
+router = APIRouter(prefix="/cursos-disciplinas", tags=["Cursos & Disciplinas"])
 
 NivelAcademico = Literal[
     "bacharelado",

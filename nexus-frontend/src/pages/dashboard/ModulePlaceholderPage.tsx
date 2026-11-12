@@ -40,7 +40,7 @@ export const ModulePlaceholderPage: React.FC = () => {
         category: 'Gestão Curricular',
       },
       '/admin/disciplinas': {
-        title: 'Disciplinas & Conteúdos AVA',
+        title: 'Disciplinas',
         desc: 'Grade de matérias, aulas, vídeos, materiais complementares e links Meet.',
         table: 'disciplinas / disciplina_conteudos',
         category: 'Ambiente Virtual (AVA)',

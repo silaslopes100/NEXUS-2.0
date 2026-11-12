@@ -27,6 +27,8 @@ import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { MinhasDisciplinasPage as MinhasDisciplinasProfessorPage } from '@/features/professores/pages/MinhasDisciplinasPage';
 import { MinhasConteudosPage as MinhasConteudosProfessorPage } from '@/features/professores/pages/MinhasConteudosPage';
 import { PresencasPage } from '@/features/presencas/pages/PresencasPage';
+import { DiarioAulasPage } from '@/features/aulas/pages/DiarioAulasPage';
+import { AulasAuditoriaPage } from '@/features/aulas/pages/AulasAuditoriaPage';
 import { CursosPage } from '@/features/cursos/pages/CursosPage';
 import { DisciplinasPage } from '@/features/cursos/pages/DisciplinasPage';
 import { TransferenciasPage } from '@/features/transferencias/pages/TransferenciasPage';
@@ -68,6 +70,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/professores" element={<ProfessoresPage />} />
           <Route path="/admin/cursos" element={<CursosPage />} />
           <Route path="/admin/disciplinas" element={<DisciplinasPage />} />
+          <Route path="/admin/disciplinas/:disciplinaId/aulas" element={<AulasAuditoriaPage />} />
+          <Route path="/admin/aulas" element={<AulasAuditoriaPage />} />
           <Route path="/admin/turmas-calendarios" element={<TurmasPage />} />
           <Route path="/admin/alunos" element={<AlunosPage />} />
           <Route path="/admin/ead" element={<ModulePlaceholderPage />} />
@@ -119,8 +123,10 @@ export const AppRoutes: React.FC = () => {
           <Route path="/professor/disciplinas" element={<MinhasDisciplinasProfessorPage />} />
           <Route path="/professor/conteudos" element={<MinhasConteudosProfessorPage />} />
           <Route path="/professor/notas" element={<ModulePlaceholderPage />} />
-          <Route path="/professor/presencas" element={<PresencasPage />} />
-          <Route path="/professor/atas" element={<ModulePlaceholderPage />} />
+          <Route path="/professor/aulas" element={<DiarioAulasPage />} />
+          {/* Presença e atas agora vivem no Diário de Aulas */}
+          <Route path="/professor/presencas" element={<Navigate to="/professor/aulas" replace />} />
+          <Route path="/professor/atas" element={<Navigate to="/professor/aulas" replace />} />
           <Route path="/professor/calendario" element={<ModulePlaceholderPage />} />
         </Route>
 

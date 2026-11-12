@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.database import close_connection_pool
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
+from app.modules.aulas.router import router as aulas_router
 from app.modules.alunos.perfil import router as aluno_perfil_router
 from app.modules.alunos_gestao import router as alunos_gestao_router
 from app.modules.alunos_gestao import router_aprendizado as aluno_aprendizado_router
@@ -63,6 +64,7 @@ app.include_router(admin_router)
 # precedência sobre a rota homônima legada de polos_escolas.
 app.include_router(professores_router)
 app.include_router(presencas_router)
+app.include_router(aulas_router)
 app.include_router(polos_escolas_router)
 app.include_router(cursos_disciplinas_router)
 app.include_router(turmas_router)

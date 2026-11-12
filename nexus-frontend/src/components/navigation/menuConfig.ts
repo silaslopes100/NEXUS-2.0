@@ -23,6 +23,7 @@ import {
   BookMarked,
   Sliders,
   Database,
+  ClipboardList,
   LucideIcon,
 } from 'lucide-react';
 import { UserRole } from '@/types/auth';
@@ -81,7 +82,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
       ],
     },
     {
-      groupTitle: 'Acadêmico & AVA',
+      groupTitle: 'Acadêmico',
       items: [
         {
           title: 'Cursos & Matrizes',
@@ -89,9 +90,14 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: BookOpen,
         },
         {
-          title: 'Disciplinas & AVA',
+          title: 'Disciplinas',
           path: '/admin/disciplinas',
           icon: FolderKanban,
+        },
+        {
+          title: 'Auditoria de Aulas',
+          path: '/admin/aulas',
+          icon: ClipboardList,
         },
         {
           title: 'Turmas & Calendários',
@@ -384,26 +390,21 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'Conteúdos AVA & Aulas',
+          title: 'Diário de Aulas',
+          path: '/professor/aulas',
+          icon: ClipboardList,
+          badge: 'Novo',
+          badgeColor: 'emerald',
+        },
+        {
+          title: 'Conteúdos AVA',
           path: '/professor/conteudos',
           icon: FolderKanban,
-          isPlaceholder: true,
         },
         {
           title: 'Lançamento de Notas',
           path: '/professor/notas',
           icon: Award,
-          isPlaceholder: true,
-        },
-        {
-          title: 'Diário de Presença',
-          path: '/professor/presencas',
-          icon: Clock,
-        },
-        {
-          title: 'Atas de Aula',
-          path: '/professor/atas',
-          icon: ScrollText,
           isPlaceholder: true,
         },
         {
