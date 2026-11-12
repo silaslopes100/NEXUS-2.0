@@ -1,7 +1,9 @@
 """Testes do módulo `professores` (NEXUS 2.0) — arquitetura em camadas + InMemoryRepository."""
 from __future__ import annotations
 
+import json
 import uuid
+from datetime import date
 
 import pytest
 import pytest_asyncio
@@ -122,6 +124,75 @@ def test_professor_tem_disciplina_nao_filtra_coluna_ativo_no_vinculo_administrat
     consulta_administrativa = cursor.query.split("OR EXISTS", maxsplit=1)[0]
     assert "FROM professor_disciplina_vinculos vinculo" in consulta_administrativa
     assert "vinculo.ativo" not in consulta_administrativa
+
+
+def test_auditoria_postgres_serializa_uuid_e_data(monkeypatch):
+    class Cursor:
+        params = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, query, params):
+            self.params = params
+
+    cursor = Cursor()
+    monkeypatch.setattr(professores_repository_module, "get_db_cursor", lambda: cursor)
+    disciplina_id = uuid.uuid4()
+
+    PostgresProfessoresRepository().record_audit_log(
+        usuario_id="admin-1",
+        acao="professor_atualizado",
+        entidade="professores",
+        dados_antes={"disciplina_ids": [disciplina_id]},
+        dados_depois={"disciplina_ids": [disciplina_id], "data_inicio": date(2026, 2, 1)},
+    )
+
+    assert json.loads(cursor.params[4]) == {"disciplina_ids": [str(disciplina_id)]}
+    assert json.loads(cursor.params[5]) == {
+        "disciplina_ids": [str(disciplina_id)],
+        "data_inicio": "2026-02-01",
+    }
+
+
+@pytest.mark.asyncio
+async def test_atualizar_professor_com_auditoria_postgres(client: AsyncClient, repos, monkeypatch):
+    class Cursor:
+        params = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, query, params):
+            self.params = params
+
+    _, repo = repos
+    headers = {"Authorization": f"Bearer {_token('admin-1')}"}
+    criado = await client.post("/professores/", json=_payload(), headers=headers)
+    assert criado.status_code == 201
+    cursor = Cursor()
+    monkeypatch.setattr(professores_repository_module, "get_db_cursor", lambda: cursor)
+    monkeypatch.setattr(repo, "record_audit_log", PostgresProfessoresRepository().record_audit_log)
+    disciplina_id = str(uuid.uuid4())
+
+    resposta = await client.put(
+        f"/professores/{criado.json()['id']}",
+        json={"disciplina_ids": [disciplina_id], "data_inicio": "2026-02-01"},
+        headers=headers,
+    )
+
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["disciplina_ids"] == [disciplina_id]
+    assert json.loads(cursor.params[5]) == {
+        "disciplina_ids": [disciplina_id],
+        "data_inicio": "2026-02-01",
+    }
 
 
 @pytest.mark.asyncio

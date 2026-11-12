@@ -5,6 +5,8 @@ import json
 import uuid
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
+from fastapi.encoders import jsonable_encoder
+
 from app.core.database import get_db_cursor
 
 _SELECT_BASE = """
@@ -842,8 +844,8 @@ class PostgresProfessoresRepository:
                     acao,
                     entidade,
                     str(entidade_id) if entidade_id else None,
-                    json.dumps(dados_antes) if dados_antes is not None else None,
-                    json.dumps(dados_depois) if dados_depois is not None else None,
+                    json.dumps(jsonable_encoder(dados_antes)) if dados_antes is not None else None,
+                    json.dumps(jsonable_encoder(dados_depois)) if dados_depois is not None else None,
                     ip,
                 ),
             )
