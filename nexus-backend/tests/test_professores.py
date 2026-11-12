@@ -7,6 +7,7 @@ from datetime import date
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.core import file_storage as file_storage_module
@@ -121,9 +122,31 @@ def test_professor_tem_disciplina_nao_filtra_coluna_ativo_no_vinculo_administrat
     assert PostgresProfessoresRepository().professor_tem_disciplina(
         "professor-1", "disciplina-1"
     )
-    consulta_administrativa = cursor.query.split("OR EXISTS", maxsplit=1)[0]
-    assert "FROM professor_disciplina_vinculos vinculo" in consulta_administrativa
-    assert "vinculo.ativo" not in consulta_administrativa
+    assert "FROM professor_disciplinas vinculo" in cursor.query
+    assert "vinculo.ativo" not in cursor.query
+
+
+def test_cadastro_administrativo_preserva_vinculos_de_turma_e_dependencias():
+    repo = InMemoryProfessoresRepository()
+    repo.professores["p"] = {"id": "p", "usuario_id": "u"}
+    repo.disciplinas["d"] = {"id": "d", "nome": "Disciplina", "carga_horaria": 40}
+    administrativo = {"id": "admin", "professor_id": "p", "disciplina_id": "d", "turma_id": None, "ativo": False}
+    turma = {"id": "turma", "professor_id": "p", "disciplina_id": "d", "turma_id": "t", "ativo": True}
+    repo.professor_disciplinas.extend([administrativo, turma])
+    repo.professor_materiais.append({"id": "material", "professor_disciplina_id": "admin"})
+
+    assert repo.get_professor("p")["horas_totais"] == 40
+    assert repo.professor_tem_disciplina("u", "d")
+    assert [v["id"] for v in repo.list_vinculos_academicos_por_usuario("u")] == ["turma"]
+    repo._sync_disciplina_ids("p", ["d"])
+    assert repo.professor_disciplinas == [administrativo, turma]
+    with pytest.raises(HTTPException) as exc:
+        repo._sync_disciplina_ids("p", [])
+    assert exc.value.status_code == 409
+    assert repo.professor_disciplinas == [administrativo, turma]
+    repo.professor_materiais.clear()
+    repo._sync_disciplina_ids("p", [])
+    assert repo.professor_disciplinas == [turma]
 
 
 def test_auditoria_postgres_serializa_uuid_e_data(monkeypatch):
@@ -202,7 +225,7 @@ async def test_professor_cria_conteudo_com_link_externo(client: AsyncClient, rep
         "id": "docente-1",
         "usuario_id": "prof-1",
     }
-    professores_repo.professor_disciplina_vinculos["docente-1"] = ["disciplina-1"]
+    professores_repo._sync_disciplina_ids("docente-1", ["disciplina-1"])
     professores_repo.disciplinas["disciplina-1"] = {
         "id": "disciplina-1",
         "nome": "Matemática",
@@ -452,7 +475,7 @@ async def test_detalhe_docente_alunos_e_escopo(client: AsyncClient, repos):
     repo.escolas["escola-1"] = {"id": "escola-1", "nome": "Escola A"}
     repo.cursos["curso-1"] = {"id": "curso-1", "nome": "Curso A"}
     repo.disciplinas[disciplina_id].update(carga_horaria=40, qtd_aulas_prevista=10)
-    repo.professor_disciplina_vinculos[professor_id] = [disciplina_id]
+    repo._sync_disciplina_ids(professor_id, [disciplina_id])
     repo.professor_disciplinas.extend([
         {"id": "v-1", "professor_id": professor_id, "disciplina_id": disciplina_id, "turma_id": turma_id, "ativo": True},
         {"id": "v-2", "professor_id": professor_id, "disciplina_id": disciplina_id, "turma_id": "turma-fora", "ativo": True},
@@ -589,12 +612,8 @@ async def test_professor_consulta_apenas_suas_disciplinas_e_turmas(client: Async
             "docente-2": {"id": "docente-2", "usuario_id": "prof-2"},
         }
     )
-    professores_repo.professor_disciplina_vinculos.update(
-        {
-            "docente-1": ["disciplina-com-turma", "disciplina-sem-turma"],
-            "docente-2": ["disciplina-de-outro-docente"],
-        }
-    )
+    professores_repo._sync_disciplina_ids("docente-1", ["disciplina-com-turma", "disciplina-sem-turma"])
+    professores_repo._sync_disciplina_ids("docente-2", ["disciplina-de-outro-docente"])
     professores_repo.professor_disciplinas.append(
         {
             "id": "vinculo-1",
@@ -678,7 +697,7 @@ async def test_professor_consulta_apenas_seus_conteudos_e_materiais(client: Asyn
             "docente-2": {"id": "docente-2", "usuario_id": "prof-2"},
         }
     )
-    professores_repo.professor_disciplina_vinculos["docente-1"] = ["disciplina-1"]
+    professores_repo._sync_disciplina_ids("docente-1", ["disciplina-1"])
     professores_repo.professor_disciplinas.extend(
         [
             {
@@ -769,7 +788,7 @@ async def test_professor_cria_edita_e_baixa_arquivo_de_conteudo(
             "docente-2": {"id": "docente-2", "usuario_id": "prof-2"},
         }
     )
-    professores_repo.professor_disciplina_vinculos["docente-1"] = ["disciplina-1"]
+    professores_repo._sync_disciplina_ids("docente-1", ["disciplina-1"])
     professores_repo.disciplinas["disciplina-1"] = {"id": "disciplina-1", "nome": "Matemática"}
     monkeypatch.setattr(file_storage_module, "_uses_blob_storage", lambda: False)
     monkeypatch.setattr(file_storage_module, "ACADEMIC_FILES_DIRECTORY", tmp_path)

@@ -96,6 +96,10 @@ def test_migracao_sincroniza_totais_em_postgres(monkeypatch):
                 "INSERT INTO professor_disciplinas VALUES (%s, %s, %s, true), (%s, %s, %s, true), (%s, %s, %s, true)",
                 (professor, disciplina, turma, professor, segunda, turma, professor, disciplina, turma_fora),
             )
+            cur.execute(
+                "INSERT INTO professor_disciplinas VALUES (%s, %s, NULL, true), (%s, %s, NULL, true)",
+                (professor, disciplina, professor, segunda),
+            )
 
             @contextmanager
             def cursor_real():

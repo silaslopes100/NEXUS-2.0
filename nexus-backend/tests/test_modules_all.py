@@ -391,7 +391,7 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
         "id": "professor-1",
         "usuario_id": "prof-1",
     }
-    professores_repo.professor_disciplina_vinculos["professor-1"] = [disc_id]
+    professores_repo._sync_disciplina_ids("professor-1", [disc_id])
     monkeypatch.setattr(professores_repository_module, "_repo_instance", professores_repo)
     t_professor = _token("prof-1", "prof@nexus.com.br", "professor")
     conteudos_docente = await client.get(

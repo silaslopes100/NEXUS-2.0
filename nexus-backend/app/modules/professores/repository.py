@@ -5,7 +5,9 @@ import json
 import uuid
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
+from fastapi import HTTPException, status
 from fastapi.encoders import jsonable_encoder
+from psycopg2 import sql
 
 from app.core.database import get_db_cursor
 
@@ -23,9 +25,9 @@ _SELECT_BASE = """
         SELECT
             array_agg(vinculo.disciplina_id::text ORDER BY vinculo.disciplina_id::text) AS disciplina_ids,
             array_agg(DISTINCT disciplina.nome ORDER BY disciplina.nome) AS disciplina_nomes
-        FROM professor_disciplina_vinculos vinculo
+        FROM professor_disciplinas vinculo
         JOIN disciplinas disciplina ON disciplina.id = vinculo.disciplina_id
-        WHERE vinculo.professor_id = prof.id
+        WHERE vinculo.professor_id = prof.id AND vinculo.turma_id IS NULL
     ) vinculos ON TRUE
     LEFT JOIN LATERAL (
         SELECT json_agg(
@@ -390,6 +392,7 @@ class PostgresProfessoresRepository:
                 FROM professor_disciplinas vinculo
                 JOIN professores professor ON professor.id = vinculo.professor_id
                 WHERE professor.usuario_id = %s AND vinculo.ativo = true
+                  AND vinculo.turma_id IS NOT NULL
                 ORDER BY vinculo.id
                 """,
                 (str(usuario_id),),
@@ -404,23 +407,14 @@ class PostgresProfessoresRepository:
                     SELECT 1
                     FROM professores professor
                     WHERE professor.usuario_id = %s
-                      AND (
-                          EXISTS (
-                              SELECT 1
-                              FROM professor_disciplina_vinculos vinculo
-                              WHERE vinculo.professor_id = professor.id
-                                AND vinculo.disciplina_id = %s
-                          )
-                          OR EXISTS (
-                              SELECT 1
-                              FROM professor_disciplinas vinculo
-                              WHERE vinculo.professor_id = professor.id
-                                AND vinculo.disciplina_id = %s
-                          )
+                      AND EXISTS (
+                          SELECT 1 FROM professor_disciplinas vinculo
+                          WHERE vinculo.professor_id = professor.id
+                            AND vinculo.disciplina_id = %s
                       )
                 ) AS vinculado
                 """,
-                (str(usuario_id), str(disciplina_id), str(disciplina_id)),
+                (str(usuario_id), str(disciplina_id)),
             )
             return bool(cur.fetchone()["vinculado"])
 
@@ -432,14 +426,10 @@ class PostgresProfessoresRepository:
                     SELECT id FROM professores WHERE usuario_id = %s
                 ),
                 disciplinas_professor AS (
-                    SELECT vinculo.disciplina_id
-                    FROM professor_disciplina_vinculos vinculo
-                    JOIN professor docente ON docente.id = vinculo.professor_id
-                    UNION
-                    SELECT vinculo.disciplina_id
+                    SELECT DISTINCT vinculo.disciplina_id
                     FROM professor_disciplinas vinculo
                     JOIN professor docente ON docente.id = vinculo.professor_id
-                    WHERE vinculo.ativo = true
+                    WHERE vinculo.turma_id IS NULL OR vinculo.ativo = true
                 ),
                 turmas_professor AS (
                     SELECT DISTINCT
@@ -487,15 +477,11 @@ class PostgresProfessoresRepository:
             cur.execute(
                 """
                 WITH disciplinas_docente AS (
-                    SELECT vinculo.disciplina_id
-                    FROM professor_disciplina_vinculos vinculo
-                    JOIN professores professor ON professor.id = vinculo.professor_id
-                    WHERE professor.usuario_id = %s
-                    UNION
-                    SELECT vinculo.disciplina_id
+                    SELECT DISTINCT vinculo.disciplina_id
                     FROM professor_disciplinas vinculo
                     JOIN professores professor ON professor.id = vinculo.professor_id
-                    WHERE professor.usuario_id = %s AND vinculo.ativo = true
+                    WHERE professor.usuario_id = %s
+                      AND (vinculo.turma_id IS NULL OR vinculo.ativo = true)
                 )
                 SELECT conteudo.id::text AS id,
                        disciplina.id::text AS disciplina_id,
@@ -514,7 +500,7 @@ class PostgresProfessoresRepository:
                 WHERE conteudo.id IS NOT NULL
                 ORDER BY disciplina.nome, conteudo.ordem, conteudo.id
                 """,
-                (str(usuario_id), str(usuario_id)),
+                (str(usuario_id),),
             )
             return [dict(row) for row in cur.fetchall()]
 
@@ -655,7 +641,7 @@ class PostgresProfessoresRepository:
                        disciplina_id::text AS disciplina_id, turma_id::text AS turma_id,
                        ativo
                 FROM professor_disciplinas
-                WHERE id = %s AND ativo = true
+                WHERE id = %s AND ativo = true AND turma_id IS NOT NULL
                 """,
                 (str(vinculo_id),),
             )
@@ -757,9 +743,10 @@ class PostgresProfessoresRepository:
         if disciplina and disciplina.strip():
             conds.append(
                 "(prof.materias::text ILIKE %s OR EXISTS ("
-                "SELECT 1 FROM professor_disciplina_vinculos vinculo "
+                "SELECT 1 FROM professor_disciplinas vinculo "
                 "JOIN disciplinas disciplina ON disciplina.id = vinculo.disciplina_id "
-                "WHERE vinculo.professor_id = prof.id AND disciplina.nome ILIKE %s))"
+                "WHERE vinculo.professor_id = prof.id AND vinculo.turma_id IS NULL "
+                "AND disciplina.nome ILIKE %s))"
             )
             term = f"%{disciplina.strip()}%"
             params.extend([term, term])
@@ -796,10 +783,10 @@ class PostgresProfessoresRepository:
                 """
                 SELECT d.id::text AS id, d.nome, d.curso_id::text AS curso_id,
                        c.nome AS curso_nome, d.carga_horaria, d.qtd_aulas_prevista
-                FROM professor_disciplina_vinculos v
+                FROM professor_disciplinas v
                 JOIN disciplinas d ON d.id = v.disciplina_id
                 LEFT JOIN cursos c ON c.id = d.curso_id
-                WHERE v.professor_id = %s
+                WHERE v.professor_id = %s AND v.turma_id IS NULL
                 ORDER BY d.nome, d.id
                 """,
                 (str(professor_id),),
@@ -819,8 +806,9 @@ class PostgresProfessoresRepository:
                        NULLIF(trim(concat(u.nome, ' ', u.sobrenome)), '') AS aluno_nome,
                        a.numero_matricula, u.email AS aluno_email
                 FROM professor_disciplinas pd
-                JOIN professor_disciplina_vinculos v
+                JOIN professor_disciplinas v
                   ON v.professor_id = pd.professor_id AND v.disciplina_id = pd.disciplina_id
+                 AND v.turma_id IS NULL
                 JOIN turmas t ON t.id = pd.turma_id
                 LEFT JOIN polos p ON p.id = t.polo_id
                 LEFT JOIN escolas e ON e.id = t.escola_id
@@ -1059,15 +1047,61 @@ class PostgresProfessoresRepository:
     @staticmethod
     def _sync_disciplina_ids(cur: Any, professor_id: str, disciplina_ids: List[str]) -> None:
         ids = list(dict.fromkeys(str(item) for item in disciplina_ids))
+        cur.execute("SELECT id FROM professores WHERE id = %s FOR UPDATE", (str(professor_id),))
         cur.execute(
-            "DELETE FROM professor_disciplina_vinculos WHERE professor_id = %s",
-            (str(professor_id),),
+            """
+            SELECT id FROM professor_disciplinas
+            WHERE professor_id = %s AND turma_id IS NULL
+              AND NOT (disciplina_id = ANY(%s::uuid[]))
+            FOR UPDATE
+            """,
+            (str(professor_id), ids),
         )
+        removidos = [str(row["id"]) for row in cur.fetchall()]
+        if removidos:
+            cur.execute(
+                """
+                SELECT n.nspname AS schema_name, c.relname AS table_name,
+                       a.attname AS column_name, target.attname AS target_column,
+                       cardinality(fk.conkey) AS columns_count, c.relrowsecurity
+                FROM pg_constraint fk
+                JOIN pg_class c ON c.oid = fk.conrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_attribute a ON a.attrelid = fk.conrelid AND a.attnum = fk.conkey[1]
+                JOIN pg_attribute target ON target.attrelid = fk.confrelid AND target.attnum = fk.confkey[1]
+                WHERE fk.contype = 'f' AND fk.confrelid = 'professor_disciplinas'::regclass
+                """
+            )
+            for reference in cur.fetchall():
+                if (reference["columns_count"] != 1 or reference["target_column"] != "id"
+                        or reference["relrowsecurity"]):
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        detail="Não é possível verificar com segurança as referências deste vínculo.",
+                    )
+                cur.execute(
+                    sql.SQL("SELECT EXISTS (SELECT 1 FROM {}.{} WHERE {} = ANY(%s::uuid[])) AS existe").format(
+                        sql.Identifier(reference["schema_name"]),
+                        sql.Identifier(reference["table_name"]),
+                        sql.Identifier(reference["column_name"]),
+                    ),
+                    (removidos,),
+                )
+                if cur.fetchone()["existe"]:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        detail="Não é possível remover uma disciplina com dados vinculados ao cadastro.",
+                    )
+            cur.execute(
+                "DELETE FROM professor_disciplinas WHERE id = ANY(%s::uuid[])",
+                (removidos,),
+            )
         if ids:
             cur.executemany(
                 """
-                INSERT INTO professor_disciplina_vinculos (professor_id, disciplina_id)
+                INSERT INTO professor_disciplinas (professor_id, disciplina_id)
                 VALUES (%s, %s)
+                ON CONFLICT (professor_id, disciplina_id) WHERE turma_id IS NULL DO NOTHING
                 """,
                 [(str(professor_id), disciplina_id) for disciplina_id in ids],
             )
@@ -1131,7 +1165,6 @@ class InMemoryProfessoresRepository:
 
     def __init__(self) -> None:
         self.professores: Dict[str, Dict[str, Any]] = {}
-        self.professor_disciplina_vinculos: Dict[str, List[str]] = {}
         self.professor_disciplinas: List[Dict[str, Any]] = []
         self.disciplina_conteudos: List[Dict[str, Any]] = []
         self.professor_materiais: List[Dict[str, Any]] = []
@@ -1287,9 +1320,7 @@ class InMemoryProfessoresRepository:
             if str(row.get("professor_id")) == professor_id
             and row.get("ativo", True)
         ]
-        disciplina_ids = set(
-            str(item) for item in self.professor_disciplina_vinculos.get(professor_id, [])
-        )
+        disciplina_ids = set(self._disciplinas_cadastro_ids(professor_id))
         disciplina_ids.update(str(row["disciplina_id"]) for row in vinculos_turma)
 
         rows: List[Dict[str, Any]] = []
@@ -1455,7 +1486,7 @@ class InMemoryProfessoresRepository:
             (item for item in self.professor_disciplinas if str(item.get("id")) == str(vinculo_id)),
             None,
         )
-        return dict(row) if row and row.get("ativo", True) else None
+        return dict(row) if row and row.get("ativo", True) and row.get("turma_id") else None
 
     def create_material(self, data: Dict[str, Any]) -> Dict[str, Any]:
         row = {"id": str(uuid.uuid4()), **data}
@@ -1495,6 +1526,7 @@ class InMemoryProfessoresRepository:
             }
             for row in self.professor_disciplinas
             if str(row.get("professor_id")) == professor_id and row.get("id")
+            and row.get("turma_id") and row.get("ativo", True)
         ]
 
     def professor_tem_disciplina(self, usuario_id: str, disciplina_id: str) -> bool:
@@ -1509,22 +1541,47 @@ class InMemoryProfessoresRepository:
         if not professor:
             return False
         professor_id = str(professor["id"])
-        if str(disciplina_id) in {
-            str(item) for item in self.professor_disciplina_vinculos.get(professor_id, [])
-        }:
-            return True
         return any(
             str(row.get("professor_id")) == professor_id
             and str(row.get("disciplina_id")) == str(disciplina_id)
-            and row.get("ativo", True)
             for row in self.professor_disciplinas
+        )
+
+    def _disciplinas_cadastro_ids(self, professor_id: str) -> List[str]:
+        return list(dict.fromkeys(
+            str(row["disciplina_id"]) for row in self.professor_disciplinas
+            if str(row.get("professor_id")) == str(professor_id)
+            and row.get("turma_id") is None and row.get("disciplina_id") is not None
+        ))
+
+    def _sync_disciplina_ids(self, professor_id: str, disciplina_ids: List[str]) -> None:
+        ids = list(dict.fromkeys(str(item) for item in disciplina_ids))
+        removidos = [
+            row for row in self.professor_disciplinas
+            if str(row.get("professor_id")) == str(professor_id)
+            and row.get("turma_id") is None and str(row.get("disciplina_id")) not in ids
+        ]
+        if any(
+            str(material.get("professor_disciplina_id")) == str(row.get("id"))
+            for row in removidos for material in self.professor_materiais
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="Não é possível remover uma disciplina com dados vinculados ao cadastro.",
+            )
+        self.professor_disciplinas = [row for row in self.professor_disciplinas if row not in removidos]
+        existentes = set(self._disciplinas_cadastro_ids(professor_id))
+        self.professor_disciplinas.extend(
+            {"id": str(uuid.uuid4()), "professor_id": str(professor_id),
+             "disciplina_id": disciplina_id, "turma_id": None, "ativo": True}
+            for disciplina_id in ids if disciplina_id not in existentes
         )
 
     def _join(self, row: Dict[str, Any]) -> Dict[str, Any]:
         usuario = self.usuarios.get(str(row.get("usuario_id")), {})
         polo = self.polos.get(str(row.get("polo_id")), {}) if row.get("polo_id") else {}
         escola = self.escolas.get(str(row.get("escola_id")), {}) if row.get("escola_id") else {}
-        disciplina_ids = list(dict.fromkeys(self.professor_disciplina_vinculos.get(str(row.get("id")), [])))
+        disciplina_ids = self._disciplinas_cadastro_ids(str(row.get("id")))
         disciplinas = [self.disciplinas[item] for item in disciplina_ids if item in self.disciplinas]
         return {
             **row,
@@ -1570,7 +1627,11 @@ class InMemoryProfessoresRepository:
             ]
         if disciplina and disciplina.strip():
             termo = disciplina.strip().lower()
-            items = [p for p in items if any(termo in str(m).lower() for m in (p.get("materias") or []))]
+            items = [
+                p for p in items
+                if any(termo in str(m).lower() for m in (p.get("materias") or []))
+                or any(termo in str(m).lower() for m in p["disciplina_nomes"])
+            ]
         if status_filter:
             items = [p for p in items if p.get("status") == status_filter]
         items = sorted(items, key=lambda p: str(p.get("nome") or ""))
@@ -1582,7 +1643,7 @@ class InMemoryProfessoresRepository:
 
     def list_disciplinas_cadastro(self, professor_id: str) -> List[Dict[str, Any]]:
         rows = []
-        for disciplina_id in dict.fromkeys(self.professor_disciplina_vinculos.get(str(professor_id), [])):
+        for disciplina_id in self._disciplinas_cadastro_ids(str(professor_id)):
             disciplina = self.disciplinas.get(str(disciplina_id))
             if not disciplina:
                 continue
@@ -1593,7 +1654,7 @@ class InMemoryProfessoresRepository:
     def list_turmas_alunos(
         self, professor_id: str, polo_id: Optional[str] = None, escola_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        disciplina_ids = set(self.professor_disciplina_vinculos.get(str(professor_id), []))
+        disciplina_ids = set(self._disciplinas_cadastro_ids(str(professor_id)))
         turma_ids = {
             str(v["turma_id"]) for v in self.professor_disciplinas
             if str(v.get("professor_id")) == str(professor_id)
@@ -1660,9 +1721,7 @@ class InMemoryProfessoresRepository:
             "atualizado_em": None,
             **{k: v for k, v in data.items() if k not in ("materias", "quantidade_aulas", "horas_totais")},
         }
-        self.professor_disciplina_vinculos[new_id] = list(dict.fromkeys(
-            str(item) for item in (data.get("disciplina_ids") or [])
-        ))
+        self._sync_disciplina_ids(new_id, data.get("disciplina_ids") or [])
         if lotacoes is not None:
             self.replace_lotacoes(new_id, lotacoes)
         return new_id
@@ -1670,6 +1729,8 @@ class InMemoryProfessoresRepository:
     def update_professor(self, professor_id: str, data: Dict[str, Any]) -> None:
         row = self.professores.get(str(professor_id))
         if row:
+            if "disciplina_ids" in data:
+                self._sync_disciplina_ids(str(professor_id), data.get("disciplina_ids") or [])
             lotacoes = data.get("lotacoes")
             ignorar = {"disciplina_ids", "horas_totais", "quantidade_aulas", "lotacoes", "criado_por"}
             if lotacoes is not None:
@@ -1677,10 +1738,6 @@ class InMemoryProfessoresRepository:
             row.update({key: value for key, value in data.items() if key not in ignorar})
             if lotacoes is not None:
                 self.replace_lotacoes(str(professor_id), lotacoes)
-            if "disciplina_ids" in data:
-                self.professor_disciplina_vinculos[str(professor_id)] = list(dict.fromkeys(
-                    str(item) for item in (data.get("disciplina_ids") or [])
-                ))
 
     # ---------- Lotações ----------
 

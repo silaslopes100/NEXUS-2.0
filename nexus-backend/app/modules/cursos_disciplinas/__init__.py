@@ -438,8 +438,8 @@ async def list_professores_disciplina(disciplina_id: uuid.UUID):
             """
             WITH professores_vinculados AS (
                 SELECT professor_id
-                FROM professor_disciplina_vinculos
-                WHERE disciplina_id = %s
+                FROM professor_disciplinas
+                WHERE disciplina_id = %s AND turma_id IS NULL
                 UNION
                 SELECT prof.id
                 FROM professores prof
@@ -581,7 +581,6 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
             EXISTS (SELECT 1 FROM calendarios_oficiais WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM disciplina_conteudos WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM professor_disciplinas WHERE disciplina_id = %s)
-            OR EXISTS (SELECT 1 FROM professor_disciplina_vinculos WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM compras_disciplina_ead WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM avisos_liberacao_ead WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM notas WHERE disciplina_id = %s)
@@ -596,7 +595,7 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
         if cur.fetchone() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
 
-        cur.execute(references_sql, (uid,) * 11)
+        cur.execute(references_sql, (uid,) * 10)
         row = cur.fetchone()
         if row is None or row["em_uso"]:
             raise HTTPException(

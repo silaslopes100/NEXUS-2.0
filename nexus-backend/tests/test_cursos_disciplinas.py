@@ -161,7 +161,7 @@ async def test_delete_disciplina_checks_database_references(
         reference_sql, params = cursor.executions[1]
         assert "professor_disciplinas" in reference_sql
         assert "disciplina_conteudos" in reference_sql
-        assert params == (str(disciplina_id),) * 11
+        assert params == (str(disciplina_id),) * 10
     assert (cursor.executions[-1][0].startswith("DELETE")) is delete_expected
 
 
@@ -224,7 +224,8 @@ async def test_list_professores_vinculados_a_disciplina_inclui_dados_do_usuario_
     assert result[1]["nome"] == "Bruno Lima"
     assert result[1]["quantidade_aulas"] == 0
     query, params = cursor.executions[1]
-    assert "professor_disciplina_vinculos" in query
+    assert "professor_disciplinas" in query
+    assert "turma_id IS NULL" in query
     assert "jsonb_array_elements_text" in query
     assert params == (str(disciplina_id), str(disciplina_id))
 

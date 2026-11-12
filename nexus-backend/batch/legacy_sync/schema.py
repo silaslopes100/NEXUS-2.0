@@ -176,6 +176,8 @@ DDL: List[str] = [
     carga_horaria_total INT,
     conteudo_programatico TEXT""",
     ),
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_professor_disciplinas_cadastro "
+    "ON professor_disciplinas (professor_id, disciplina_id) WHERE turma_id IS NULL;",
     _tbl(
         "professor_disciplina_vinculos",
         """    professor_id UUID NOT NULL REFERENCES professores(id) ON DELETE CASCADE,

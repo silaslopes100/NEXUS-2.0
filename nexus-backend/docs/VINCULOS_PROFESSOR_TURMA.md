@@ -33,11 +33,52 @@ Vinculos exclusivamente por turma e nomes antigos de materias nao entram na
 soma. Esses totais nao sao editaveis; valores enviados por clientes antigos sao
 ignorados e o banco recalcula os totais mesmo em outros caminhos de escrita.
 
-Antes de implantar a alteracao, faca backup e aplique, em ordem, as migracoes 008
-e 010 (se ainda nao aplicadas) e
-`scripts/migrations/013_totais_professores_disciplinas.sql`. A migracao 013
-substitui os valores manuais existentes, inclusive por zero quando nao ha
-disciplinas cadastradas. Suas triggers mantem os totais atualizados ao alterar
-vinculos ou disciplinas; nao desative as triggers durante operacoes normais.
-Para validar a migracao, configure `NEXUS_TEST_POSTGRES_DSN` para um banco de
-teste isolado e execute `pytest tests/test_professores_totais_postgres.py`.
+## Unificacao dos vinculos administrativos
+
+A migracao `scripts/migrations/014_unificar_professor_disciplinas.sql` copia
+os pares de `professor_disciplina_vinculos` para `professor_disciplinas`, com
+`turma_id` nulo. Ela nao exclui nem altera linhas preexistentes nessas tabelas;
+mantem os IDs do destino e copia as datas da origem apenas para linhas novas.
+Pares ja existentes sem turma nao sao duplicados. Um par com turma nao substitui
+o registro administrativo. A tabela antiga permanece como copia historica e
+nao deve mais receber escritas nem ser usada como fonte pela aplicacao.
+As chaves estrangeiras antigas ainda podem apagar registros em cascata quando
+um professor ou uma disciplina for excluido; preserve o backup para uma copia
+historica imutavel.
+
+Todas as linhas preexistentes sem turma passam a ser administrativas, inclusive
+as inativas e as que nao constavam na tabela antiga. Elas entram nas listagens,
+autorizacao por disciplina e totais, portanto os totais podem mudar. O campo
+`ativo` continua determinando a atividade dos vinculos de turma. A edicao do
+cadastro nao remove vinculos de turma e recusa a remocao de uma linha
+administrativa que tenha dependencias.
+
+Antes do corte:
+
+1. Confirme no banco real os nomes, colunas, restricoes, triggers, referencias
+   e todos os processos externos que usam as duas tabelas. Aplique antes as
+   migracoes 008, 010 e 013 de totais, se ainda nao estiverem aplicadas; a
+   migracao 013 de lotacoes tambem e necessaria para a versao atual da
+   aplicacao. Nao execute novamente a 013 de totais apos a 014.
+2. Em homologacao com copia protegida, confira pares da origem, registros
+   existentes sem turma, dados associados e totais. A migracao interrompe a
+   transacao se encontrar pares duplicados sem turma ou referencias invalidas;
+   investigue e decida como corrigir esses casos antes de prosseguir.
+3. Ensaie a restauracao do backup e a migracao. Configure
+   `NEXUS_TEST_POSTGRES_DSN` apontando para um PostgreSQL **de teste isolado**
+   e execute `pytest tests/test_unificar_professor_disciplinas_postgres.py
+   tests/test_professores_totais_postgres.py`.
+4. Em janela de manutencao, interrompa todos os leitores e escritores antigos,
+   inclusive ETL e integracoes, e produza backup verificavel. Execute a 014 em
+   uma unica sessao; ela bloqueia as tabelas durante a transacao e falhas
+   revertem toda a migracao. Implante a versao atualizada da aplicacao antes
+   de liberar os acessos. Nao execute versoes antigas apos o corte.
+5. Antes de liberar, confira que cada par de origem tem uma linha sem turma no
+   destino, compare as linhas preexistentes com o backup e valide totais,
+   permissoes, turmas, materiais, aulas, presencas e notas. A tabela
+   `migracao_professor_disciplinas` registra a conclusao para impedir que uma
+   nova execucao recrie vinculos removidos posteriormente.
+
+Se a validacao falhar, mantenha a manutencao e restaure banco e aplicacao a
+partir do backup testado. Se ja houver escritas posteriores ao corte, preserve e
+concilie essas alteracoes antes da restauracao para nao perde-las.
