@@ -594,7 +594,7 @@ class PostgresPolosEscolasRepository:
                     SELECT
                         (SELECT COUNT(*) FROM escolas e WHERE e.polo_id = %s) AS escolas,
                         (SELECT COUNT(*) FROM turmas t WHERE t.polo_id = %s) AS turmas,
-                        (SELECT COUNT(*) FROM professores p WHERE p.polo_id = %s) AS professores,
+                        (SELECT COUNT(DISTINCT pl.professor_id) FROM professor_lotacoes pl WHERE pl.polo_id = %s) AS professores,
                         (SELECT COUNT(*) FROM alunos a WHERE a.polo_id = %s AND a.status = 'ativo') AS alunos,
                         (SELECT COUNT(*) FROM aulas au WHERE au.polo_id = %s) AS aulas,
                         (SELECT COALESCE(SUM(le.quantidade_disponivel), 0) FROM licencas_estoque le
@@ -615,7 +615,7 @@ class PostgresPolosEscolasRepository:
                         (SELECT COUNT(*) FROM licencas_alunos la WHERE la.escola_id = %s) AS licencas_alunos,
                         (SELECT COUNT(*) FROM licencas_alunos la WHERE la.escola_id = %s AND la.status = 'ativa') AS licencas_atribuidas,
                         (SELECT COUNT(*) FROM licencas_movimentacoes lm WHERE lm.escola_id = %s) AS licencas_movimentacoes,
-                        (SELECT COUNT(*) FROM professores p WHERE p.escola_id = %s) AS professores,
+                        (SELECT COUNT(DISTINCT pl.professor_id) FROM professor_lotacoes pl WHERE pl.escola_id = %s) AS professores,
                         (SELECT COUNT(*) FROM turmas t WHERE t.escola_id = %s) AS turmas
                     """,
                     (valor,) * 8,
@@ -1284,10 +1284,16 @@ class PostgresPolosEscolasRepository:
         offset: int = 0,
         escola_id: Optional[str] = None,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        conds = ["prof.polo_id = %s"]
+        conds = [
+            "EXISTS (SELECT 1 FROM professor_lotacoes pl "
+            "WHERE pl.professor_id = prof.id AND pl.polo_id = %s)"
+        ]
         params: List[Any] = [str(polo_id)]
         if escola_id:
-            conds.append("prof.escola_id = %s")
+            conds.append(
+                "EXISTS (SELECT 1 FROM professor_lotacoes pl "
+                "WHERE pl.professor_id = prof.id AND pl.escola_id = %s)"
+            )
             params.append(str(escola_id))
         if data_inicio:
             conds.append("prof.data_inicio >= %s")

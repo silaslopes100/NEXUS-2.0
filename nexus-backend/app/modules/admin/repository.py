@@ -395,6 +395,19 @@ class PostgresAdminRepository:
                 (str(uuid.uuid4()), str(user_id), polo_id, escola_id),
             )
             row = cur.fetchone()
+            if row and (polo_id or escola_id):
+                # Primeira lotação do professor = polo/escola do usuário.
+                cur.execute(
+                    """
+                    INSERT INTO professor_lotacoes (professor_id, polo_id, escola_id)
+                    SELECT %s, COALESCE(%s::uuid, escola.polo_id), %s::uuid
+                    FROM (SELECT 1) base
+                    LEFT JOIN escolas escola ON escola.id = %s::uuid
+                    WHERE COALESCE(%s::uuid, escola.polo_id) IS NOT NULL
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (row["id"], polo_id, escola_id, escola_id, polo_id),
+                )
             return str(row["id"]) if row else None
 
     def set_professor_status(self, professor_id: str, status: str) -> None:

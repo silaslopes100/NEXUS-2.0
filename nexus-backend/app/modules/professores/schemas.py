@@ -8,12 +8,31 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class LotacaoInput(BaseModel):
+    """Polo (obrigatório, ou deduzido da escola) com escola opcional."""
+
+    polo_id: Optional[str] = Field(default=None, max_length=64)
+    escola_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class LotacaoItem(BaseModel):
+    id: str
+    polo_id: str
+    polo_nome: Optional[str] = None
+    escola_id: Optional[str] = None
+    escola_nome: Optional[str] = None
+
+
 class ProfessorCreateRequest(BaseModel):
     """Cadastro de docente — exige vínculo com um usuário (coluna NOT NULL)."""
 
     usuario_id: str = Field(min_length=1, description="ID do usuário vinculado ao docente")
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
+    lotacoes: Optional[List[LotacaoInput]] = Field(
+        default=None,
+        description="Polos/escolas em que o professor atua. Sem a lista, polo_id/escola_id viram a lotação.",
+    )
     materias: List[str] = Field(default_factory=list, description="Disciplinas/docências do professor")
     disciplina_ids: List[UUID] = Field(default_factory=list, description="IDs das disciplinas vinculadas")
     data_inicio: Optional[date] = None
@@ -30,6 +49,7 @@ class ProfessorUpdateRequest(BaseModel):
     usuario_id: Optional[str] = None
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
+    lotacoes: Optional[List[LotacaoInput]] = None
     materias: Optional[List[str]] = None
     disciplina_ids: Optional[List[UUID]] = None
     data_inicio: Optional[date] = None
@@ -54,6 +74,7 @@ class ProfessorResponse(BaseModel):
     polo_nome: Optional[str] = None
     escola_id: Optional[str] = None
     escola_nome: Optional[str] = None
+    lotacoes: List[LotacaoItem] = Field(default_factory=list)
     materias: List[str] = Field(default_factory=list)
     disciplina_ids: List[str] = Field(default_factory=list)
     data_inicio: Optional[date] = None
@@ -182,6 +203,19 @@ class ProfessorDisciplinaConteudosResumo(BaseModel):
 
 class ProfessorConteudosResponse(BaseModel):
     items: List[ProfessorDisciplinaConteudosResumo]
+
+
+class ProfessorDisponivel(BaseModel):
+    """Dados mínimos para escolher um professor (sem remuneração nem PIX)."""
+
+    id: str
+    nome: Optional[str] = None
+    email: Optional[str] = None
+    lotacoes: List[LotacaoItem] = Field(default_factory=list)
+
+
+class ProfessorDisponiveisResponse(BaseModel):
+    items: List[ProfessorDisponivel]
 
 
 class ProfessorListResponse(BaseModel):

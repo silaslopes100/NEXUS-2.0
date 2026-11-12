@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { GraduationCap, Loader2, Search, UserCheck, UserPlus, X } from 'lucide-react';
+import { GraduationCap, Loader2, MapPin, Plus, Search, Trash2, UserCheck, UserPlus, X } from 'lucide-react';
 import { adminApi } from '@/features/admin/api';
 import { cursosApi, Curso, Disciplina } from '@/features/cursos/api';
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { UsuarioAdmin } from '@/types/admin';
-import { Professor, UnidadeOption } from '@/types/professor';
+import { Lotacao, Professor, UnidadeOption, rotuloLotacao } from '@/types/professor';
 
 interface Props {
   polos: UnidadeOption[];
@@ -17,6 +17,27 @@ const inputCls =
   'w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-nexus-yellow';
 
 const normalizarMateria = (nome: string): string => nome.trim().toLocaleLowerCase();
+
+/** Lotação ainda não salva (sem id) ou já existente. */
+type LotacaoRascunho = Omit<Lotacao, 'id'> & { chave: string };
+
+const chaveLotacao = (poloId: string, escolaId?: string | null) => `${poloId}:${escolaId || ''}`;
+
+const lotacoesIniciais = (professor: Professor | null): LotacaoRascunho[] => {
+  if (professor?.lotacoes?.length) {
+    return professor.lotacoes.map((l) => ({ ...l, chave: chaveLotacao(l.polo_id, l.escola_id) }));
+  }
+  if (professor?.polo_id) {
+    return [{
+      chave: chaveLotacao(professor.polo_id, professor.escola_id),
+      polo_id: professor.polo_id,
+      polo_nome: professor.polo_nome,
+      escola_id: professor.escola_id,
+      escola_nome: professor.escola_nome,
+    }];
+  }
+  return [];
+};
 
 interface UsuarioVinculado {
   id: string;
@@ -46,9 +67,11 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
   );
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', email: '', senha: '' });
 
+  const [lotacoes, setLotacoes] = useState<LotacaoRascunho[]>(() => lotacoesIniciais(professor));
   const [form, setForm] = useState({
-    polo_id: professor?.polo_id || '',
-    escola_id: professor?.escola_id || '',
+    // Linha "adicionar lotação" (polo + escola opcional)
+    polo_id: '',
+    escola_id: '',
     disciplina_ids: [...(professor?.disciplina_ids || [])],
     materias: (professor?.materias || []).reduce<string[]>((materias, materia) => {
       const nome = materia.trim();
@@ -107,6 +130,26 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
       })
       .catch(() => setEscolas([]));
   }, [form.polo_id]);
+
+  /** Lotação escolhida nos selects e ainda não adicionada à lista. */
+  const lotacaoSelecionada = (): LotacaoRascunho | null => {
+    if (!form.polo_id) return null;
+    return {
+      chave: chaveLotacao(form.polo_id, form.escola_id),
+      polo_id: form.polo_id,
+      polo_nome: polos.find((p) => p.id === form.polo_id)?.nome,
+      escola_id: form.escola_id || null,
+      escola_nome: escolas.find((e) => e.id === form.escola_id)?.nome ?? null,
+    };
+  };
+
+  const incluirLotacao = (atuais: LotacaoRascunho[], nova: LotacaoRascunho | null) =>
+    !nova || atuais.some((l) => l.chave === nova.chave) ? atuais : [...atuais, nova];
+
+  const adicionarLotacao = () => {
+    setLotacoes((atuais) => incluirLotacao(atuais, lotacaoSelecionada()));
+    setForm((atual) => ({ ...atual, polo_id: '', escola_id: '' }));
+  };
 
   const buscarUsuarios = async () => {
     const termo = buscaUsuario.trim();
@@ -167,10 +210,11 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
         usuarioId = usuario.id;
       }
 
+      // Se ficou um polo selecionado sem clicar em "Adicionar", ele também entra.
+      const lotacoesFinais = incluirLotacao(lotacoes, lotacaoSelecionada());
       const payload = {
         usuario_id: usuarioId as string,
-        polo_id: form.polo_id || null,
-        escola_id: form.escola_id || null,
+        lotacoes: lotacoesFinais.map((l) => ({ polo_id: l.polo_id, escola_id: l.escola_id || null })),
         materias: form.materias,
         disciplina_ids: form.disciplina_ids,
         data_inicio: form.data_inicio || null,
@@ -394,34 +438,66 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
             )}
           </div>
 
-          {/* Polo e Escola */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300">Polo</label>
+          {/* Polos e escolas (N lotações) */}
+          <div className="space-y-2">
+            <div>
+              <label className="text-xs font-semibold text-slate-300">Polos e escolas</label>
+              <p className="text-[11px] text-slate-500">
+                Onde o professor pode dar aula. Sem escola, ele atende todas as escolas do polo. Ao associá-lo a
+                uma turma, o polo/escola dela é incluído automaticamente.
+              </p>
+            </div>
+
+            {lotacoes.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-slate-800 px-3 py-2 text-xs text-slate-500">
+                Nenhum polo vinculado.
+              </p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {lotacoes.map((lotacao) => (
+                  <li
+                    key={lotacao.chave}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950 py-1 pl-3 pr-1.5 text-xs text-slate-200"
+                  >
+                    <MapPin size={12} className="text-nexus-yellow" />
+                    {rotuloLotacao({ ...lotacao, id: lotacao.chave })}
+                    {!lotacao.escola_id && <span className="text-slate-500">(todas as escolas)</span>}
+                    <button
+                      type="button"
+                      onClick={() => setLotacoes((atuais) => atuais.filter((l) => l.chave !== lotacao.chave))}
+                      aria-label={`Remover ${rotuloLotacao({ ...lotacao, id: lotacao.chave })}`}
+                      className="rounded-full p-1 text-slate-500 hover:bg-slate-800 hover:text-red-300"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
               <select
                 value={form.polo_id}
                 onChange={(e) => setForm({ ...form, polo_id: e.target.value, escola_id: '' })}
                 className={inputCls}
+                aria-label="Polo da lotação"
               >
-                <option value="">Sem polo vinculado</option>
+                <option value="">Selecione o polo</option>
                 {polos.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nome}
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300">Escola</label>
               <select
                 value={form.escola_id}
                 onChange={(e) => setForm({ ...form, escola_id: e.target.value })}
                 disabled={!form.polo_id}
                 className={`${inputCls} disabled:opacity-50`}
+                aria-label="Escola da lotação"
               >
                 <option value="">
-                  {form.polo_id ? 'Selecione a escola' : 'Selecione um polo primeiro'}
+                  {form.polo_id ? 'Todas as escolas do polo' : 'Selecione um polo primeiro'}
                 </option>
                 {escolas.map((e) => (
                   <option key={e.id} value={e.id}>
@@ -429,6 +505,15 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={adicionarLotacao}
+                disabled={!form.polo_id}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              >
+                <Plus size={14} />
+                Adicionar
+              </button>
             </div>
           </div>
 

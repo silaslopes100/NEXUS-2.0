@@ -1,3 +1,28 @@
+/** Polo (com escola opcional) em que o professor atua. */
+export interface Lotacao {
+  id: string;
+  polo_id: string;
+  polo_nome?: string | null;
+  escola_id?: string | null;
+  escola_nome?: string | null;
+}
+
+export interface LotacaoInput {
+  polo_id?: string | null;
+  escola_id?: string | null;
+}
+
+/** Dados mínimos para escolher um professor de qualquer unidade (sem remuneração). */
+export interface ProfessorDisponivel {
+  id: string;
+  nome?: string | null;
+  email?: string | null;
+  lotacoes: Lotacao[];
+}
+
+export const rotuloLotacao = (lotacao: Lotacao): string =>
+  [lotacao.polo_nome || 'Polo', lotacao.escola_nome].filter(Boolean).join(' · ');
+
 export interface Professor {
   id: string;
   usuario_id?: string | null;
@@ -7,6 +32,7 @@ export interface Professor {
   polo_nome?: string | null;
   escola_id?: string | null;
   escola_nome?: string | null;
+  lotacoes?: Lotacao[];
   materias?: string[];
   disciplina_ids?: string[];
   data_inicio?: string | null;
@@ -137,6 +163,7 @@ export interface ProfessorCreate {
   usuario_id: string;
   polo_id?: string | null;
   escola_id?: string | null;
+  lotacoes?: LotacaoInput[];
   materias?: string[];
   disciplina_ids?: string[];
   data_inicio?: string | null;
@@ -151,6 +178,7 @@ export interface ProfessorUpdate {
   usuario_id?: string;
   polo_id?: string | null;
   escola_id?: string | null;
+  lotacoes?: LotacaoInput[];
   materias?: string[];
   disciplina_ids?: string[];
   data_inicio?: string | null;

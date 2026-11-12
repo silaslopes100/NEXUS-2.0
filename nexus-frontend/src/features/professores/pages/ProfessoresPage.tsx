@@ -16,6 +16,7 @@ import {
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { ProfessorModal } from '@/features/professores/components/ProfessorModal';
 import { ProfessorDetalheModal } from '@/features/professores/components/ProfessorDetalheModal';
+import { LotacoesChips } from '@/features/professores/components/LotacoesChips';
 import { Professor, UnidadeOption } from '@/types/professor';
 
 const PAGE_SIZE = 20;
@@ -307,8 +308,7 @@ export const ProfessoresPage: React.FC = () => {
             <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
               <tr>
                 <th className="py-3.5 px-4">Docente</th>
-                <th className="py-3.5 px-4">Polo</th>
-                <th className="py-3.5 px-4">Escola</th>
+                <th className="py-3.5 px-4">Polos e escolas</th>
                 <th className="py-3.5 px-4">Disciplinas</th>
                 <th className="py-3.5 px-4">Carga Horária</th>
                 <th className="py-3.5 px-4">Status</th>
@@ -318,14 +318,14 @@ export const ProfessoresPage: React.FC = () => {
             <tbody className="divide-y divide-slate-800/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-nexus-yellow" />
                     Carregando professores do NEXUS 2.0...
                   </td>
                 </tr>
               ) : !searchTriggered ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
                     Preencha a busca ou selecione um filtro e clique em{' '}
                     <strong className="text-nexus-yellow">Buscar</strong> para carregar os
                     professores.
@@ -333,7 +333,7 @@ export const ProfessoresPage: React.FC = () => {
                 </tr>
               ) : professores.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
                     Nenhum professor encontrado com os filtros informados.
                   </td>
                 </tr>
@@ -352,8 +352,9 @@ export const ProfessoresPage: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4">{p.polo_nome || '—'}</td>
-                    <td className="py-3.5 px-4">{p.escola_nome || '—'}</td>
+                    <td className="py-3.5 px-4">
+                      <LotacoesChips lotacoes={p.lotacoes} limite={2} />
+                    </td>
 
                     <td className="py-3.5 px-4">
                       <div className="flex flex-wrap gap-1 max-w-xs">

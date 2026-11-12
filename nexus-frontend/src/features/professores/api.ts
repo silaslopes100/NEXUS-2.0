@@ -1,8 +1,10 @@
 import { apiClient } from '@/api/client';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import {
+  LotacaoInput,
   Professor,
   ProfessorCreate,
+  ProfessorDisponivel,
   ProfessorDetalhe,
   ProfessorConteudoItem,
   ProfessorConteudosResponse,
@@ -28,6 +30,26 @@ export interface ListProfessoresParams {
 export const professoresApi = {
   listar: async (params?: ListProfessoresParams): Promise<ProfessorListResponse> => {
     const { data } = await apiClient.get<ProfessorListResponse>('/professores/', { params });
+    return data;
+  },
+
+  /** Professores ativos de qualquer polo/escola, para associar a uma turma. */
+  disponiveis: async (search?: string): Promise<ProfessorDisponivel[]> => {
+    const { data } = await apiClient.get<{ items: ProfessorDisponivel[] }>('/professores/disponiveis', {
+      params: { search: search || undefined, limit: 20 },
+    });
+    return data.items;
+  },
+
+  adicionarLotacao: async (professorId: string, lotacao: LotacaoInput): Promise<Professor> => {
+    const { data } = await apiClient.post<Professor>(`/professores/${professorId}/lotacoes`, lotacao);
+    return data;
+  },
+
+  removerLotacao: async (professorId: string, lotacaoId: string): Promise<Professor> => {
+    const { data } = await apiClient.delete<Professor>(
+      `/professores/${professorId}/lotacoes/${lotacaoId}`
+    );
     return data;
   },
 

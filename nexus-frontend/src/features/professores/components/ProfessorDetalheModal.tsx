@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { ProfessorDetalhe } from '@/types/professor';
+import { LotacoesChips } from '@/features/professores/components/LotacoesChips';
 
 interface Props {
   professorId: string;
@@ -75,6 +76,10 @@ export const ProfessorDetalheModal: React.FC<Props> = ({ professorId, onClose })
               <strong>{detalhe.professor.horas_totais ?? 0}h</strong> · {detalhe.professor.quantidade_aulas ?? 0} aulas previstas
               <p className="mt-1 text-xs text-slate-400">Soma das disciplinas vinculadas no cadastro.</p>
             </div>
+            <section aria-label="Polos e escolas">
+              <h3 className="mb-2 font-semibold text-white">Polos e escolas</h3>
+              <LotacoesChips lotacoes={detalhe.professor.lotacoes} />
+            </section>
             <section aria-label="Cursos">
               <h3 className="mb-2 font-semibold text-white">Cursos</h3>
               {cursos.length ? <ul className="flex flex-wrap gap-2">{cursos.map(([id, nome]) => <li key={id} className="rounded-lg bg-slate-800 px-3 py-1 text-sm text-slate-200">{nome}</li>)}</ul> : <p className="text-sm text-slate-400">Nenhum curso vinculado.</p>}

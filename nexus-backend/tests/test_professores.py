@@ -1106,3 +1106,174 @@ async def test_cadastro_completa_registro_criado_pelo_perfil(client: AsyncClient
     assert res.json()["materias"] == ["Matemática", "Física"]
     assert len(professores_repo.professores) == 1
     assert duplicado.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Lotações: professor em N polos / N escolas
+# ---------------------------------------------------------------------------
+
+POLO_A = str(uuid.UUID(int=201))
+POLO_B = str(uuid.UUID(int=202))
+ESCOLA_A1 = str(uuid.UUID(int=211))
+ESCOLA_B1 = str(uuid.UUID(int=221))
+
+
+def _preparar_lotacoes(repos):
+    """Professor lotado no polo A; gestor do polo B; turma no polo B / escola B1."""
+    auth_repo, professores_repo, professor_id, disciplina_id, turma_id = _preparar_vinculo_turma(
+        repos, polo_id=POLO_A
+    )
+    professores_repo.polos.update({
+        POLO_A: {"id": POLO_A, "nome": "Polo A"},
+        POLO_B: {"id": POLO_B, "nome": "Polo B"},
+    })
+    professores_repo.escolas.update({
+        ESCOLA_A1: {"id": ESCOLA_A1, "nome": "Escola A1", "polo_id": POLO_A},
+        ESCOLA_B1: {"id": ESCOLA_B1, "nome": "Escola B1", "polo_id": POLO_B},
+    })
+    professores_repo.turmas[turma_id].update({"polo_id": POLO_B, "escola_id": ESCOLA_B1})
+    professores_repo.professores[professor_id].update({"pix": "chave-pix", "valor_hora_aula": 80})
+    for user_id, polo_id in (("gestor-a", POLO_A), ("gestor-b", POLO_B)):
+        auth_repo.usuarios[user_id] = {
+            **auth_repo.usuarios["gestor-1"], "id": user_id, "polo_id": polo_id,
+            "email": f"{user_id}@nexus.com.br",
+        }
+    return professores_repo, professor_id, disciplina_id, turma_id
+
+
+def _h(user_id: str) -> dict:
+    return {"Authorization": f"Bearer {_token(user_id)}"}
+
+
+@pytest.mark.asyncio
+async def test_admin_cadastra_professor_com_varias_lotacoes(client: AsyncClient, repos):
+    _, professores_repo = repos
+    professores_repo.polos.update({POLO_A: {"id": POLO_A, "nome": "Polo A"}, POLO_B: {"id": POLO_B, "nome": "Polo B"}})
+    professores_repo.escolas[ESCOLA_A1] = {"id": ESCOLA_A1, "nome": "Escola A1", "polo_id": POLO_A}
+    payload = {
+        **_payload(),
+        "polo_id": None,
+        "lotacoes": [
+            {"polo_id": POLO_A},
+            {"escola_id": ESCOLA_A1},  # polo deduzido da escola
+            {"polo_id": POLO_B},
+            {"polo_id": POLO_B},  # repetida: ignorada
+        ],
+    }
+    criado = await client.post("/professores/", json=payload, headers=_h("admin-1"))
+    assert criado.status_code == 201, criado.text
+    lotacoes = criado.json()["lotacoes"]
+    assert {(l["polo_id"], l["escola_id"]) for l in lotacoes} == {
+        (POLO_A, None), (POLO_A, ESCOLA_A1), (POLO_B, None)
+    }
+    assert criado.json()["polo_id"] in {POLO_A, POLO_B}
+
+    invalido = await client.put(
+        f"/professores/{criado.json()['id']}",
+        json={"lotacoes": [{"polo_id": POLO_B, "escola_id": ESCOLA_A1}]},
+        headers=_h("admin-1"),
+    )
+    assert invalido.status_code == 400
+    assert "não pertence ao polo" in invalido.json()["detail"]
+
+    substituido = await client.put(
+        f"/professores/{criado.json()['id']}",
+        json={"lotacoes": [{"polo_id": POLO_B}]},
+        headers=_h("admin-1"),
+    )
+    assert substituido.status_code == 200, substituido.text
+    assert [l["polo_id"] for l in substituido.json()["lotacoes"]] == [POLO_B]
+    assert substituido.json()["polo_id"] == POLO_B
+
+
+@pytest.mark.asyncio
+async def test_gestor_associa_professor_de_outro_polo_e_passa_a_ve_lo(client: AsyncClient, repos):
+    professores_repo, professor_id, disciplina_id, turma_id = _preparar_lotacoes(repos)
+
+    antes = await client.get("/professores/", headers=_h("gestor-b"))
+    assert antes.json()["total"] == 0
+    assert (await client.get(f"/professores/{professor_id}", headers=_h("gestor-b"))).status_code == 404
+
+    # A busca para associar enxerga professores de qualquer unidade, sem dados sensíveis.
+    disponiveis = await client.get("/professores/disponiveis", headers=_h("gestor-b"))
+    assert disponiveis.status_code == 200, disponiveis.text
+    item = next(i for i in disponiveis.json()["items"] if i["id"] == professor_id)
+    assert "pix" not in item and "valor_hora_aula" not in item
+    assert item["lotacoes"][0]["polo_id"] == POLO_A
+
+    criado = await client.post(
+        f"/professores/turmas/{turma_id}/vinculos",
+        json={"professor_id": professor_id, "disciplina_id": disciplina_id},
+        headers=_h("gestor-b"),
+    )
+    assert criado.status_code == 201, criado.text
+
+    lotacoes = {(l["polo_id"], l.get("escola_id")) for l in professores_repo.list_lotacoes(professor_id)}
+    assert lotacoes == {(POLO_A, None), (POLO_B, ESCOLA_B1)}
+    assert any(log["acao"] == "professor_lotacao_incluida" for log in professores_repo.logs_auditoria)
+
+    depois = await client.get("/professores/", headers=_h("gestor-b"))
+    assert depois.json()["total"] == 1
+    # Cada gestor continua vendo o professor, mas o detalhe só traz as turmas da sua unidade.
+    detalhe_b = await client.get(f"/professores/{professor_id}/detalhe", headers=_h("gestor-b"))
+    assert detalhe_b.status_code == 200, detalhe_b.text
+    detalhe_a = await client.get(f"/professores/{professor_id}/detalhe", headers=_h("gestor-a"))
+    assert detalhe_a.status_code == 200
+    assert detalhe_a.json()["turmas"] == []
+
+
+@pytest.mark.asyncio
+async def test_gestor_so_altera_lotacao_da_propria_unidade(client: AsyncClient, repos):
+    professores_repo, professor_id, _, _ = _preparar_lotacoes(repos)
+
+    negado = await client.post(
+        f"/professores/{professor_id}/lotacoes", json={"polo_id": POLO_A}, headers=_h("gestor-b")
+    )
+    assert negado.status_code == 403
+
+    incluida = await client.post(
+        f"/professores/{professor_id}/lotacoes", json={"polo_id": POLO_B}, headers=_h("gestor-b")
+    )
+    assert incluida.status_code == 200, incluida.text
+    lotacoes = {l["polo_id"]: l["id"] for l in incluida.json()["lotacoes"]}
+    assert set(lotacoes) == {POLO_A, POLO_B}
+
+    remover_a = await client.delete(
+        f"/professores/{professor_id}/lotacoes/{lotacoes[POLO_A]}", headers=_h("gestor-b")
+    )
+    assert remover_a.status_code == 403
+
+    removida = await client.delete(
+        f"/professores/{professor_id}/lotacoes/{lotacoes[POLO_B]}", headers=_h("gestor-b")
+    )
+    assert removida.status_code == 200, removida.text
+    assert [l["polo_id"] for l in removida.json()["lotacoes"]] == [POLO_A]
+
+    ultima = await client.delete(
+        f"/professores/{professor_id}/lotacoes/{lotacoes[POLO_A]}", headers=_h("admin-1")
+    )
+    assert ultima.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_lotacao_com_turma_ativa_nao_pode_ser_removida(client: AsyncClient, repos):
+    professores_repo, professor_id, disciplina_id, turma_id = _preparar_lotacoes(repos)
+    criado = await client.post(
+        f"/professores/turmas/{turma_id}/vinculos",
+        json={"professor_id": professor_id, "disciplina_id": disciplina_id},
+        headers=_h("admin-1"),
+    )
+    assert criado.status_code == 201, criado.text
+    lotacao_b = next(l for l in professores_repo.list_lotacoes(professor_id) if l["polo_id"] == POLO_B)
+
+    bloqueada = await client.delete(
+        f"/professores/{professor_id}/lotacoes/{lotacao_b['id']}", headers=_h("admin-1")
+    )
+    assert bloqueada.status_code == 409
+    assert "leciona" in bloqueada.json()["detail"]
+
+    await client.delete(f"/professores/turmas/{turma_id}/vinculos/{criado.json()['id']}", headers=_h("admin-1"))
+    liberada = await client.delete(
+        f"/professores/{professor_id}/lotacoes/{lotacao_b['id']}", headers=_h("admin-1")
+    )
+    assert liberada.status_code == 200, liberada.text

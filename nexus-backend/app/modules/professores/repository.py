@@ -13,7 +13,8 @@ _SELECT_BASE = """
     SELECT prof.*, u.nome, u.email,
            p.nome AS polo_nome, e.nome AS escola_nome,
            COALESCE(vinculos.disciplina_ids, ARRAY[]::text[]) AS disciplina_ids,
-           COALESCE(vinculos.disciplina_nomes, ARRAY[]::text[]) AS disciplina_nomes
+           COALESCE(vinculos.disciplina_nomes, ARRAY[]::text[]) AS disciplina_nomes,
+           COALESCE(lot.lotacoes, '[]'::json) AS lotacoes
     FROM professores prof
     LEFT JOIN usuarios u ON u.id = prof.usuario_id
     LEFT JOIN polos p ON p.id = prof.polo_id
@@ -26,7 +27,49 @@ _SELECT_BASE = """
         JOIN disciplinas disciplina ON disciplina.id = vinculo.disciplina_id
         WHERE vinculo.professor_id = prof.id
     ) vinculos ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT json_agg(
+                   json_build_object(
+                       'id', lotacao.id::text,
+                       'polo_id', lotacao.polo_id::text,
+                       'polo_nome', lotacao_polo.nome,
+                       'escola_id', lotacao.escola_id::text,
+                       'escola_nome', lotacao_escola.nome
+                   )
+                   ORDER BY lotacao_polo.nome, lotacao_escola.nome NULLS FIRST
+               ) AS lotacoes
+        FROM professor_lotacoes lotacao
+        JOIN polos lotacao_polo ON lotacao_polo.id = lotacao.polo_id
+        LEFT JOIN escolas lotacao_escola ON lotacao_escola.id = lotacao.escola_id
+        WHERE lotacao.professor_id = prof.id
+    ) lot ON TRUE
 """
+
+_LOTACAO_SELECT = """
+    SELECT lotacao.id::text AS id, lotacao.professor_id::text AS professor_id,
+           lotacao.polo_id::text AS polo_id, polo.nome AS polo_nome,
+           lotacao.escola_id::text AS escola_id, escola.nome AS escola_nome
+    FROM professor_lotacoes lotacao
+    JOIN polos polo ON polo.id = lotacao.polo_id
+    LEFT JOIN escolas escola ON escola.id = lotacao.escola_id
+"""
+
+
+def _uuid_valido(valor: Any) -> bool:
+    try:
+        uuid.UUID(str(valor))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def lotacao_cobre_unidade(
+    lotacao: Dict[str, Any], polo_id: Optional[str], escola_id: Optional[str]
+) -> bool:
+    """A lotação atende a unidade? Lotação só de polo cobre todas as escolas do polo."""
+    if str(lotacao.get("polo_id")) != str(polo_id):
+        return False
+    return not lotacao.get("escola_id") or str(lotacao.get("escola_id")) == str(escola_id)
 
 
 class ProfessoresRepositoryInterface(Protocol):
@@ -110,6 +153,36 @@ class ProfessoresRepositoryInterface(Protocol):
 
     def set_usuario_perfil(self, usuario_id: str, perfil_nome: str) -> Optional[str]:
         """Define o perfil do usuário; retorna o nome do perfil anterior (ou None se não mudou)."""
+        ...
+
+    # ---------- Lotações (N polos / N escolas) ----------
+
+    def get_escola_polo(self, escola_id: str) -> Optional[str]:
+        """Polo ao qual a escola pertence (None se a escola não existe)."""
+        ...
+
+    def polo_existe(self, polo_id: str) -> bool: ...
+
+    def list_lotacoes(self, professor_id: str) -> List[Dict[str, Any]]: ...
+
+    def add_lotacao(
+        self,
+        professor_id: str,
+        polo_id: str,
+        escola_id: Optional[str] = None,
+        criado_por: Optional[str] = None,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """Inclui a lotação (idempotente); retorna (lotação, criada_agora)."""
+        ...
+
+    def remove_lotacao(self, professor_id: str, lotacao_id: str) -> Optional[Dict[str, Any]]: ...
+
+    def replace_lotacoes(
+        self, professor_id: str, lotacoes: List[Dict[str, Any]], criado_por: Optional[str] = None
+    ) -> None: ...
+
+    def list_unidades_turmas_ativas(self, professor_id: str) -> List[Dict[str, Any]]:
+        """Polo/escola das turmas em que o professor tem vínculo ativo."""
         ...
 
     def record_audit_log(
@@ -240,8 +313,6 @@ class PostgresProfessoresRepository:
                 or professor["usuario_status"] != "ativo"
             ):
                 return "", "inactive_professor"
-            if scope_column and str(professor[scope_column]) != str(scope_id):
-                return "", "professor_out_of_scope"
             cur.execute(
                 """
                 SELECT id::text AS id, ativo
@@ -672,10 +743,16 @@ class PostgresProfessoresRepository:
             like = f"%{search.strip().lower()}%"
             params.extend([like, like, like])
         if polo_id:
-            conds.append("prof.polo_id = %s")
+            conds.append(
+                "EXISTS (SELECT 1 FROM professor_lotacoes lotacao "
+                "WHERE lotacao.professor_id = prof.id AND lotacao.polo_id = %s)"
+            )
             params.append(str(polo_id))
         if escola_id:
-            conds.append("prof.escola_id = %s")
+            conds.append(
+                "EXISTS (SELECT 1 FROM professor_lotacoes lotacao "
+                "WHERE lotacao.professor_id = prof.id AND lotacao.escola_id = %s)"
+            )
             params.append(str(escola_id))
         if disciplina and disciplina.strip():
             conds.append(
@@ -783,6 +860,8 @@ class PostgresProfessoresRepository:
 
     def create_professor(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
+        data = dict(data)
+        lotacoes = data.pop("lotacoes", None)
         with get_db_cursor() as cur:
             cur.execute(
                 """
@@ -807,6 +886,8 @@ class PostgresProfessoresRepository:
                 ),
             )
             self._sync_disciplina_ids(cur, new_id, data.get("disciplina_ids") or [])
+            if lotacoes is not None:
+                self._replace_lotacoes(cur, new_id, lotacoes, data.get("criado_por"))
         return new_id
 
     def update_professor(self, professor_id: str, data: Dict[str, Any]) -> None:
@@ -814,9 +895,12 @@ class PostgresProfessoresRepository:
             return
         fields: List[str] = []
         params: List[Any] = []
+        lotacoes = data.get("lotacoes")
         for key, value in data.items():
-            if key == "disciplina_ids":
+            if key in ("disciplina_ids", "lotacoes", "criado_por"):
                 continue
+            if lotacoes is not None and key in ("polo_id", "escola_id"):
+                continue  # a lotação principal é derivada da lista
             if key == "materias":
                 fields.append("materias = %s")
                 params.append(json.dumps(value or []))
@@ -833,6 +917,144 @@ class PostgresProfessoresRepository:
                 )
             if "disciplina_ids" in data:
                 self._sync_disciplina_ids(cur, str(professor_id), data.get("disciplina_ids") or [])
+            if lotacoes is not None:
+                self._replace_lotacoes(cur, str(professor_id), lotacoes, data.get("criado_por"))
+
+    # ---------- Lotações ----------
+
+    def get_escola_polo(self, escola_id: str) -> Optional[str]:
+        if not _uuid_valido(escola_id):
+            return None
+        with get_db_cursor() as cur:
+            cur.execute("SELECT polo_id::text AS polo_id FROM escolas WHERE id = %s", (str(escola_id),))
+            row = cur.fetchone()
+            return str(row["polo_id"]) if row and row.get("polo_id") else None
+
+    def polo_existe(self, polo_id: str) -> bool:
+        if not _uuid_valido(polo_id):
+            return False
+        with get_db_cursor() as cur:
+            cur.execute("SELECT 1 FROM polos WHERE id = %s", (str(polo_id),))
+            return cur.fetchone() is not None
+
+    def list_lotacoes(self, professor_id: str) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                _LOTACAO_SELECT
+                + " WHERE lotacao.professor_id = %s ORDER BY polo.nome, escola.nome NULLS FIRST",
+                (str(professor_id),),
+            )
+            return [dict(row) for row in cur.fetchall()]
+
+    def add_lotacao(
+        self,
+        professor_id: str,
+        polo_id: str,
+        escola_id: Optional[str] = None,
+        criado_por: Optional[str] = None,
+    ) -> Tuple[Dict[str, Any], bool]:
+        with get_db_cursor() as cur:
+            criada = self._insert_lotacao(cur, str(professor_id), str(polo_id), escola_id, criado_por)
+            self._sync_lotacao_principal(cur, str(professor_id))
+            cur.execute(
+                _LOTACAO_SELECT
+                + """ WHERE lotacao.professor_id = %s AND lotacao.polo_id = %s
+                  AND lotacao.escola_id IS NOT DISTINCT FROM %s::uuid""",
+                (str(professor_id), str(polo_id), str(escola_id) if escola_id else None),
+            )
+            row = cur.fetchone()
+        return dict(row), criada
+
+    def remove_lotacao(self, professor_id: str, lotacao_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                _LOTACAO_SELECT + " WHERE lotacao.id = %s AND lotacao.professor_id = %s",
+                (str(lotacao_id), str(professor_id)),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            cur.execute("DELETE FROM professor_lotacoes WHERE id = %s", (str(lotacao_id),))
+            self._sync_lotacao_principal(cur, str(professor_id))
+            return dict(row)
+
+    def replace_lotacoes(
+        self, professor_id: str, lotacoes: List[Dict[str, Any]], criado_por: Optional[str] = None
+    ) -> None:
+        with get_db_cursor() as cur:
+            self._replace_lotacoes(cur, str(professor_id), lotacoes, criado_por)
+
+    def list_unidades_turmas_ativas(self, professor_id: str) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT COALESCE(t.polo_id, escola.polo_id)::text AS polo_id,
+                       t.escola_id::text AS escola_id
+                FROM professor_disciplinas pd
+                JOIN turmas t ON t.id = pd.turma_id
+                LEFT JOIN escolas escola ON escola.id = t.escola_id
+                WHERE pd.professor_id = %s AND pd.ativo = true
+                """,
+                (str(professor_id),),
+            )
+            return [dict(row) for row in cur.fetchall()]
+
+    @staticmethod
+    def _insert_lotacao(
+        cur: Any, professor_id: str, polo_id: str, escola_id: Optional[str], criado_por: Optional[str]
+    ) -> bool:
+        cur.execute(
+            """
+            INSERT INTO professor_lotacoes (professor_id, polo_id, escola_id, criado_por)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            RETURNING id
+            """,
+            (professor_id, polo_id, str(escola_id) if escola_id else None, str(criado_por) if criado_por else None),
+        )
+        return cur.fetchone() is not None
+
+    def _replace_lotacoes(
+        self, cur: Any, professor_id: str, lotacoes: List[Dict[str, Any]], criado_por: Optional[str]
+    ) -> None:
+        cur.execute("DELETE FROM professor_lotacoes WHERE professor_id = %s", (professor_id,))
+        for lotacao in lotacoes:
+            self._insert_lotacao(
+                cur, professor_id, str(lotacao["polo_id"]), lotacao.get("escola_id"), criado_por
+            )
+        self._sync_lotacao_principal(cur, professor_id)
+
+    @staticmethod
+    def _sync_lotacao_principal(cur: Any, professor_id: str) -> None:
+        """Mantém professores.polo_id/escola_id apontando para uma lotação existente."""
+        cur.execute(
+            """
+            UPDATE professores prof
+            SET polo_id = principal.polo_id, escola_id = principal.escola_id, atualizado_em = now()
+            FROM (
+                SELECT polo_id, escola_id FROM professor_lotacoes
+                WHERE professor_id = %s
+                ORDER BY criado_em, id
+                LIMIT 1
+            ) principal
+            WHERE prof.id = %s
+              AND NOT EXISTS (
+                  SELECT 1 FROM professor_lotacoes atual
+                  WHERE atual.professor_id = prof.id
+                    AND atual.polo_id IS NOT DISTINCT FROM prof.polo_id
+                    AND atual.escola_id IS NOT DISTINCT FROM prof.escola_id
+              )
+            """,
+            (professor_id, professor_id),
+        )
+        cur.execute(
+            """
+            UPDATE professores SET polo_id = NULL, escola_id = NULL, atualizado_em = now()
+            WHERE id = %s AND (polo_id IS NOT NULL OR escola_id IS NOT NULL)
+              AND NOT EXISTS (SELECT 1 FROM professor_lotacoes WHERE professor_id = %s)
+            """,
+            (professor_id, professor_id),
+        )
 
     @staticmethod
     def _sync_disciplina_ids(cur: Any, professor_id: str, disciplina_ids: List[str]) -> None:
@@ -923,6 +1145,9 @@ class InMemoryProfessoresRepository:
         self.polos: Dict[str, Dict[str, Any]] = {}
         self.escolas: Dict[str, Dict[str, Any]] = {}
         self.logs_auditoria: List[Dict[str, Any]] = []
+        # professor_id -> lotações. Sem entrada, vale o polo/escola do cadastro
+        # (equivale ao backfill da migração 013).
+        self.lotacoes: Dict[str, List[Dict[str, Any]]] = {}
 
     def get_turma_vinculo_scope(self, turma_id: str) -> Optional[Dict[str, Any]]:
         turma = self.turmas.get(str(turma_id))
@@ -987,8 +1212,6 @@ class InMemoryProfessoresRepository:
         usuario = self.usuarios.get(str(professor.get("usuario_id"))) if professor else None
         if not professor or professor.get("status") != "ativo" or not usuario or usuario.get("status") != "ativo":
             return "", "inactive_professor"
-        if scope_column and str(professor.get(scope_column)) != str(scope_id):
-            return "", "professor_out_of_scope"
         same = [
             row for row in self.professor_disciplinas
             if str(row.get("professor_id")) == str(professor_id)
@@ -1313,6 +1536,7 @@ class InMemoryProfessoresRepository:
             "email": usuario.get("email"),
             "polo_nome": polo.get("nome"),
             "escola_nome": escola.get("nome"),
+            "lotacoes": self.list_lotacoes(str(row.get("id"))),
         }
 
     def list_professores(
@@ -1335,9 +1559,15 @@ class InMemoryProfessoresRepository:
                 or termo in str(p.get("email") or "").lower()
             ]
         if polo_id:
-            items = [p for p in items if str(p.get("polo_id")) == str(polo_id)]
+            items = [
+                p for p in items
+                if any(str(l["polo_id"]) == str(polo_id) for l in p["lotacoes"])
+            ]
         if escola_id:
-            items = [p for p in items if str(p.get("escola_id")) == str(escola_id)]
+            items = [
+                p for p in items
+                if any(str(l.get("escola_id")) == str(escola_id) for l in p["lotacoes"])
+            ]
         if disciplina and disciplina.strip():
             termo = disciplina.strip().lower()
             items = [p for p in items if any(termo in str(m).lower() for m in (p.get("materias") or []))]
@@ -1417,6 +1647,9 @@ class InMemoryProfessoresRepository:
 
     def create_professor(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
+        data = dict(data)
+        lotacoes = data.pop("lotacoes", None)
+        data.pop("criado_por", None)
         self.professores[new_id] = {
             "id": new_id,
             "status": "ativo",
@@ -1430,18 +1663,130 @@ class InMemoryProfessoresRepository:
         self.professor_disciplina_vinculos[new_id] = list(dict.fromkeys(
             str(item) for item in (data.get("disciplina_ids") or [])
         ))
+        if lotacoes is not None:
+            self.replace_lotacoes(new_id, lotacoes)
         return new_id
 
     def update_professor(self, professor_id: str, data: Dict[str, Any]) -> None:
         row = self.professores.get(str(professor_id))
         if row:
-            row.update({key: value for key, value in data.items() if key not in (
-                "disciplina_ids", "horas_totais", "quantidade_aulas"
-            )})
+            lotacoes = data.get("lotacoes")
+            ignorar = {"disciplina_ids", "horas_totais", "quantidade_aulas", "lotacoes", "criado_por"}
+            if lotacoes is not None:
+                ignorar |= {"polo_id", "escola_id"}
+            row.update({key: value for key, value in data.items() if key not in ignorar})
+            if lotacoes is not None:
+                self.replace_lotacoes(str(professor_id), lotacoes)
             if "disciplina_ids" in data:
                 self.professor_disciplina_vinculos[str(professor_id)] = list(dict.fromkeys(
                     str(item) for item in (data.get("disciplina_ids") or [])
                 ))
+
+    # ---------- Lotações ----------
+
+    def _lotacao_view(self, lotacao: Dict[str, Any]) -> Dict[str, Any]:
+        escola_id = lotacao.get("escola_id")
+        return {
+            **lotacao,
+            "polo_nome": self.polos.get(str(lotacao["polo_id"]), {}).get("nome"),
+            "escola_nome": self.escolas.get(str(escola_id), {}).get("nome") if escola_id else None,
+        }
+
+    def _lotacoes_brutas(self, professor_id: str) -> List[Dict[str, Any]]:
+        professor_id = str(professor_id)
+        if professor_id not in self.lotacoes:
+            row = self.professores.get(professor_id) or {}
+            polo_id = row.get("polo_id")
+            if not polo_id and row.get("escola_id"):
+                polo_id = self.get_escola_polo(str(row["escola_id"]))
+            self.lotacoes[professor_id] = (
+                [{
+                    "id": str(uuid.uuid4()),
+                    "professor_id": professor_id,
+                    "polo_id": str(polo_id),
+                    "escola_id": str(row["escola_id"]) if row.get("escola_id") else None,
+                }]
+                if polo_id else []
+            )
+        return self.lotacoes[professor_id]
+
+    def _sync_principal(self, professor_id: str) -> None:
+        row = self.professores.get(str(professor_id))
+        if not row:
+            return
+        lotacoes = self._lotacoes_brutas(professor_id)
+        atual = any(
+            str(l["polo_id"]) == str(row.get("polo_id"))
+            and str(l.get("escola_id")) == str(row.get("escola_id"))
+            for l in lotacoes
+        )
+        if not atual:
+            row["polo_id"] = lotacoes[0]["polo_id"] if lotacoes else None
+            row["escola_id"] = lotacoes[0].get("escola_id") if lotacoes else None
+
+    def get_escola_polo(self, escola_id: str) -> Optional[str]:
+        escola = self.escolas.get(str(escola_id))
+        return str(escola["polo_id"]) if escola and escola.get("polo_id") else None
+
+    def polo_existe(self, polo_id: str) -> bool:
+        return str(polo_id) in self.polos
+
+    def list_lotacoes(self, professor_id: str) -> List[Dict[str, Any]]:
+        rows = [self._lotacao_view(l) for l in self._lotacoes_brutas(professor_id)]
+        return sorted(rows, key=lambda l: (l.get("polo_nome") or "", l.get("escola_nome") or ""))
+
+    def add_lotacao(
+        self,
+        professor_id: str,
+        polo_id: str,
+        escola_id: Optional[str] = None,
+        criado_por: Optional[str] = None,
+    ) -> Tuple[Dict[str, Any], bool]:
+        lotacoes = self._lotacoes_brutas(professor_id)
+        for lotacao in lotacoes:
+            if str(lotacao["polo_id"]) == str(polo_id) and str(lotacao.get("escola_id")) == str(escola_id):
+                return self._lotacao_view(lotacao), False
+        nova = {
+            "id": str(uuid.uuid4()),
+            "professor_id": str(professor_id),
+            "polo_id": str(polo_id),
+            "escola_id": str(escola_id) if escola_id else None,
+        }
+        lotacoes.append(nova)
+        self._sync_principal(professor_id)
+        return self._lotacao_view(nova), True
+
+    def remove_lotacao(self, professor_id: str, lotacao_id: str) -> Optional[Dict[str, Any]]:
+        lotacoes = self._lotacoes_brutas(professor_id)
+        alvo = next((l for l in lotacoes if str(l["id"]) == str(lotacao_id)), None)
+        if not alvo:
+            return None
+        lotacoes.remove(alvo)
+        self._sync_principal(professor_id)
+        return self._lotacao_view(alvo)
+
+    def replace_lotacoes(
+        self, professor_id: str, lotacoes: List[Dict[str, Any]], criado_por: Optional[str] = None
+    ) -> None:
+        self.lotacoes[str(professor_id)] = []
+        for lotacao in lotacoes:
+            self.add_lotacao(str(professor_id), str(lotacao["polo_id"]), lotacao.get("escola_id"))
+        self._sync_principal(professor_id)
+
+    def list_unidades_turmas_ativas(self, professor_id: str) -> List[Dict[str, Any]]:
+        unidades = []
+        for vinculo in self.professor_disciplinas:
+            if str(vinculo.get("professor_id")) != str(professor_id) or not vinculo.get("ativo", True):
+                continue
+            turma = self.turmas.get(str(vinculo.get("turma_id"))) or {}
+            polo_id = turma.get("polo_id") or (
+                self.get_escola_polo(str(turma["escola_id"])) if turma.get("escola_id") else None
+            )
+            unidade = {"polo_id": str(polo_id) if polo_id else None,
+                       "escola_id": str(turma["escola_id"]) if turma.get("escola_id") else None}
+            if unidade not in unidades:
+                unidades.append(unidade)
+        return unidades
 
     def set_usuario_perfil(self, usuario_id: str, perfil_nome: str) -> Optional[str]:
         usuario = self.usuarios.get(str(usuario_id))

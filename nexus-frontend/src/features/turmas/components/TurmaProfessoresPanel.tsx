@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, GraduationCap, Loader2, Search, UserRoundX, X } from 'lucide-react';
 import { cursosApi, Disciplina } from '@/features/cursos/api';
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
-import { ProfessorTurmaVinculo } from '@/types/professor';
+import { ProfessorDisponivel, ProfessorTurmaVinculo, rotuloLotacao } from '@/types/professor';
 import { Turma } from '@/features/turmas/api';
 import { inputCls } from '@/features/turmas/components/TurmaFormModal';
 
@@ -14,7 +14,7 @@ interface Props {
 export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
   const [vinculos, setVinculos] = useState<ProfessorTurmaVinculo[]>([]);
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
-  const [professores, setProfessores] = useState<{ id: string; nome?: string | null; email?: string | null }[]>([]);
+  const [professores, setProfessores] = useState<ProfessorDisponivel[]>([]);
   const [professorId, setProfessorId] = useState('');
   const [disciplinaId, setDisciplinaId] = useState('');
   const [buscaProfessor, setBuscaProfessor] = useState('');
@@ -58,14 +58,9 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
       setBuscandoProfessores(true);
       setErroBusca('');
       professoresApi
-        .listar({
-          search: buscaProfessor.trim() || undefined,
-          status: 'ativo',
-          limit: 20,
-          offset: 0,
-        })
-        .then((response) => {
-          if (active) setProfessores(response.items);
+        .disponiveis(buscaProfessor.trim() || undefined)
+        .then((items) => {
+          if (active) setProfessores(items);
         })
         .catch((error: unknown) => {
           if (active) setErroBusca(apiErrorMessage(error, 'Não foi possível buscar professores.'));
@@ -79,6 +74,15 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
       window.clearTimeout(timer);
     };
   }, [buscaProfessor]);
+
+  const professorSelecionado = professores.find((professor) => professor.id === professorId);
+  const atendeTurma = Boolean(
+    professorSelecionado?.lotacoes.some(
+      (lotacao) =>
+        lotacao.polo_id === turma.polo_id &&
+        (!lotacao.escola_id || lotacao.escola_id === turma.escola_id)
+    )
+  );
 
   const jaVinculado = vinculos.some(
     (vinculo) =>
@@ -192,12 +196,21 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
               {professores.map((professor) => (
                 <option key={professor.id} value={professor.id}>
                   {professor.nome || professor.email || professor.id}
+                  {professor.lotacoes.length
+                    ? ` — ${professor.lotacoes.map(rotuloLotacao).join(', ')}`
+                    : ' — sem polo'}
                 </option>
               ))}
             </select>
             {buscandoProfessores && <p className="text-slate-500">Buscando...</p>}
             {!buscandoProfessores && professores.length === 0 && (
               <p className="text-amber-300">Nenhum professor ativo encontrado.</p>
+            )}
+            {professorSelecionado && !atendeTurma && (
+              <p className="font-normal text-sky-300">
+                Ao vincular, {professorSelecionado.nome || 'o professor'} passa a atender também este
+                polo/escola.
+              </p>
             )}
           </div>
 

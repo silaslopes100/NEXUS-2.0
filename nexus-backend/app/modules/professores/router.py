@@ -28,7 +28,9 @@ from app.modules.professores.repository import (
     get_professores_repository,
 )
 from app.modules.professores.schemas import (
+    LotacaoInput,
     MessageResponse,
+    ProfessorDisponiveisResponse,
     ProfessorCreateRequest,
     ProfessorConteudoItem,
     ProfessorConteudosResponse,
@@ -203,6 +205,53 @@ async def listar_professores(
 
 
 @router.get(
+    "/disponiveis",
+    response_model=ProfessorDisponiveisResponse,
+    dependencies=[Depends(require_role(_PERFIS_LEITURA))],
+    summary="Busca professores ativos de qualquer unidade para associar a uma turma",
+)
+async def listar_professores_disponiveis(
+    search: Optional[str] = Query(None, description="Nome ou e-mail"),
+    limit: int = Query(20, ge=1, le=50),
+    service: ProfessoresService = Depends(get_professores_service),
+):
+    # Só nome, e-mail e lotações: remuneração e PIX ficam restritos ao Corpo Docente.
+    return service.list_disponiveis(search, limit)
+
+
+@router.post(
+    "/{professor_id}/lotacoes",
+    response_model=ProfessorResponse,
+    dependencies=[Depends(require_role(_PERFIS_LEITURA))],
+    summary="Inclui um polo/escola nas lotações do professor (gestor: só a própria unidade)",
+)
+async def incluir_lotacao(
+    professor_id: uuid.UUID,
+    dados: LotacaoInput,
+    current_user: UserResponse = Depends(get_current_user),
+    service: ProfessoresService = Depends(get_professores_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    return service.adicionar_lotacao(str(professor_id), dados, current_user, client_ip)
+
+
+@router.delete(
+    "/{professor_id}/lotacoes/{lotacao_id}",
+    response_model=ProfessorResponse,
+    dependencies=[Depends(require_role(_PERFIS_LEITURA))],
+    summary="Remove um polo/escola das lotações do professor (gestor: só a própria unidade)",
+)
+async def remover_lotacao(
+    professor_id: uuid.UUID,
+    lotacao_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+    service: ProfessoresService = Depends(get_professores_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    return service.remover_lotacao(str(professor_id), str(lotacao_id), current_user, client_ip)
+
+
+@router.get(
     "/me/disciplinas",
     response_model=ProfessorDisciplinaListResponse,
     dependencies=[Depends(require_role(["admin", "professor"]))],
@@ -242,7 +291,7 @@ async def obter_detalhe_professor(
 ):
     professor = service.get_professor(professor_id)
     polo_id, escola_id = _escopo_usuario(current_user)
-    if (polo_id and professor.polo_id != polo_id) or (escola_id and professor.escola_id != escola_id):
+    if not service.professor_visivel(professor.lotacoes, polo_id, escola_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
     return service.get_detalhe(professor, polo_id, escola_id)
 
@@ -552,9 +601,7 @@ async def obter_professor(
 ):
     professor = service.get_professor(professor_id)
     escopo_polo, escopo_escola = _escopo_usuario(current_user)
-    if escopo_polo and professor.polo_id != escopo_polo:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
-    if escopo_escola and professor.escola_id != escopo_escola:
+    if not service.professor_visivel(professor.lotacoes, escopo_polo, escopo_escola):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
     return professor
 

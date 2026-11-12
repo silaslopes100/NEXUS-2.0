@@ -1,7 +1,7 @@
 """Camada de serviço (regras de negócio) do módulo `professores` do NEXUS 2.0."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 
@@ -10,9 +10,14 @@ from app.modules.auth.schemas import UserResponse
 from app.modules.professores.repository import (
     ProfessoresRepositoryInterface,
     get_professores_repository,
+    lotacao_cobre_unidade,
 )
 from app.modules.professores.schemas import (
+    LotacaoInput,
+    LotacaoItem,
     MessageResponse,
+    ProfessorDisponivel,
+    ProfessorDisponiveisResponse,
     ProfessorCreateRequest,
     ProfessorConteudosResponse,
     ProfessorDisciplinaListResponse,
@@ -253,7 +258,6 @@ class ProfessoresService:
                 status.HTTP_404_NOT_FOUND,
                 detail="Professor ativo não encontrado.",
             )
-        self._validar_escopo_professor(professor, current_user)
         usuario = self.repo.get_usuario_by_id(str(professor.get("usuario_id") or ""))
         if not usuario or usuario.get("status") != "ativo":
             raise HTTPException(
@@ -314,6 +318,7 @@ class ProfessoresService:
             },
             ip=ip,
         )
+        self._lotar_na_turma(professor_id, turma, current_user, ip)
         row = next(
             (
                 item
@@ -397,15 +402,197 @@ class ProfessoresService:
             return turma
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Perfil não autorizado para esta operação.")
 
+    # ------------------------------------------------------------------
+    # Lotações (N polos / N escolas)
+    # ------------------------------------------------------------------
+
     @staticmethod
-    def _validar_escopo_professor(
-        professor: Dict[str, Any], current_user: UserResponse
+    def professor_visivel(
+        lotacoes: List[Any], polo_id: Optional[str], escola_id: Optional[str]
+    ) -> bool:
+        """RN-09: o gestor vê o professor que tem alguma lotação na sua unidade."""
+
+        def campo(lotacao: Any, nome: str) -> Optional[str]:
+            valor = lotacao.get(nome) if isinstance(lotacao, dict) else getattr(lotacao, nome, None)
+            return str(valor) if valor else None
+
+        if polo_id and not any(campo(l, "polo_id") == str(polo_id) for l in lotacoes):
+            return False
+        if escola_id and not any(campo(l, "escola_id") == str(escola_id) for l in lotacoes):
+            return False
+        return True
+
+    def list_disponiveis(self, search: Optional[str], limit: int = 20) -> ProfessorDisponiveisResponse:
+        """Professores ativos de qualquer unidade, para associar a uma turma."""
+        _, rows = self.repo.list_professores(search=search, status_filter="ativo", limit=limit, offset=0)
+        return ProfessorDisponiveisResponse(
+            items=[
+                ProfessorDisponivel(
+                    id=str(row["id"]),
+                    nome=row.get("nome"),
+                    email=row.get("email"),
+                    lotacoes=self._lotacoes_response(row.get("lotacoes")),
+                )
+                for row in rows
+            ]
+        )
+
+    def adicionar_lotacao(
+        self,
+        professor_id: str,
+        dados: LotacaoInput,
+        current_user: UserResponse,
+        ip: Optional[str] = None,
+    ) -> ProfessorResponse:
+        if not self.repo.get_professor(professor_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Professor não encontrado")
+        polo_id, escola_id = self._resolver_unidade(dados)
+        self._exigir_unidade_do_gestor(current_user, polo_id, escola_id)
+        lotacao, criada = self.repo.add_lotacao(professor_id, polo_id, escola_id, current_user.id)
+        if criada:
+            self.repo.record_audit_log(
+                usuario_id=current_user.id,
+                acao="professor_lotacao_incluida",
+                entidade="professor_lotacoes",
+                entidade_id=str(lotacao["id"]),
+                dados_depois={"professor_id": professor_id, "polo_id": polo_id, "escola_id": escola_id},
+                ip=ip,
+            )
+        return self.get_professor(professor_id)
+
+    def remover_lotacao(
+        self,
+        professor_id: str,
+        lotacao_id: str,
+        current_user: UserResponse,
+        ip: Optional[str] = None,
+    ) -> ProfessorResponse:
+        lotacoes = self.repo.list_lotacoes(professor_id)
+        alvo = next((l for l in lotacoes if str(l["id"]) == str(lotacao_id)), None)
+        if not alvo:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Lotação não encontrada.")
+        self._exigir_unidade_do_gestor(current_user, alvo["polo_id"], alvo.get("escola_id"))
+        restantes = [l for l in lotacoes if str(l["id"]) != str(lotacao_id)]
+        if not restantes:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="O professor precisa de ao menos um polo. Inclua outro antes de remover este.",
+            )
+        for unidade in self.repo.list_unidades_turmas_ativas(professor_id):
+            polo_id, escola_id = unidade.get("polo_id"), unidade.get("escola_id")
+            coberta_pelo_alvo = lotacao_cobre_unidade(alvo, polo_id, escola_id)
+            coberta_por_outra = any(lotacao_cobre_unidade(l, polo_id, escola_id) for l in restantes)
+            if coberta_pelo_alvo and not coberta_por_outra:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail=(
+                        "O professor ainda leciona em turmas desta unidade. "
+                        "Arquive os vínculos com as turmas antes de remover a lotação."
+                    ),
+                )
+        self.repo.remove_lotacao(professor_id, lotacao_id)
+        self.repo.record_audit_log(
+            usuario_id=current_user.id,
+            acao="professor_lotacao_removida",
+            entidade="professor_lotacoes",
+            entidade_id=str(lotacao_id),
+            dados_antes={
+                "professor_id": professor_id,
+                "polo_id": alvo["polo_id"],
+                "escola_id": alvo.get("escola_id"),
+            },
+            ip=ip,
+        )
+        return self.get_professor(professor_id)
+
+    def _lotar_na_turma(
+        self, professor_id: str, turma: Dict[str, Any], current_user: UserResponse, ip: Optional[str]
     ) -> None:
+        """Quem leciona numa turma passa a ser lotado no polo/escola dela."""
+        escola_id = str(turma["escola_id"]) if turma.get("escola_id") else None
+        polo_id = turma.get("polo_id") or (self.repo.get_escola_polo(escola_id) if escola_id else None)
+        if not polo_id:
+            return
+        lotacao, criada = self.repo.add_lotacao(professor_id, str(polo_id), escola_id, current_user.id)
+        if criada:
+            self.repo.record_audit_log(
+                usuario_id=current_user.id,
+                acao="professor_lotacao_incluida",
+                entidade="professor_lotacoes",
+                entidade_id=str(lotacao["id"]),
+                dados_depois={
+                    "professor_id": professor_id,
+                    "polo_id": str(polo_id),
+                    "escola_id": escola_id,
+                    "origem": "vinculo_turma",
+                    "turma_id": str(turma.get("id")),
+                },
+                ip=ip,
+            )
+
+    def _resolver_unidade(self, dados: LotacaoInput) -> Tuple[str, Optional[str]]:
+        """Valida polo/escola; o polo pode ser deduzido da escola."""
+        polo_id = str(dados.polo_id) if dados.polo_id else None
+        escola_id = str(dados.escola_id) if dados.escola_id else None
+        if escola_id:
+            polo_da_escola = self.repo.get_escola_polo(escola_id)
+            if not polo_da_escola:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Escola não encontrada.")
+            if polo_id and polo_id != polo_da_escola:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail="A escola informada não pertence ao polo selecionado.",
+                )
+            polo_id = polo_da_escola
+        if not polo_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Informe o polo da lotação.")
+        if not escola_id and not self.repo.polo_existe(polo_id):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Polo não encontrado.")
+        return polo_id, escola_id
+
+    def _normalizar_lotacoes(self, lotacoes: List[LotacaoInput]) -> List[Dict[str, Any]]:
+        resultado: List[Dict[str, Any]] = []
+        for item in lotacoes:
+            polo_id, escola_id = self._resolver_unidade(item)
+            unidade = {"polo_id": polo_id, "escola_id": escola_id}
+            if unidade not in resultado:
+                resultado.append(unidade)
+        return resultado
+
+    @staticmethod
+    def _exigir_unidade_do_gestor(
+        current_user: UserResponse, polo_id: str, escola_id: Optional[str]
+    ) -> None:
+        """Admin altera qualquer lotação; gestor só a da própria unidade."""
         perfil = perfil_do_usuario(current_user)
-        if perfil == "polo" and str(professor.get("polo_id")) != str(current_user.polo_id):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Professor fora do seu escopo.")
-        if perfil == "escola" and str(professor.get("escola_id")) != str(current_user.escola_id):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Professor fora do seu escopo.")
+        if perfil == "admin":
+            return
+        if perfil == "polo" and current_user.polo_id and str(polo_id) == str(current_user.polo_id):
+            return
+        if (
+            perfil == "escola"
+            and current_user.escola_id
+            and escola_id
+            and str(escola_id) == str(current_user.escola_id)
+        ):
+            return
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Você só pode incluir ou remover a sua própria unidade.",
+        )
+
+    @staticmethod
+    def _lotacoes_response(rows: Any) -> List[LotacaoItem]:
+        return [
+            LotacaoItem(
+                id=str(row["id"]),
+                polo_id=str(row["polo_id"]),
+                polo_nome=row.get("polo_nome"),
+                escola_id=str(row["escola_id"]) if row.get("escola_id") else None,
+                escola_nome=row.get("escola_nome"),
+            )
+            for row in (rows or [])
+        ]
 
     def get_conteudo(self, conteudo_id: str) -> Dict[str, Any]:
         row = self.repo.get_conteudo(conteudo_id)
@@ -494,26 +681,30 @@ class ProfessoresService:
                 detail="Este usuário já está vinculado a um professor",
             )
 
+        payload = dados.model_dump(exclude={"horas_totais", "quantidade_aulas", "lotacoes"})
+        if dados.lotacoes is not None:
+            payload["lotacoes"] = self._normalizar_lotacoes(dados.lotacoes)
+        elif dados.polo_id or dados.escola_id:
+            payload["lotacoes"] = self._normalizar_lotacoes(
+                [LotacaoInput(polo_id=dados.polo_id, escola_id=dados.escola_id)]
+            )
+        payload["criado_por"] = actor_id
+
         if existente:
             # Registro criado automaticamente pela tela de Usuários (ou desativado):
             # completa-o em vez de duplicar.
             professor_id = str(existente["id"])
             self._validar_disciplinas(dados.disciplina_ids)
-            self.repo.update_professor(
-                professor_id,
-                {**dados.model_dump(exclude={"horas_totais", "quantidade_aulas"}), "status": "ativo"},
-            )
+            self.repo.update_professor(professor_id, {**payload, "status": "ativo"})
         else:
             self._validar_disciplinas(dados.disciplina_ids)
-            professor_id = self.repo.create_professor(
-                dados.model_dump(exclude={"horas_totais", "quantidade_aulas"})
-            )
+            professor_id = self.repo.create_professor(payload)
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="professor_cadastrado",
             entidade="professores",
             entidade_id=professor_id,
-            dados_depois={"usuario_id": dados.usuario_id, "polo_id": dados.polo_id},
+            dados_depois={"usuario_id": dados.usuario_id, "lotacoes": payload.get("lotacoes")},
             ip=ip,
         )
         self._garantir_perfil_professor(dados.usuario_id, actor_id, ip)
@@ -532,9 +723,17 @@ class ProfessoresService:
 
         update_dict: Dict[str, Any] = {
             k: v for k, v in dados.model_dump(
-                exclude_unset=True, exclude={"horas_totais", "quantidade_aulas"}
+                exclude_unset=True, exclude={"horas_totais", "quantidade_aulas", "lotacoes"}
             ).items() if v is not None
         }
+        if dados.lotacoes is not None:
+            update_dict["lotacoes"] = self._normalizar_lotacoes(dados.lotacoes)
+        elif update_dict.get("polo_id") or update_dict.get("escola_id"):
+            # Cliente antigo (um polo/escola): inclui a unidade sem apagar as demais.
+            polo_id, escola_id = self._resolver_unidade(
+                LotacaoInput(polo_id=update_dict.get("polo_id"), escola_id=update_dict.get("escola_id"))
+            )
+            self.repo.add_lotacao(professor_id, polo_id, escola_id, actor_id)
 
         novo_usuario_id = update_dict.get("usuario_id")
         if novo_usuario_id and str(novo_usuario_id) != str(atual.get("usuario_id")):
@@ -549,7 +748,7 @@ class ProfessoresService:
         if update_dict:
             if "disciplina_ids" in update_dict:
                 self._validar_disciplinas(update_dict["disciplina_ids"])
-            self.repo.update_professor(professor_id, update_dict)
+            self.repo.update_professor(professor_id, {**update_dict, "criado_por": actor_id})
             self.repo.record_audit_log(
                 usuario_id=actor_id,
                 acao="professor_atualizado",
@@ -630,6 +829,7 @@ class ProfessoresService:
             polo_nome=row.get("polo_nome"),
             escola_id=str(row["escola_id"]) if row.get("escola_id") else None,
             escola_nome=row.get("escola_nome"),
+            lotacoes=self._lotacoes_response(row.get("lotacoes")),
             materias=materias,
             disciplina_ids=[str(item) for item in (row.get("disciplina_ids") or [])],
             data_inicio=row.get("data_inicio"),
