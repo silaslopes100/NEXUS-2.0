@@ -12,6 +12,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
 from app.modules.admin.repository import InMemoryAdminRepository, set_admin_repository
+from app.modules import alunos as alunos_module
 from app.modules import cursos_disciplinas as cursos_disciplinas_module
 from app.modules import notas_historico as notas_historico_module
 from app.modules import presencas as presencas_module
@@ -701,7 +702,7 @@ async def test_modulo_ead(client: AsyncClient):
 
 # 10. Notas & Histórico
 @pytest.mark.asyncio
-async def test_modulo_notas_e_historico(client: AsyncClient, monkeypatch):
+async def test_modulo_notas_e_historico(client: AsyncClient, auth_setup, monkeypatch):
     monkeypatch.setattr(settings, "PG_DSN", "")
     t_prof = _token("prof-1", "prof@nexus.com.br", "professor")
     t_aluno = _token("aluno-1", "aluno@nexus.com.br", "aluno")
@@ -723,6 +724,14 @@ async def test_modulo_notas_e_historico(client: AsyncClient, monkeypatch):
         turmas_module,
         "_turma_alunos_db",
         [{"turma_id": "turma-1", "aluno_id": "aluno-1"}],
+    )
+    monkeypatch.setattr(
+        alunos_module,
+        "_alunos_db",
+        {
+            "aluno-1": {"id": "aluno-1", "usuario_id": "aluno-1"},
+            "aluno-2": {"id": "aluno-2", "usuario_id": "aluno-2"},
+        },
     )
     monkeypatch.setattr(
         notas_historico_module,
@@ -766,6 +775,33 @@ async def test_modulo_notas_e_historico(client: AsyncClient, monkeypatch):
         headers={"Authorization": f"Bearer {t_prof}"},
     )
     assert n_res.status_code == 201
+    nota_id = n_res.json()["id"]
+    nota_invalida = await client.post(
+        "/notas-historico/notas",
+        json={
+            "aluno_id": "aluno-1",
+            "disciplina_id": "disciplina-1",
+            "turma_id": "turma-1",
+            "valor": 10.1,
+        },
+        headers={"Authorization": f"Bearer {t_prof}"},
+    )
+    assert nota_invalida.status_code == 422
+
+    correcao = await client.put(
+        f"/notas-historico/notas/{nota_id}",
+        json={"valor": 5.5},
+        headers={"Authorization": f"Bearer {t_prof}"},
+    )
+    assert correcao.status_code == 200
+    assert correcao.json()["valor"] == 5.5
+    assert any(
+        log["acao"] == "nota_corrigida"
+        and log["entidade_id"] == nota_id
+        and log["dados_antes"] == {"valor": 9.5}
+        and log["dados_depois"] == {"valor": 5.5}
+        for log in auth_setup.logs_auditoria
+    )
     nota_de_vinculo_alheio = await client.post(
         "/notas-historico/notas",
         json={
@@ -796,6 +832,19 @@ async def test_modulo_notas_e_historico(client: AsyncClient, monkeypatch):
     assert notas_docente.status_code == 200
     assert [nota["aluno_id"] for nota in notas_docente.json()] == ["aluno-1"]
 
+    notas_do_aluno = await client.get(
+        "/notas-historico/notas",
+        headers={"Authorization": f"Bearer {t_aluno}"},
+    )
+    assert notas_do_aluno.status_code == 200
+    assert [nota["aluno_id"] for nota in notas_do_aluno.json()] == ["aluno-1"]
+    notas_de_outro_aluno = await client.get(
+        "/notas-historico/notas",
+        params={"aluno_id": "aluno-2"},
+        headers={"Authorization": f"Bearer {t_aluno}"},
+    )
+    assert notas_de_outro_aluno.status_code == 403
+
     historico_docente = await client.get(
         "/notas-historico/historico/aluno-1",
         headers={"Authorization": f"Bearer {t_prof}"},
@@ -814,6 +863,118 @@ async def test_modulo_notas_e_historico(client: AsyncClient, monkeypatch):
         headers={"Authorization": f"Bearer {t_aluno}"},
     )
     assert h_res.status_code == 200
+    assert h_res.json()[0]["nota_final"] == 5.5
+    assert h_res.json()[0]["status"] == "reprovado"
+
+    historico_de_outro_aluno = await client.get(
+        "/notas-historico/historico/aluno-2",
+        headers={"Authorization": f"Bearer {t_aluno}"},
+    )
+    assert historico_de_outro_aluno.status_code == 403
+
+    meu_historico = await client.get(
+        "/notas-historico/historico/me",
+        headers={"Authorization": f"Bearer {t_aluno}"},
+    )
+    assert meu_historico.status_code == 200
+    pdf_historico = await client.get(
+        "/notas-historico/historico/me/pdf",
+        headers={"Authorization": f"Bearer {t_aluno}"},
+    )
+    assert pdf_historico.status_code == 200
+    assert pdf_historico.headers["content-type"] == "application/pdf"
+    assert pdf_historico.content.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_listagem_admin_notas_limita_ordena_e_busca_dados_do_aluno(
+    client: AsyncClient, auth_setup, monkeypatch
+):
+    monkeypatch.setattr(settings, "PG_DSN", "")
+    auth_setup.usuarios["aluno-1"]["cpf"] = "123.456.789-00"
+    monkeypatch.setattr(
+        alunos_module,
+        "_alunos_db",
+        {
+            "aluno-1": {
+                "id": "aluno-1",
+                "usuario_id": "aluno-1",
+                "numero_matricula": "MAT-2026-001",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        cursos_disciplinas_module,
+        "_disciplinas_db",
+        {
+            "disciplina-1": {
+                "id": "disciplina-1",
+                "nome": "Teologia Sistemática",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        notas_historico_module,
+        "_notas_db",
+        {
+            f"nota-{indice:02}": {
+                "id": f"nota-{indice:02}",
+                "aluno_id": "aluno-1",
+                "disciplina_id": "disciplina-1",
+                "turma_id": "turma-1",
+                "origem": "manual",
+                "valor": 8.0,
+                "atualizado_em": datetime.fromtimestamp(indice, timezone.utc),
+            }
+            for indice in range(35)
+        },
+    )
+    token_admin = _token("admin-1", "admin@nexus.com.br", "admin")
+
+    for termo in ("aluno", "aluno@nexus.com.br", "MAT-2026-001", "12345678900"):
+        resposta = await client.get(
+            "/notas-historico/notas/admin",
+            params={"q": termo},
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        assert resposta.status_code == 200
+        pagina = resposta.json()
+        itens = pagina["items"]
+        assert len(itens) == 30
+        assert pagina["total"] == 35
+        assert pagina["limit"] == 30
+        assert pagina["offset"] == 0
+        assert itens[0]["id"] == "nota-34"
+        assert itens[-1]["id"] == "nota-05"
+        assert itens[0]["aluno_email"] == "aluno@nexus.com.br"
+        assert itens[0]["aluno_matricula"] == "MAT-2026-001"
+
+    busca_disciplina = await client.get(
+        "/notas-historico/notas/admin",
+        params={"disciplina_nome": "teologia"},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert busca_disciplina.status_code == 200
+    assert len(busca_disciplina.json()["items"]) == 30
+    assert busca_disciplina.json()["items"][0]["disciplina_nome"] == "Teologia Sistemática"
+
+    segunda_pagina = await client.get(
+        "/notas-historico/notas/admin",
+        params={"q": "MAT-2026-001", "offset": 30},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert segunda_pagina.status_code == 200
+    assert segunda_pagina.json()["total"] == 35
+    assert len(segunda_pagina.json()["items"]) == 5
+    assert segunda_pagina.json()["items"][0]["id"] == "nota-04"
+    assert segunda_pagina.json()["offset"] == 30
+
+    excesso = await client.get(
+        "/notas-historico/notas/admin",
+        params={"limit": 31},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert excesso.status_code == 422
 
 
 @pytest.mark.asyncio

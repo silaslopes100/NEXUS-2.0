@@ -121,7 +121,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Notas & Histórico Unificado',
           path: '/admin/notas-historico',
           icon: Award,
-          isPlaceholder: true,
         },
         {
           title: 'Presenças & Frequência',
@@ -405,7 +404,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Lançamento de Notas',
           path: '/professor/notas',
           icon: Award,
-          isPlaceholder: true,
         },
         {
           title: 'Chat com Alunos',
@@ -454,7 +452,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Notas & Histórico Unificado',
           path: '/aluno/historico',
           icon: Award,
-          isPlaceholder: true,
         },
         {
           title: 'Frequência & Presença',

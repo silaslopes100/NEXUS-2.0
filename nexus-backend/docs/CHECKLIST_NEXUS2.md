@@ -28,7 +28,7 @@ Documento oficial de acompanhamento do plano técnico e status de entrega dos 18
 | **07** | **Disciplinas & Conteúdos AVA** | `disciplinas`, `disciplina_conteudos` | [app/modules/cursos_disciplinas/](app/modules/cursos_disciplinas/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
 | **08** | **Turmas & Calendários** | `turmas`, `calendarios_oficiais` | [app/modules/turmas/](app/modules/turmas/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
 | **09** | **Matrículas & Cursos EAD** | `matriculas_ead`, `compras_disciplina_ead`, `avisos_liberacao_ead`, `turma_alunos` | [app/modules/ead/](app/modules/ead/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
-| **10** | **Grades, Notas & Histórico** | `notas`, `historico_unificado` | [app/modules/notas_historico/](app/modules/notas_historico/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
+| **10** | **Grades, Notas & Histórico** | `notas`, `historico_unificado` | [app/modules/notas_historico/](app/modules/notas_historico/) | Lançamento/correção docente, acompanhamento admin paginado de 30 em 30 com busca, consulta e PDF | `test_modules_all.py` | ✅ Concluído |
 | **11** | **Certificados & Diplomas** | `certificados` | [app/modules/certificados/](app/modules/certificados/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |
 | **12** | **Presenças & Frequência** | `presencas` | [app/modules/presencas/](app/modules/presencas/) | Chamada em lote e correções docentes/admin | `test_modules_all.py` | ✅ Concluído |
 | **13** | **Licenças & Estoque** | `estoque_licencas`, `licencas_atribuidas` | [app/modules/licencas/](app/modules/licencas/) | Rotas & Sidebar Integrados | `test_modules_all.py` | ✅ Concluído |

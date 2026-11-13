@@ -513,6 +513,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_presencas_vinculo_aluno_aula
       AND data_aula IS NOT NULL
       AND numero_aula IS NOT NULL;
 """,
+    """
+CREATE INDEX IF NOT EXISTS idx_notas_atualizado_em_desc
+    ON notas (atualizado_em DESC NULLS LAST, id DESC);
+""",
     "CREATE INDEX IF NOT EXISTS idx_usuarios_escola_id ON usuarios (escola_id);",
     "CREATE INDEX IF NOT EXISTS idx_turmas_escola_id ON turmas (escola_id);",
     "CREATE SEQUENCE IF NOT EXISTS seq_matricula_aluno START 1;",

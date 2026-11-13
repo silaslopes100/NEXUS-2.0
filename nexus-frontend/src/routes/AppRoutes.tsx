@@ -33,6 +33,9 @@ import { CursosPage } from '@/features/cursos/pages/CursosPage';
 import { DisciplinasPage } from '@/features/cursos/pages/DisciplinasPage';
 import { TransferenciasPage } from '@/features/transferencias/pages/TransferenciasPage';
 import { MinhasDisciplinasPage } from '@/features/alunos/pages/MinhasDisciplinasPage';
+import { NotasAdminPage } from '@/features/notas_historico/pages/NotasAdminPage';
+import { NotasProfessorPage } from '@/features/notas_historico/pages/NotasProfessorPage';
+import { HistoricoAlunoPage } from '@/features/notas_historico/pages/HistoricoAlunoPage';
 import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -75,7 +78,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/turmas-calendarios" element={<TurmasPage />} />
           <Route path="/admin/alunos" element={<AlunosPage />} />
           <Route path="/admin/ead" element={<ModulePlaceholderPage />} />
-          <Route path="/admin/notas-historico" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/notas-historico" element={<NotasAdminPage />} />
           <Route path="/admin/presencas" element={<PresencasPage />} />
           <Route path="/admin/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/admin/licencas" element={<LicencasPage />} />
@@ -122,7 +125,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/professor/dashboard" element={<ProfessorDashboardPage />} />
           <Route path="/professor/disciplinas" element={<MinhasDisciplinasProfessorPage />} />
           <Route path="/professor/conteudos" element={<MinhasConteudosProfessorPage />} />
-          <Route path="/professor/notas" element={<ModulePlaceholderPage />} />
+          <Route path="/professor/notas" element={<NotasProfessorPage />} />
           <Route path="/professor/aulas" element={<DiarioAulasPage />} />
           {/* Presença e atas agora vivem no Diário de Aulas */}
           <Route path="/professor/presencas" element={<Navigate to="/professor/aulas" replace />} />
@@ -139,7 +142,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/disciplinas" element={<MinhasDisciplinasPage />} />
           </Route>
           <Route path="/aluno/ava" element={<ModulePlaceholderPage />} />
-          <Route path="/aluno/historico" element={<ModulePlaceholderPage />} />
+          <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />
           <Route path="/aluno/presenca" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/livros" element={<ModulePlaceholderPage />} />
