@@ -4,7 +4,7 @@ import {
   AlertCircle,
   BookOpen,
   CalendarDays,
-  ExternalLink,
+  Eye,
   FileText,
   GraduationCap,
   Loader2,
@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
 } from 'lucide-react';
+import { ContentViewer } from '@/components/content/ContentViewer';
 import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import {
   ProfessorDisciplinaConteudosResumo,
@@ -26,7 +27,9 @@ export const MinhasConteudosPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [formContext, setFormContext] = useState<ConteudoMaterialFormContext | null>(null);
-  const [baixandoId, setBaixandoId] = useState<string | null>(null);
+  const [conteudoAberto, setConteudoAberto] = useState<
+    ProfessorDisciplinaConteudosResumo['conteudos'][number] | null
+  >(null);
 
   const carregarConteudos = useCallback(async () => {
     setIsLoading(true);
@@ -45,28 +48,10 @@ export const MinhasConteudosPage: React.FC = () => {
     void carregarConteudos();
   }, [carregarConteudos]);
 
-  const baixarArquivo = async (tipo: 'conteudo' | 'material', id: string, nome: string) => {
-    setErro('');
-    setBaixandoId(`${tipo}:${id}`);
-    try {
-      const arquivo =
-        tipo === 'conteudo'
-          ? await professoresApi.baixarConteudo(id)
-          : await professoresApi.baixarMaterial(id);
-      const url = URL.createObjectURL(arquivo);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = nome;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      setErro(apiErrorMessage(error, 'Não foi possível baixar o arquivo.'));
-    } finally {
-      setBaixandoId(null);
-    }
-  };
+  const carregarArquivoVisualizado = useCallback(() => {
+    if (!conteudoAberto) return Promise.reject(new Error('Nenhum conteúdo selecionado.'));
+    return professoresApi.baixarConteudo(conteudoAberto.id);
+  }, [conteudoAberto?.id]);
 
   return (
     <div className="max-w-7xl space-y-6">
@@ -196,29 +181,21 @@ export const MinhasConteudosPage: React.FC = () => {
                             {conteudo.tem_arquivo ? (
                               <button
                                 type="button"
-                                disabled={baixandoId === `conteudo:${conteudo.id}`}
-                                onClick={() =>
-                                  void baixarArquivo(
-                                    'conteudo',
-                                    conteudo.id,
-                                    conteudo.arquivo_nome || conteudo.titulo || 'conteudo'
-                                  )
-                                }
-                                aria-label={`Baixar ${conteudo.arquivo_nome || conteudo.titulo || 'arquivo'}`}
-                                className="text-blue-300 hover:text-blue-200 disabled:opacity-50"
-                              >
-                                <ExternalLink size={16} />
-                              </button>
-                            ) : conteudo.url_arquivo ? (
-                              <a
-                                href={conteudo.url_arquivo}
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label={`Abrir ${conteudo.titulo || 'conteúdo'}`}
+                                onClick={() => setConteudoAberto(conteudo)}
+                                aria-label={`Visualizar ${conteudo.arquivo_nome || conteudo.titulo || 'arquivo'}`}
                                 className="text-blue-300 hover:text-blue-200"
                               >
-                                <ExternalLink size={16} />
-                              </a>
+                                <Eye size={16} />
+                              </button>
+                            ) : conteudo.url_arquivo ? (
+                              <button
+                                type="button"
+                                onClick={() => setConteudoAberto(conteudo)}
+                                aria-label={`Visualizar ${conteudo.titulo || 'conteúdo'}`}
+                                className="text-blue-300 hover:text-blue-200"
+                              >
+                                <Eye size={16} />
+                              </button>
                             ) : null}
                             <button
                               type="button"
@@ -274,6 +251,22 @@ export const MinhasConteudosPage: React.FC = () => {
             await carregarConteudos();
             setFormContext(null);
           }}
+        />
+      )}
+      {conteudoAberto && (
+        <ContentViewer
+          title={conteudoAberto.titulo || 'Conteúdo da disciplina'}
+          url={conteudoAberto.tem_arquivo ? undefined : conteudoAberto.url_arquivo}
+          file={
+            conteudoAberto.tem_arquivo
+              ? {
+                  name: conteudoAberto.arquivo_nome || conteudoAberto.titulo || 'conteudo',
+                  mimeType: conteudoAberto.arquivo_mime_type,
+                  load: carregarArquivoVisualizado,
+                }
+              : undefined
+          }
+          onClose={() => setConteudoAberto(null)}
         />
       )}
     </div>

@@ -1,12 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { BookOpen, Download, ExternalLink, Loader2 } from 'lucide-react';
-import { alunosGestaoApi, apiErrorMessage, CursoAprendizado } from '@/features/alunos/api';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BookOpen, Eye, Loader2 } from 'lucide-react';
+import { ContentViewer } from '@/components/content/ContentViewer';
+import {
+  alunosGestaoApi,
+  apiErrorMessage,
+  ConteudoAprendizado,
+  CursoAprendizado,
+} from '@/features/alunos/api';
 
 export const MinhasDisciplinasPage: React.FC = () => {
   const [cursos, setCursos] = useState<CursoAprendizado[] | null>(null);
   const [erro, setErro] = useState('');
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
-  const [baixandoId, setBaixandoId] = useState<string | null>(null);
+  const [conteudoAberto, setConteudoAberto] = useState<ConteudoAprendizado | null>(null);
 
   useEffect(() => {
     alunosGestaoApi
@@ -41,25 +47,10 @@ export const MinhasDisciplinasPage: React.FC = () => {
     }
   };
 
-  const baixarArquivo = async (conteudoId: string, nome: string) => {
-    setErro('');
-    setBaixandoId(conteudoId);
-    try {
-      const arquivo = await alunosGestaoApi.baixarConteudoArquivo(conteudoId);
-      const url = URL.createObjectURL(arquivo);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = nome;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      setErro(apiErrorMessage(err, 'Não foi possível baixar este arquivo.'));
-    } finally {
-      setBaixandoId(null);
-    }
-  };
+  const carregarArquivoVisualizado = useCallback(() => {
+    if (!conteudoAberto) return Promise.reject(new Error('Nenhum conteúdo selecionado.'));
+    return alunosGestaoApi.baixarConteudoArquivo(conteudoAberto.id);
+  }, [conteudoAberto?.id]);
 
   if (cursos === null) {
     return (
@@ -122,28 +113,21 @@ export const MinhasDisciplinasPage: React.FC = () => {
                         {conteudo.tem_arquivo ? (
                           <button
                             type="button"
-                            disabled={baixandoId === conteudo.id}
-                            onClick={() =>
-                              void baixarArquivo(
-                                conteudo.id,
-                                conteudo.arquivo_nome || conteudo.titulo || 'conteudo'
-                              )
-                            }
-                            aria-label={`Baixar ${conteudo.arquivo_nome || conteudo.titulo || 'conteúdo'}`}
-                            className="shrink-0 text-blue-300 hover:text-blue-200 disabled:opacity-50"
-                          >
-                            <Download size={15} />
-                          </button>
-                        ) : conteudo.url_arquivo ? (
-                          <a
-                            href={conteudo.url_arquivo}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label={`Abrir ${conteudo.titulo || 'conteúdo'}`}
+                            onClick={() => setConteudoAberto(conteudo)}
+                            aria-label={`Visualizar ${conteudo.arquivo_nome || conteudo.titulo || 'conteúdo'}`}
                             className="shrink-0 text-blue-300 hover:text-blue-200"
                           >
-                            <ExternalLink size={15} />
-                          </a>
+                            <Eye size={15} />
+                          </button>
+                        ) : conteudo.url_arquivo ? (
+                          <button
+                            type="button"
+                            onClick={() => setConteudoAberto(conteudo)}
+                            aria-label={`Visualizar ${conteudo.titulo || 'conteúdo'}`}
+                            className="shrink-0 text-blue-300 hover:text-blue-200"
+                          >
+                            <Eye size={15} />
+                          </button>
                         ) : null}
                       </li>
                     ))}
@@ -154,6 +138,22 @@ export const MinhasDisciplinasPage: React.FC = () => {
           })}
         </section>
       ))}
+      {conteudoAberto && (
+        <ContentViewer
+          title={conteudoAberto.titulo || 'Conteúdo da disciplina'}
+          url={conteudoAberto.tem_arquivo ? undefined : conteudoAberto.url_arquivo}
+          file={
+            conteudoAberto.tem_arquivo
+              ? {
+                  name: conteudoAberto.arquivo_nome || conteudoAberto.titulo || 'conteudo',
+                  mimeType: conteudoAberto.arquivo_mime_type,
+                  load: carregarArquivoVisualizado,
+                }
+              : undefined
+          }
+          onClose={() => setConteudoAberto(null)}
+        />
+      )}
     </div>
   );
 };

@@ -15,3 +15,10 @@ aplicada antes da implantacao. Em desenvolvimento, os arquivos ficam em
 `uploads/academic_materials/`. Em producao no Vercel, a API usa Vercel Blob
 privado; configure o Blob e suas credenciais no projeto da API antes de habilitar
 uploads. As chaves internas de armazenamento nao sao expostas pela API.
+
+Conteudos disciplinares podem ser abertos no visualizador integrado da plataforma.
+PDFs e imagens enviados sao exibidos diretamente pelo navegador; documentos
+Office permanecem disponiveis para download, pois a API serverless do Vercel nao
+inclui um conversor local de Office para PDF. Links externos sao incorporados
+quando o provedor permite; caso contrario, o visualizador oferece uma alternativa
+para abrir o link externamente.
