@@ -16,6 +16,7 @@ import {
   CreditCard,
   Ticket,
   Truck,
+  Package,
   ArrowLeftRight,
   MessageSquare,
   BellRing,
@@ -147,12 +148,16 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'Vendas & Asaas',
+          title: 'Financeiro & Pagamentos',
           path: '/admin/financeiro',
           icon: CreditCard,
           badge: 'Gateway',
           badgeColor: 'blue',
-          isPlaceholder: true,
+        },
+        {
+          title: 'Produtos & Preços',
+          path: '/admin/produtos',
+          icon: Package,
         },
         {
           title: 'Cupons de Desconto',
@@ -164,7 +169,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Logística & Livros',
           path: '/admin/pedidos-livros',
           icon: Truck,
-          isPlaceholder: true,
         },
         {
           title: 'Transferências',
@@ -285,7 +289,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Pedidos de Livros Didáticos',
           path: '/polo/livros',
           icon: BookMarked,
-          isPlaceholder: true,
         },
       ],
     },
@@ -355,7 +358,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Pedidos de Livros',
           path: '/escola/livros',
           icon: BookMarked,
-          isPlaceholder: true,
         },
         {
           title: 'Chat Interno',

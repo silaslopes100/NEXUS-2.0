@@ -15,3 +15,5 @@ email-validator>=2.0.0
 fpdf2>=2.7.9
 Pillow>=10.0.0
 vercel-blob>=0.5.0
+cryptography>=42.0.0
+openpyxl>=3.1.0

@@ -37,6 +37,10 @@ import { NotasAdminPage } from '@/features/notas_historico/pages/NotasAdminPage'
 import { NotasProfessorPage } from '@/features/notas_historico/pages/NotasProfessorPage';
 import { HistoricoAlunoPage } from '@/features/notas_historico/pages/HistoricoAlunoPage';
 import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
+import { PagamentosPage } from '@/features/financeiro/pages/PagamentosPage';
+import { PedidosLivrosUnidadePage } from '@/features/financeiro/pages/PedidosLivrosUnidadePage';
+import { PedidosPage } from '@/features/financeiro/pages/PedidosPage';
+import { ProdutosPage } from '@/features/financeiro/pages/ProdutosPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -82,9 +86,10 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/presencas" element={<PresencasPage />} />
           <Route path="/admin/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/admin/licencas" element={<LicencasPage />} />
-          <Route path="/admin/financeiro" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/financeiro" element={<PagamentosPage />} />
+          <Route path="/admin/produtos" element={<ProdutosPage />} />
           <Route path="/admin/cupons" element={<ModulePlaceholderPage />} />
-          <Route path="/admin/pedidos-livros" element={<ModulePlaceholderPage />} />
+          <Route path="/admin/pedidos-livros" element={<PedidosPage />} />
           <Route path="/admin/transferencias" element={<TransferenciasPage />} />
           <Route path="/admin/auditoria" element={<LogsAuditoriaPage />} />
           <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
@@ -105,7 +110,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/transferencias" element={<TransferenciasPage />} />
           <Route path="/polo/licencas" element={<LicencasPage />} />
           <Route path="/polo/comprar-licencas" element={<ModulePlaceholderPage />} />
-          <Route path="/polo/livros" element={<ModulePlaceholderPage />} />
+          <Route path="/polo/livros" element={<PedidosLivrosUnidadePage />} />
         </Route>
 
         {/* Módulo Escola */}
@@ -117,7 +122,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/escola/transferencias" element={<TransferenciasPage />} />
           <Route path="/escola/presencas" element={<ModulePlaceholderPage />} />
           <Route path="/escola/licencas" element={<LicencasPage />} />
-          <Route path="/escola/livros" element={<ModulePlaceholderPage />} />
+          <Route path="/escola/livros" element={<PedidosLivrosUnidadePage />} />
         </Route>
 
         {/* Módulo Professor */}

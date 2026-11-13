@@ -1239,26 +1239,53 @@ async def test_modulo_cupons(client: AsyncClient):
     assert v_res.json()["percentual_desconto"] == 20.0
 
 
-# 16. Pedidos Livros
+# 16. Financeiro & Logística: pedidos (tabela única)
 @pytest.mark.asyncio
-async def test_modulo_pedidos_livros(client: AsyncClient):
-    t_polo = _token("polo-1", "polo@nexus.com.br", "polo")
-    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
+async def test_modulo_financeiro_pedidos(client: AsyncClient):
+    from app.modules.financeiro.repository import InMemoryFinanceiroRepository, set_financeiro_repository
+    from app.modules.financeiro.schemas import PedidoCreate, PedidoItemIn
+    from app.modules.financeiro.service import FinanceiroService
 
-    p_res = await client.post(
-        "/pedidos-livros",
-        json={"polo_id": "polo-1", "status": "pendente", "itens": [{"disciplina_id": "disc-1", "quantidade": 30}]},
-        headers={"Authorization": f"Bearer {t_polo}"},
-    )
-    assert p_res.status_code == 201
-    ped_id = p_res.json()["id"]
+    repo = InMemoryFinanceiroRepository()
+    repo.polos["polo-1"] = {
+        "nome": "Polo 1", "cep": "01001-000", "logradouro": "Praça da Sé", "numero": "1",
+        "bairro": "Sé", "cidade": "São Paulo", "uf": "SP",
+    }
+    set_financeiro_repository(repo)
+    try:
+        t_polo = _token("polo-1", "polo@nexus.com.br", "polo")
+        t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
 
-    u_res = await client.put(
-        f"/pedidos-livros/{ped_id}/status?novo_status=enviado",
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert u_res.status_code == 200
-    assert u_res.json()["status"] == "enviado"
+        prod = await client.post(
+            "/financeiro/produtos",
+            json={"tipo": "livro", "sku": "liv-mat-1", "nome": "Matemática 1", "preco": 59.9},
+            headers={"Authorization": f"Bearer {t_admin}"},
+        )
+        assert prod.status_code == 201
+        assert prod.json()["sku"] == "LIV-MAT-1"
+
+        negado = await client.post(
+            "/financeiro/produtos",
+            json={"tipo": "livro", "sku": "X-2", "nome": "Outro", "preco": 1},
+            headers={"Authorization": f"Bearer {t_polo}"},
+        )
+        assert negado.status_code == 403
+
+        polo_user = (await client.get("/auth/me", headers={"Authorization": f"Bearer {t_polo}"})).json()
+        from app.modules.auth.schemas import UserResponse
+        pedido = FinanceiroService(repo).criar_pedido(
+            PedidoCreate(tipo="livro", itens=[PedidoItemIn(produto_id=prod.json()["id"], quantidade=30)]),
+            UserResponse(**polo_user),
+        )
+        assert pedido.status == "aguardando_pagamento"
+        assert pedido.valor_total == 1797.0
+
+        lista = await client.get("/financeiro/pedidos", headers={"Authorization": f"Bearer {t_polo}"})
+        assert lista.status_code == 200
+        assert lista.json()["total"] == 1
+        assert lista.json()["items"][0]["numero"] == pedido.numero
+    finally:
+        set_financeiro_repository(None)
 
 
 # 17. Transferências

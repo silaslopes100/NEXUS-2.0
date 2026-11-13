@@ -608,7 +608,7 @@ class PolosEscolasService:
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="licencas_compradas",
-            entidade="compras_licencas",
+            entidade="pedidos",
             entidade_id=resultado["compra_id"],
             dados_depois={"quantidade": dados.quantidade, "fornecedor": dados.fornecedor},
             ip=ip,

@@ -42,8 +42,8 @@ FULL_LOAD_ORDER = [
     NotaMapper,         # quiz -> notas
     PresencaMapper,     # presenca -> presencas
     LicencaMapper,      # licences -> licencas_atribuidas
-    PedidoLivroMapper,  # p_livros -> pedidos_livros
-    PedidoLivroItemMapper,  # p_livros -> pedidos_livros_itens
+    PedidoLivroMapper,  # p_livros -> pedidos (tipo livro)
+    PedidoLivroItemMapper,  # p_livros -> pedidos_itens
     PagamentoMapper,    # pagamento -> pagamentos
     PagseguroMapper,    # pagseguro_transaction -> pagamentos
     OfflinePaymentMapper,   # offline_payment -> pagamentos
@@ -198,8 +198,8 @@ FONTE_CONTAGEM = [
     ("notas", ["quiz"]),
     ("presencas", ["presenca"]),
     ("licencas_atribuidas", ["licences"]),
-    ("pedidos_livros", ["p_livros"]),
-    ("pedidos_livros_itens", ["p_livros"]),
+    ("pedidos", ["p_livros"]),
+    ("pedidos_itens", ["p_livros"]),
     ("pagamentos", ["pagamento", "pagseguro_transaction", "offline_payment"]),
     ("conversas", ["message_thread"]),
     ("mensagens", ["message"]),

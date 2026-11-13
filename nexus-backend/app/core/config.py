@@ -55,4 +55,17 @@ class Settings:
     SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "noreply@nexus2.com.br")
     SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "NEXUS 2.0")
 
+    # --- Pagamentos (Financeiro & Logistica) ---
+    # Ambiente dos gateways usado nas novas cobrancas: sandbox | producao.
+    PAYMENT_ENV: str = os.getenv("PAYMENT_ENV", "sandbox").strip().lower()
+    if PAYMENT_ENV not in ("sandbox", "producao"):
+        raise RuntimeError("PAYMENT_ENV deve ser 'sandbox' ou 'producao'.")
+    # Chave Fernet que criptografa as credenciais em gateways_config. Nao e
+    # exigida no import para nao derrubar o deploy; a falha ocorre no uso.
+    PAYMENT_SECRETS_KEY: str = os.getenv("PAYMENT_SECRETS_KEY", "")
+    # URL publica da API (base das URLs de webhook dos gateways).
+    PUBLIC_API_URL: str = os.getenv("PUBLIC_API_URL", "").rstrip("/")
+    # Segredo exigido pelos endpoints de cron (Vercel Cron).
+    CRON_SECRET: str = os.getenv("CRON_SECRET", "")
+
 settings = Settings()

@@ -115,7 +115,7 @@ class PostgresAdminRepository:
                  WHERE u.status = 'ativo') AS professores_ativos,
                 (SELECT COUNT(*) FROM certificados WHERE emitido_em IS NOT NULL) AS certificados_emitidos,
                 (SELECT COALESCE(SUM(quantidade_disponivel), 0)
-                 FROM estoque_licencas) AS licencas_em_estoque
+                 FROM licencas_estoque) AS licencas_em_estoque
         """
         with get_db_cursor() as cur:
             cur.execute(sql)

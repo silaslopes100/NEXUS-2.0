@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Sequence
 
 import psycopg2
@@ -12,6 +13,12 @@ from . import schema
 logger = logging.getLogger(__name__)
 
 TRACKING_COLS = ("legacy_table", "legacy_id", "synced_at")
+
+# Migrations idempotentes aplicadas apos o DDL base: criam tabelas que os
+# mappers usam como destino (ex.: `pedidos`/`pedidos_itens`). A 017
+# (unificacao de dados) NAO entra aqui: e aplicada manualmente.
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "scripts" / "migrations"
+POST_DDL_MIGRATIONS = ("016_financeiro_logistica_estrutura.sql",)
 
 
 class PostgresTarget:
@@ -50,6 +57,11 @@ class PostgresTarget:
             for stmt in schema.DDL:
                 cur.execute(stmt)
         self.commit()
+        for nome in POST_DDL_MIGRATIONS:
+            logger.info("Aplicando migration %s...", nome)
+            with self.conn.cursor() as cur:
+                cur.execute((MIGRATIONS_DIR / nome).read_text(encoding="utf-8"))
+            self.commit()
 
     def upsert_rows(
         self,

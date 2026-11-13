@@ -10,5 +10,6 @@
             "matchCommandLine": true
         },
         "e:/NEXUS-2.0/nexus-backend/.venv/Scripts/python.exe": true
-    }
+    },
+    "python.terminal.useEnvFile": true
 }

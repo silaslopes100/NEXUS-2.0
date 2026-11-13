@@ -306,13 +306,7 @@ DDL: List[str] = [
     presente BOOLEAN DEFAULT false""",
     ),
     # ---------- 3.10 Licencas ----------
-    _tbl(
-        "estoque_licencas",
-        """    disciplina_id UUID REFERENCES disciplinas(id) ON DELETE SET NULL,
-    quantidade_total INT DEFAULT 0,
-    quantidade_disponivel INT DEFAULT 0""",
-        tracking=False,
-    ),
+    # Estoque canonico: `licencas_estoque` (polos_escolas/schema.sql).
     _tbl(
         "licencas_atribuidas",
         """    disciplina_id UUID REFERENCES disciplinas(id) ON DELETE SET NULL,
@@ -324,17 +318,12 @@ DDL: List[str] = [
     atribuido_em TIMESTAMPTZ""",
     ),
     # ---------- 3.11 Vendas / Financeiro ----------
-    _tbl(
-        "pedidos_licenca",
-        """    polo_id UUID REFERENCES polos(id) ON DELETE SET NULL,
-    escola_id UUID REFERENCES escolas(id) ON DELETE SET NULL,
-    itens JSONB,
-    valor_total NUMERIC(12,2),
-    status VARCHAR(16) DEFAULT 'pendente'""",
-    ),
+    # Pedidos (tabela unica `pedidos`/`pedidos_itens`), produtos, gateways e
+    # demais tabelas do modulo 2.4 vem da migration 016, aplicada pelo
+    # ensure_schema logo apos este DDL. `pedido_licenca_id` e legado (sem FK).
     _tbl(
         "pagamentos",
-        """    pedido_licenca_id UUID REFERENCES pedidos_licenca(id) ON DELETE SET NULL,
+        """    pedido_licenca_id UUID,
     compra_disciplina_ead_id UUID REFERENCES compras_disciplina_ead(id) ON DELETE SET NULL,
     gateway VARCHAR(32) DEFAULT 'legado',
     asaas_customer_id VARCHAR(64),
@@ -352,20 +341,6 @@ DDL: List[str] = [
     percentual_desconto NUMERIC(5,2),
     valido_de DATE,
     valido_ate DATE""",
-    ),
-    # ---------- 3.12 Orders (Logistica) ----------
-    _tbl(
-        "pedidos_livros",
-        """    polo_id UUID REFERENCES polos(id) ON DELETE SET NULL,
-    escola_id UUID REFERENCES escolas(id) ON DELETE SET NULL,
-    status VARCHAR(16) DEFAULT 'pendente',
-    enviado_em TIMESTAMPTZ""",
-    ),
-    _tbl(
-        "pedidos_livros_itens",
-        """    pedido_livro_id UUID NOT NULL REFERENCES pedidos_livros(id) ON DELETE CASCADE,
-    disciplina_id UUID REFERENCES disciplinas(id) ON DELETE SET NULL,
-    quantidade INT DEFAULT 1""",
     ),
     # ---------- 3.13 Transferencias ----------
     _tbl(
