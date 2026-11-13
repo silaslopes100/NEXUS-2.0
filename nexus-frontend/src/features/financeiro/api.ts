@@ -1,6 +1,13 @@
 import { apiClient } from '@/api/client';
 import {
+  Ambiente,
   FiltrosPeriodo,
+  GatewayConfig,
+  GatewayConfigPayload,
+  GatewayNome,
+  GatewaysResposta,
+  MeioCobranca,
+  WebhookEvento,
   Pagamento,
   Paginado,
   Pedido,
@@ -44,5 +51,27 @@ export const financeiroApi = {
   // Pagamentos
   async listPagamentos(filtros?: FiltrosPeriodo) {
     return (await apiClient.get<Paginado<Pagamento>>('/financeiro/pagamentos', { params: limpar(filtros) })).data;
+  },
+
+  // Cobrança (Fase 2)
+  async gerarCobranca(pedidoId: string, meio: MeioCobranca) {
+    return (await apiClient.post<Pagamento>(`/financeiro/pedidos/${pedidoId}/cobranca`, { meio })).data;
+  },
+  async cancelarPagamento(id: string) {
+    return (await apiClient.post<Pagamento>(`/financeiro/pagamentos/${id}/cancelar`)).data;
+  },
+
+  // Gateways
+  async listGateways() {
+    return (await apiClient.get<GatewaysResposta>('/financeiro/gateways')).data;
+  },
+  async salvarGateway(gateway: GatewayNome, ambiente: Ambiente, payload: GatewayConfigPayload) {
+    return (await apiClient.put<GatewayConfig>(`/financeiro/gateways/${gateway}/${ambiente}`, payload)).data;
+  },
+  async testarGateway(gateway: GatewayNome, ambiente: Ambiente) {
+    return (await apiClient.post<{ ok: boolean; mensagem: string }>(`/financeiro/gateways/${gateway}/${ambiente}/testar`)).data;
+  },
+  async listWebhookEventos(params?: { gateway?: string; status?: string; limit?: number; offset?: number }) {
+    return (await apiClient.get<Paginado<WebhookEvento>>('/financeiro/webhooks/eventos', { params })).data;
   },
 };

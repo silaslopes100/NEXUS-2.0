@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
 
 from fastapi import HTTPException, status
 from psycopg2.errors import UniqueViolation
+from psycopg2.extras import Json
 
 from app.core.database import get_db_cursor
 from app.modules.financeiro.schemas import FiltrosPeriodo
@@ -44,6 +45,8 @@ COLUNAS_PEDIDO = (
 CAMPOS_STATUS_EXTRA = frozenset(
     {"pago_em", "cancelado_em", "motivo_cancelamento", "enviado_em", "entregue_em"}
 )
+CAMPOS_GATEWAY_CONFIG = ("credenciais_cripto", "webhook_token_cripto", "ativo", "padrao", "atualizado_por")
+GATEWAYS_REAIS = ("asaas", "pagbank", "mercadopago")
 COLUNAS_PAGAMENTO = (
     "pedido_id", "polo_id", "escola_id", "aluno_id", "gateway", "ambiente",
     "gateway_customer_id", "gateway_payment_id", "asaas_customer_id",
@@ -81,6 +84,7 @@ def where_periodo(
     coluna_data: str,
     coluna_status: Optional[str] = None,
     coluna_tipo: Optional[str] = None,
+    coluna_pedido: Optional[str] = None,
 ) -> Tuple[List[str], List[Any]]:
     """Monta condições SQL + parâmetros para os filtros de período/unidade.
 
@@ -125,6 +129,9 @@ def where_periodo(
     if filtros.tipo and coluna_tipo:
         conds.append(f"{coluna_tipo} = %s")
         params.append(filtros.tipo)
+    if filtros.pedido_id and coluna_pedido:
+        conds.append(f"{coluna_pedido} = %s")
+        params.append(filtros.pedido_id)
     return conds, params
 
 
@@ -168,6 +175,24 @@ class FinanceiroRepositoryInterface(Protocol):
     def update_pagamento(self, pagamento_id: str, campos: Dict[str, Any]) -> None: ...
     # apoio
     def get_endereco_polo(self, polo_id: str) -> Optional[Dict[str, Any]]: ...
+    def get_dados_cobranca_polo(self, polo_id: str) -> Optional[Dict[str, Any]]: ...
+    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]: ...
+    # gateways
+    def get_gateway_config(self, gateway: str, ambiente: str) -> Optional[Dict[str, Any]]: ...
+    def list_gateway_configs(self) -> List[Dict[str, Any]]: ...
+    def salvar_gateway_config(self, gateway: str, ambiente: str, campos: Dict[str, Any]) -> Dict[str, Any]: ...
+    def marcar_teste_gateway(self, gateway: str, ambiente: str, ok: bool) -> None: ...
+    def get_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str) -> Optional[Dict[str, Any]]: ...
+    def salvar_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str, customer_id: str, documento: str) -> None: ...
+    def get_pagamento_pendente_do_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]: ...
+    def list_pagamentos_para_reconciliar(self, limite: int = 50) -> List[Dict[str, Any]]: ...
+    # webhooks
+    def registrar_webhook(self, gateway: str, ambiente: str, evento_id: str, tipo_evento: Optional[str],
+                          payment_id: Optional[str], payload: Any) -> Optional[str]: ...
+    def finalizar_webhook(self, webhook_id: str, status: str, erro: Optional[str] = None) -> None: ...
+    def get_webhook(self, webhook_id: str) -> Optional[Dict[str, Any]]: ...
+    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]: ...
+    def list_webhooks_com_erro(self, max_tentativas: int = 5, limite: int = 50) -> List[Dict[str, Any]]: ...
 
 
 # =============================================================================
@@ -384,7 +409,7 @@ class PostgresFinanceiroRepository:
     def list_pagamentos(self, filtros: FiltrosPeriodo, escopo: Escopo) -> Tuple[int, List[Dict[str, Any]]]:
         conds, params = where_periodo(
             filtros, escopo, alias="pg", coluna_data="pg.criado_em",
-            coluna_status="pg.status", coluna_tipo="p.tipo",
+            coluna_status="pg.status", coluna_tipo="p.tipo", coluna_pedido="pg.pedido_id",
         )
         where = _where(conds)
         with get_db_cursor() as cur:
@@ -419,6 +444,180 @@ class PostgresFinanceiroRepository:
                 (str(polo_id),),
             )
             return _limpar(cur.fetchone())
+
+    def get_dados_cobranca_polo(self, polo_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, nome, cep, logradouro, numero, complemento, bairro, cidade, uf,
+                       documento_fiscal, razao_social, email_financeiro, telefone_financeiro
+                  FROM polos WHERE id = %s
+                """,
+                (str(polo_id),),
+            )
+            return _limpar(cur.fetchone())
+
+    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM regras_pagamento
+                 WHERE ativo
+                   AND (aplica_tipo_pedido IS NULL OR aplica_tipo_pedido = %s)
+                   AND (aplica_polo_id IS NULL OR aplica_polo_id::text = %s)
+                 ORDER BY (aplica_polo_id IS NULL), (aplica_tipo_pedido IS NULL), prioridade
+                 LIMIT 1
+                """,
+                (tipo, str(polo_id or "")),
+            )
+            return _limpar(cur.fetchone())
+
+    # ---------------- gateways ----------------
+
+    def get_gateway_config(self, gateway: str, ambiente: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM gateways_config WHERE gateway = %s AND ambiente = %s", (gateway, ambiente))
+            return _limpar(cur.fetchone())
+
+    def list_gateway_configs(self) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM gateways_config ORDER BY gateway, ambiente")
+            return [_limpar(r) for r in cur.fetchall()]
+
+    def salvar_gateway_config(self, gateway: str, ambiente: str, campos: Dict[str, Any]) -> Dict[str, Any]:
+        campos = _filtrar_colunas(campos, CAMPOS_GATEWAY_CONFIG)
+        with get_db_cursor() as cur:
+            if campos.get("padrao"):
+                cur.execute(
+                    "UPDATE gateways_config SET padrao = false, atualizado_em = now() "
+                    "WHERE ambiente = %s AND gateway <> %s AND padrao",
+                    (ambiente, gateway),
+                )
+            cols = ["gateway", "ambiente", *campos.keys()]
+            sets = ", ".join(f"{k} = EXCLUDED.{k}" for k in campos) or "gateway = EXCLUDED.gateway"
+            cur.execute(
+                f"""
+                INSERT INTO gateways_config ({", ".join(cols)}) VALUES ({", ".join(["%s"] * len(cols))})
+                ON CONFLICT (gateway, ambiente) DO UPDATE SET {sets}, atualizado_em = now()
+                RETURNING *
+                """,
+                (gateway, ambiente, *campos.values()),
+            )
+            return _limpar(cur.fetchone())
+
+    def marcar_teste_gateway(self, gateway: str, ambiente: str, ok: bool) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "UPDATE gateways_config SET ultimo_teste_em = now(), ultimo_teste_ok = %s WHERE gateway = %s AND ambiente = %s",
+                (ok, gateway, ambiente),
+            )
+
+    def get_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT * FROM gateway_clientes WHERE gateway = %s AND ambiente = %s AND polo_id = %s",
+                (gateway, ambiente, str(polo_id)),
+            )
+            return _limpar(cur.fetchone())
+
+    def salvar_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str, customer_id: str, documento: str) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO gateway_clientes (gateway, ambiente, polo_id, customer_id, documento_fiscal)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (gateway, ambiente, polo_id) DO UPDATE
+                   SET customer_id = EXCLUDED.customer_id, documento_fiscal = EXCLUDED.documento_fiscal,
+                       atualizado_em = now()
+                """,
+                (gateway, ambiente, str(polo_id), customer_id, documento),
+            )
+
+    def get_pagamento_pendente_do_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                _SELECT_PAGAMENTO + " WHERE pg.pedido_id = %s AND pg.status = 'pendente' "
+                "ORDER BY pg.criado_em DESC LIMIT 1",
+                (str(pedido_id),),
+            )
+            return _limpar(cur.fetchone())
+
+    def list_pagamentos_para_reconciliar(self, limite: int = 50) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                _SELECT_PAGAMENTO
+                + """
+                 WHERE pg.status IN ('pendente', 'vencido')
+                   AND pg.gateway = ANY(%s) AND pg.ambiente IS NOT NULL
+                   AND pg.gateway_payment_id IS NOT NULL
+                   AND pg.criado_em < now() - interval '30 minutes'
+                 ORDER BY pg.atualizado_em NULLS FIRST, pg.criado_em
+                 LIMIT %s
+                """,
+                (list(GATEWAYS_REAIS), limite),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
+    # ---------------- webhooks ----------------
+
+    def registrar_webhook(self, gateway: str, ambiente: str, evento_id: str, tipo_evento: Optional[str],
+                          payment_id: Optional[str], payload: Any) -> Optional[str]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO webhook_eventos (gateway, ambiente, evento_id, tipo_evento, gateway_payment_id, payload)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (gateway, evento_id) DO NOTHING
+                RETURNING id
+                """,
+                (gateway, ambiente, evento_id[:128], (tipo_evento or "")[:64] or None,
+                 (payment_id or "")[:128] or None, Json(payload)),
+            )
+            row = cur.fetchone()
+            return str(row["id"]) if row else None
+
+    def finalizar_webhook(self, webhook_id: str, status: str, erro: Optional[str] = None) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                UPDATE webhook_eventos
+                   SET status = %s, erro = %s, tentativas = tentativas + 1, processado_em = now()
+                 WHERE id = %s
+                """,
+                (status, (erro or None) and erro[:2000], str(webhook_id)),
+            )
+
+    def get_webhook(self, webhook_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM webhook_eventos WHERE id = %s", (str(webhook_id),))
+            return _limpar(cur.fetchone())
+
+    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]:
+        conds, params = [], []
+        if gateway:
+            conds.append("gateway = %s")
+            params.append(gateway)
+        if status:
+            conds.append("status = %s")
+            params.append(status)
+        where = _where(conds)
+        with get_db_cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS total FROM webhook_eventos {where}", tuple(params))
+            total = int(cur.fetchone()["total"])
+            cur.execute(
+                f"SELECT * FROM webhook_eventos {where} ORDER BY recebido_em DESC LIMIT %s OFFSET %s",
+                tuple(params + [limit, offset]),
+            )
+            return total, [_limpar(r) for r in cur.fetchall()]
+
+    def list_webhooks_com_erro(self, max_tentativas: int = 5, limite: int = 50) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT * FROM webhook_eventos WHERE status = 'erro' AND tentativas < %s "
+                "ORDER BY recebido_em LIMIT %s",
+                (max_tentativas, limite),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
 
 
 # =============================================================================
@@ -472,6 +671,8 @@ def _casa_periodo(
         return False
     if filtros.tipo and tipo != filtros.tipo:
         return False
+    if filtros.pedido_id and registro.get("pedido_id") != filtros.pedido_id:
+        return False
     return True
 
 
@@ -484,6 +685,10 @@ class InMemoryFinanceiroRepository:
         self.envios: List[Dict[str, Any]] = []
         self.pagamentos: Dict[str, Dict[str, Any]] = {}
         self.polos: Dict[str, Dict[str, Any]] = {}
+        self.regras: List[Dict[str, Any]] = []
+        self.gateway_configs: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self.gateway_clientes: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        self.webhooks: Dict[str, Dict[str, Any]] = {}
         self._seq = 0
 
     # produtos
@@ -639,6 +844,106 @@ class InMemoryFinanceiroRepository:
     def get_endereco_polo(self, polo_id: str) -> Optional[Dict[str, Any]]:
         p = self.polos.get(str(polo_id))
         return dict(p) if p else None
+
+    def get_dados_cobranca_polo(self, polo_id: str) -> Optional[Dict[str, Any]]:
+        p = self.polos.get(str(polo_id))
+        return {"id": str(polo_id), **p} if p else None
+
+    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        candidatas = [
+            r for r in self.regras
+            if r.get("ativo", True)
+            and r.get("aplica_tipo_pedido") in (None, tipo)
+            and r.get("aplica_polo_id") in (None, polo_id)
+        ]
+        candidatas.sort(key=lambda r: (r.get("aplica_polo_id") is None, r.get("aplica_tipo_pedido") is None,
+                                       r.get("prioridade", 100)))
+        return dict(candidatas[0]) if candidatas else None
+
+    # gateways
+    def get_gateway_config(self, gateway: str, ambiente: str) -> Optional[Dict[str, Any]]:
+        c = self.gateway_configs.get((gateway, ambiente))
+        return dict(c) if c else None
+
+    def list_gateway_configs(self) -> List[Dict[str, Any]]:
+        return [dict(c) for _, c in sorted(self.gateway_configs.items())]
+
+    def salvar_gateway_config(self, gateway: str, ambiente: str, campos: Dict[str, Any]) -> Dict[str, Any]:
+        campos = _filtrar_colunas(campos, CAMPOS_GATEWAY_CONFIG)
+        if campos.get("padrao"):
+            for (g, a), c in self.gateway_configs.items():
+                if a == ambiente and g != gateway:
+                    c["padrao"] = False
+        atual = self.gateway_configs.setdefault((gateway, ambiente), {
+            "id": str(uuid.uuid4()), "gateway": gateway, "ambiente": ambiente, "credenciais_cripto": None,
+            "webhook_token_cripto": None, "ativo": False, "padrao": False,
+            "ultimo_teste_em": None, "ultimo_teste_ok": None, "criado_em": _agora(),
+        })
+        atual.update(campos)
+        atual["atualizado_em"] = _agora()
+        return dict(atual)
+
+    def marcar_teste_gateway(self, gateway: str, ambiente: str, ok: bool) -> None:
+        c = self.gateway_configs.get((gateway, ambiente))
+        if c:
+            c.update(ultimo_teste_em=_agora(), ultimo_teste_ok=ok)
+
+    def get_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str) -> Optional[Dict[str, Any]]:
+        c = self.gateway_clientes.get((gateway, ambiente, str(polo_id)))
+        return dict(c) if c else None
+
+    def salvar_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str, customer_id: str, documento: str) -> None:
+        self.gateway_clientes[(gateway, ambiente, str(polo_id))] = {
+            "customer_id": customer_id, "documento_fiscal": documento,
+        }
+
+    def get_pagamento_pendente_do_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]:
+        pendentes = [pg for pg in self.pagamentos.values()
+                     if pg.get("pedido_id") == str(pedido_id) and pg.get("status") == "pendente"]
+        pendentes.sort(key=lambda pg: pg["criado_em"], reverse=True)
+        return self._montar_pagamento(pendentes[0]) if pendentes else None
+
+    def list_pagamentos_para_reconciliar(self, limite: int = 50) -> List[Dict[str, Any]]:
+        limite_data = _agora() - timedelta(minutes=30)
+        out = [
+            self._montar_pagamento(pg) for pg in self.pagamentos.values()
+            if pg.get("status") in ("pendente", "vencido") and pg.get("gateway_payment_id")
+            and pg.get("ambiente") and pg.get("gateway") in (*GATEWAYS_REAIS, "fake")
+            and pg["criado_em"] < limite_data
+        ]
+        return out[:limite]
+
+    # webhooks
+    def registrar_webhook(self, gateway: str, ambiente: str, evento_id: str, tipo_evento: Optional[str],
+                          payment_id: Optional[str], payload: Any) -> Optional[str]:
+        if any(w["gateway"] == gateway and w["evento_id"] == evento_id for w in self.webhooks.values()):
+            return None
+        wid = str(uuid.uuid4())
+        self.webhooks[wid] = {
+            "id": wid, "gateway": gateway, "ambiente": ambiente, "evento_id": evento_id,
+            "tipo_evento": tipo_evento, "gateway_payment_id": payment_id, "payload": payload,
+            "status": "recebido", "tentativas": 0, "erro": None, "recebido_em": _agora(), "processado_em": None,
+        }
+        return wid
+
+    def finalizar_webhook(self, webhook_id: str, status: str, erro: Optional[str] = None) -> None:
+        w = self.webhooks[str(webhook_id)]
+        w.update(status=status, erro=erro, processado_em=_agora())
+        w["tentativas"] += 1
+
+    def get_webhook(self, webhook_id: str) -> Optional[Dict[str, Any]]:
+        w = self.webhooks.get(str(webhook_id))
+        return dict(w) if w else None
+
+    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]:
+        itens = [dict(w) for w in self.webhooks.values()
+                 if (not gateway or w["gateway"] == gateway) and (not status or w["status"] == status)]
+        itens.sort(key=lambda w: w["recebido_em"], reverse=True)
+        return len(itens), itens[offset: offset + limit]
+
+    def list_webhooks_com_erro(self, max_tentativas: int = 5, limite: int = 50) -> List[Dict[str, Any]]:
+        return [dict(w) for w in self.webhooks.values()
+                if w["status"] == "erro" and w["tentativas"] < max_tentativas][:limite]
 
 
 _repo_instance: Optional[FinanceiroRepositoryInterface] = None

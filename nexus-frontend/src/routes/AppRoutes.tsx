@@ -37,6 +37,7 @@ import { NotasAdminPage } from '@/features/notas_historico/pages/NotasAdminPage'
 import { NotasProfessorPage } from '@/features/notas_historico/pages/NotasProfessorPage';
 import { HistoricoAlunoPage } from '@/features/notas_historico/pages/HistoricoAlunoPage';
 import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
+import { GatewaysPage } from '@/features/financeiro/pages/GatewaysPage';
 import { PagamentosPage } from '@/features/financeiro/pages/PagamentosPage';
 import { PedidosLivrosUnidadePage } from '@/features/financeiro/pages/PedidosLivrosUnidadePage';
 import { PedidosPage } from '@/features/financeiro/pages/PedidosPage';
@@ -88,6 +89,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/licencas" element={<LicencasPage />} />
           <Route path="/admin/financeiro" element={<PagamentosPage />} />
           <Route path="/admin/produtos" element={<ProdutosPage />} />
+          <Route path="/admin/gateways" element={<GatewaysPage />} />
           <Route path="/admin/cupons" element={<ModulePlaceholderPage />} />
           <Route path="/admin/pedidos-livros" element={<PedidosPage />} />
           <Route path="/admin/transferencias" element={<TransferenciasPage />} />

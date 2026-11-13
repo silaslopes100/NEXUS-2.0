@@ -17,6 +17,12 @@ export interface PoloItem {
   coordenador_email?: string;
   endereco: EnderecoCompleto;
   status: string;
+  dados_fiscais?: {
+    documento_fiscal?: string | null;
+    razao_social?: string | null;
+    email_financeiro?: string | null;
+    telefone_financeiro?: string | null;
+  } | null;
   criado_em?: string;
   atualizado_em?: string;
 }

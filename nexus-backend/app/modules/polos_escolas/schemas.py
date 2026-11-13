@@ -4,7 +4,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+from app.core.documentos import documento_valido, normalizar_documento
 
 
 # =========================================================================
@@ -25,6 +27,34 @@ class EnderecoSchema(BaseModel):
     cep: str = ""
 
 
+class DadosFiscaisSchema(BaseModel):
+    """Pagador das cobranças nos gateways (Asaas, PagBank, Mercado Pago)."""
+
+    documento_fiscal: Optional[str] = Field(default=None, description="CPF ou CNPJ (com ou sem máscara)")
+    razao_social: Optional[str] = Field(default=None, max_length=255)
+    email_financeiro: Optional[EmailStr] = None
+    telefone_financeiro: Optional[str] = Field(default=None, max_length=32)
+
+    @field_validator("documento_fiscal")
+    @classmethod
+    def _documento(cls, valor: Optional[str]) -> Optional[str]:
+        if valor is None or not valor.strip():
+            return None
+        if not documento_valido(valor):
+            raise ValueError("CPF/CNPJ inválido")
+        return normalizar_documento(valor)
+
+    @field_validator("razao_social", "telefone_financeiro", mode="before")
+    @classmethod
+    def _vazio_para_none(cls, valor):
+        return valor.strip() or None if isinstance(valor, str) else valor
+
+    @field_validator("email_financeiro", mode="before")
+    @classmethod
+    def _email_vazio(cls, valor):
+        return None if isinstance(valor, str) and not valor.strip() else valor
+
+
 # =========================================================================
 # 1. Polos
 # =========================================================================
@@ -35,6 +65,7 @@ class PoloCreateRequest(BaseModel):
 
     nome: str = Field(min_length=2)
     endereco: Optional[EnderecoSchema] = None
+    dados_fiscais: Optional[DadosFiscaisSchema] = None
 
     # Opção 1: vincular usuário existente (promovido a coordenador_polo se necessário)
     coordenador_usuario_id: Optional[str] = None
@@ -61,6 +92,7 @@ class PoloUpdateRequest(BaseModel):
 
     nome: Optional[str] = None
     endereco: Optional[EnderecoSchema] = None
+    dados_fiscais: Optional[DadosFiscaisSchema] = None
     status: Optional[str] = Field(default=None, pattern="^(ativo|inativo)$")
 
     # NOVO: vincular um usuário existente (perfil coordenador_polo)
@@ -84,6 +116,7 @@ class PoloResponse(BaseModel):
     coordenador_nome: Optional[str] = None
     coordenador_cpf: Optional[str] = None
     coordenador_email: Optional[str] = None
+    dados_fiscais: DadosFiscaisSchema = Field(default_factory=DadosFiscaisSchema)
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
 

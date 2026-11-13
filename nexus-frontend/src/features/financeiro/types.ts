@@ -117,6 +117,10 @@ export interface Pagamento {
   status?: string | null;
   boleto_url?: string | null;
   invoice_url?: string | null;
+  linha_digitavel?: string | null;
+  pix_copia_cola?: string | null;
+  pix_qrcode_base64?: string | null;
+  valor_liquido?: number | null;
   vencimento_em?: string | null;
   pago_em?: string | null;
   descricao?: string | null;
@@ -141,6 +145,7 @@ export interface FiltrosPeriodo {
   escola_id?: string;
   status?: string;
   tipo?: string;
+  pedido_id?: string;
   limit?: number;
   offset?: number;
 }
@@ -176,4 +181,72 @@ export const erroApi = (error: any, padrao: string): string => {
   if (typeof detail === 'string') return detail;
   if (Array.isArray(detail)) return detail.map((d: any) => d.msg).join('; ');
   return padrao;
+};
+
+// ---------------------------------------------------------------------------
+// Fase 2: gateways, cobrança e webhooks
+// ---------------------------------------------------------------------------
+
+export type GatewayNome = 'asaas' | 'pagbank' | 'mercadopago';
+export type Ambiente = 'sandbox' | 'producao';
+export type MeioCobranca = 'BOLETO' | 'PIX';
+
+export interface CampoCredencial { campo: string; label: string; obrigatorio: boolean; }
+
+export interface GatewayConfig {
+  gateway: GatewayNome;
+  ambiente: Ambiente;
+  ativo: boolean;
+  padrao: boolean;
+  credenciais: Record<string, string>; // sempre mascaradas
+  webhook_token: string; // mascarado
+  campos: CampoCredencial[];
+  rotulo_webhook_token: string | null;
+  webhook_url: string | null;
+  ultimo_teste_em?: string | null;
+  ultimo_teste_ok?: boolean | null;
+}
+
+export interface GatewaysResposta {
+  ambiente_ativo: Ambiente;
+  public_api_url_configurada: boolean;
+  chave_configurada: boolean;
+  items: GatewayConfig[];
+}
+
+export interface GatewayConfigPayload {
+  credenciais?: Record<string, string>;
+  webhook_token?: string;
+  ativo?: boolean;
+  padrao?: boolean;
+}
+
+export interface WebhookEvento {
+  id: string;
+  gateway: string;
+  ambiente: string;
+  evento_id: string;
+  tipo_evento?: string | null;
+  gateway_payment_id?: string | null;
+  payload: unknown;
+  status: 'recebido' | 'processado' | 'erro' | 'ignorado';
+  tentativas: number;
+  erro?: string | null;
+  recebido_em?: string | null;
+  processado_em?: string | null;
+}
+
+export const NOME_GATEWAY: Record<GatewayNome, string> = {
+  asaas: 'Asaas',
+  pagbank: 'PagBank',
+  mercadopago: 'Mercado Pago',
+};
+
+export const COR_STATUS_PAGAMENTO: Record<string, string> = {
+  pago: 'text-emerald-400',
+  pendente: 'text-amber-300',
+  vencido: 'text-red-400',
+  cancelado: 'text-slate-500',
+  estornado: 'text-purple-300',
+  falhou: 'text-red-400',
 };

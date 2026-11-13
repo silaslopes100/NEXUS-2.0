@@ -17,6 +17,7 @@ import {
   Ticket,
   Truck,
   Package,
+  ShieldCheck,
   ArrowLeftRight,
   MessageSquare,
   BellRing,
@@ -158,6 +159,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Produtos & Preços',
           path: '/admin/produtos',
           icon: Package,
+        },
+        {
+          title: 'Gateways de Pagamento',
+          path: '/admin/gateways',
+          icon: ShieldCheck,
         },
         {
           title: 'Cupons de Desconto',

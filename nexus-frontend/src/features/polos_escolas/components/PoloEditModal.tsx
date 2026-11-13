@@ -21,7 +21,35 @@ export interface PoloItem {
   coordenador_nome?: string | null;
   coordenador_cpf?: string | null;
   coordenador_email?: string | null;
+  dados_fiscais?: DadosFiscais | null;
 }
+
+export interface DadosFiscais {
+  documento_fiscal?: string | null;
+  razao_social?: string | null;
+  email_financeiro?: string | null;
+  telefone_financeiro?: string | null;
+}
+
+/** Máscara de CPF (11 dígitos) ou CNPJ (14 dígitos). */
+const mascararDocumento = (valor: string) => {
+  const d = valor.replace(/\D/g, '').slice(0, 14);
+  if (d.length <= 11) {
+    return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+};
+
+const erroDetalhe = (err: any, padrao: string): string => {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map((d: any) => d.msg).join('; ');
+  return padrao;
+};
 
 interface UsuarioVinculavel {
   id: string;
@@ -54,6 +82,12 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
     endereco: polo.endereco || emptyAddress,
     status: polo.status || 'ativo',
     coordenador_usuario_id: polo.coordenador_id || '',
+  });
+  const [fiscal, setFiscal] = useState({
+    documento_fiscal: mascararDocumento(polo.dados_fiscais?.documento_fiscal || ''),
+    razao_social: polo.dados_fiscais?.razao_social || '',
+    email_financeiro: polo.dados_fiscais?.email_financeiro || '',
+    telefone_financeiro: polo.dados_fiscais?.telefone_financeiro || '',
   });
 
   const [usuarios, setUsuarios] = useState<UsuarioVinculavel[]>([]);
@@ -115,6 +149,7 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
         nome: form.nome,
         endereco: form.endereco,
         status: form.status,
+        dados_fiscais: fiscal,
       };
       if (form.coordenador_usuario_id) {
         payload.coordenador_usuario_id = form.coordenador_usuario_id;
@@ -124,7 +159,7 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
       onSuccess();
       onClose();
     } catch (err: any) {
-      setFeedback(err.response?.data?.detail || 'Erro ao atualizar polo.');
+      setFeedback(erroDetalhe(err, 'Erro ao atualizar polo.'));
     } finally {
       setSaving(false);
     }
@@ -132,7 +167,7 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">Editar Polo</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
@@ -183,6 +218,53 @@ export const PoloEditModal: React.FC<PoloEditModalProps> = ({ polo, onClose, onS
                 <option value="ativo">Ativo</option>
                 <option value="inativo">Inativo</option>
               </select>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 pt-4">
+            <h3 className="text-sm font-semibold text-slate-300">Dados fiscais para cobrança</h3>
+            <p className="mb-3 text-xs text-slate-500">
+              Pagador dos boletos/PIX gerados nos gateways. Obrigatórios para emitir cobranças: CPF/CNPJ, razão social e e-mail financeiro.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-300">CPF/CNPJ</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={fiscal.documento_fiscal}
+                  onChange={(e) => setFiscal({ ...fiscal, documento_fiscal: mascararDocumento(e.target.value) })}
+                  placeholder="00.000.000/0000-00"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-300">Razão social / nome</label>
+                <input
+                  type="text"
+                  value={fiscal.razao_social}
+                  onChange={(e) => setFiscal({ ...fiscal, razao_social: e.target.value })}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-300">E-mail financeiro</label>
+                <input
+                  type="email"
+                  value={fiscal.email_financeiro}
+                  onChange={(e) => setFiscal({ ...fiscal, email_financeiro: e.target.value })}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-300">Telefone financeiro</label>
+                <input
+                  type="text"
+                  value={fiscal.telefone_financeiro}
+                  onChange={(e) => setFiscal({ ...fiscal, telefone_financeiro: e.target.value })}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                />
+              </div>
             </div>
           </div>
 

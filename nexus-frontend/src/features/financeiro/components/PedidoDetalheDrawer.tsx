@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Ban, CheckCircle2, Loader2, MapPin, Wallet, X } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
+import { CobrancaPedido } from '@/features/financeiro/components/CobrancaPedido';
 import { StatusPedidoBadge } from '@/features/financeiro/components/StatusPedidoBadge';
 import {
   ACOES_MANUAIS,
@@ -121,6 +122,8 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
                 <p className="text-base font-bold text-white">Total {formatBRL(pedido.valor_total)}</p>
               </div>
             </div>
+
+            <CobrancaPedido pedido={pedido} podeCancelar={podeAlterarStatus} onAlterado={() => { load(); onAlterado(); }} />
 
             {end && (end.logradouro || end.cidade) && (
               <div>

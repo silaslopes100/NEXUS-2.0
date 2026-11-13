@@ -16,6 +16,7 @@ from app.modules.polos_escolas.repository import (
     get_polos_escolas_repository,
 )
 from app.modules.polos_escolas.schemas import (
+    DadosFiscaisSchema,
     AlertaListResponse,
     AulaEscolaListResponse,
     AulaEscolaResponse,
@@ -148,6 +149,12 @@ class PolosEscolasService:
             coordenador_nome=coordenador.get("nome") if coordenador else None,
             coordenador_cpf=coordenador.get("cpf") if coordenador else None,
             coordenador_email=coordenador.get("email") if coordenador else None,
+            dados_fiscais=DadosFiscaisSchema.model_construct(
+                documento_fiscal=polo.get("documento_fiscal"),
+                razao_social=polo.get("razao_social"),
+                email_financeiro=polo.get("email_financeiro"),
+                telefone_financeiro=polo.get("telefone_financeiro"),
+            ),
             criado_em=polo.get("criado_em"),
             atualizado_em=polo.get("atualizado_em"),
         )
@@ -212,6 +219,8 @@ class PolosEscolasService:
                 "cep": endereco.cep,
             }
         )
+        if dados.dados_fiscais:
+            self.repo.update_polo(polo_id, dados.dados_fiscais.model_dump())
 
         coordenador_id: Optional[str] = None
 
@@ -278,6 +287,8 @@ class PolosEscolasService:
             update_dict.update(dados.endereco.model_dump())
         if dados.status is not None:
             update_dict["status"] = dados.status
+        if dados.dados_fiscais is not None:
+            update_dict.update(dados.dados_fiscais.model_dump())
 
         # NOVO: trocar/vincular usuário coordenador
         if dados.coordenador_usuario_id:

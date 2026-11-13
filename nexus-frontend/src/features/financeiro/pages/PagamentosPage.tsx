@@ -1,17 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, CreditCard, ExternalLink, Loader2, Package, RefreshCw } from 'lucide-react';
+import { Ban, ChevronLeft, ChevronRight, CreditCard, ExternalLink, Loader2, Package, RefreshCw, ShieldCheck } from 'lucide-react';
 import { PeriodoFiltros, useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
-import { Pagamento, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
+import { COR_STATUS_PAGAMENTO, Pagamento, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
 
 const PAGE_SIZE = 20;
 const STATUS_OPCOES = ['pendente', 'pago', 'vencido', 'cancelado', 'estornado', 'falhou'].map((s) => ({
   value: s, label: s.charAt(0).toUpperCase() + s.slice(1),
 }));
-const COR_STATUS: Record<string, string> = {
-  pago: 'text-emerald-400', pendente: 'text-amber-300', vencido: 'text-red-400', cancelado: 'text-slate-500',
-};
 
 /** Consulta de pagamentos/boletos (inclui os boletos migrados). Vira a tela completa de Boletos na Fase 3. */
 export const PagamentosPage: React.FC = () => {
@@ -20,6 +17,20 @@ export const PagamentosPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
+  const [cancelando, setCancelando] = useState<string | null>(null);
+
+  const cancelar = async (pg: Pagamento) => {
+    if (!window.confirm(`Cancelar a cobrança de ${formatBRL(pg.valor)}${pg.pedido_numero ? ` do pedido ${pg.pedido_numero}` : ''}?`)) return;
+    setCancelando(pg.id);
+    try {
+      await financeiroApi.cancelarPagamento(pg.id);
+      await load();
+    } catch (error) {
+      setErro(erroApi(error, 'Não foi possível cancelar a cobrança.'));
+    } finally {
+      setCancelando(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,11 +55,16 @@ export const PagamentosPage: React.FC = () => {
         <div>
           <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-300"><CreditCard size={15} /> Financeiro</p>
           <h1 className="text-3xl font-extrabold text-white">Pagamentos & Boletos</h1>
-          <p className="mt-1 text-sm text-slate-400">Cobranças registradas (boletos, PIX e cartão). Geração de cobranças e webhooks chegam nas Fases 2 e 3.</p>
+          <p className="mt-1 text-sm text-slate-400">Cobranças registradas (boletos, PIX e cartão). Status atualizados automaticamente pelos webhooks dos gateways.</p>
         </div>
-        <Link to="/admin/produtos" className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:text-white">
-          <Package size={16} /> Produtos & Preços
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/admin/gateways" className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:text-white">
+            <ShieldCheck size={16} /> Gateways
+          </Link>
+          <Link to="/admin/produtos" className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:text-white">
+            <Package size={16} /> Produtos & Preços
+          </Link>
+        </div>
       </header>
 
       <PeriodoFiltros statusOpcoes={STATUS_OPCOES} />
@@ -84,9 +100,14 @@ export const PagamentosPage: React.FC = () => {
                       <td className="p-4 text-xs">{pg.billing_type || '-'}</td>
                       <td className="p-4 text-xs">{pg.gateway || '-'}{pg.ambiente ? ` (${pg.ambiente})` : ''}</td>
                       <td className="p-4 text-xs">{formatData(pg.vencimento_em)}</td>
-                      <td className={`p-4 text-xs font-semibold ${COR_STATUS[pg.status || ''] || 'text-slate-300'}`}>{pg.status || '-'}</td>
+                      <td className={`p-4 text-xs font-semibold ${COR_STATUS_PAGAMENTO[pg.status || ''] || 'text-slate-300'}`}>{pg.status || '-'}</td>
                       <td className="p-4 text-right font-semibold text-white">{formatBRL(pg.valor)}</td>
-                      <td className="p-4 text-right">
+                      <td className="flex justify-end gap-1 p-4">
+                        {(pg.status === 'pendente' || pg.status === 'vencido') && pg.gateway && (
+                          <button onClick={() => cancelar(pg)} disabled={cancelando === pg.id} title="Cancelar cobrança" className="inline-flex rounded-lg border border-red-500/40 p-1.5 text-red-300 disabled:opacity-50">
+                            {cancelando === pg.id ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+                          </button>
+                        )}
                         {link && (
                           <a href={link} target="_blank" rel="noreferrer" title="Abrir boleto/fatura" className="inline-flex rounded-lg border border-slate-700 p-1.5 text-slate-400 hover:text-white">
                             <ExternalLink size={14} />

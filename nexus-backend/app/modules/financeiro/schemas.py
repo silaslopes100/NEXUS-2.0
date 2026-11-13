@@ -35,6 +35,7 @@ class FiltrosPeriodo(BaseModel):
     modalidade: Optional[Literal["ead"]] = None
     status: Optional[str] = None
     tipo: Optional[TipoPedido] = None
+    pedido_id: Optional[str] = None
     limit: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
 
@@ -240,3 +241,25 @@ class PagamentoListResponse(BaseModel):
     items: List[PagamentoResponse]
     limit: int
     offset: int
+
+
+# ---------------------------------------------------------------------------
+# Gateways e cobrança (Fase 2)
+# ---------------------------------------------------------------------------
+
+GatewayNome = Literal["asaas", "pagbank", "mercadopago"]
+Ambiente = Literal["sandbox", "producao"]
+
+
+class CobrancaRequest(BaseModel):
+    meio: Literal["BOLETO", "PIX"]
+    gateway: Optional[GatewayNome] = None  # padrão: gateway marcado como padrão no ambiente
+
+
+class GatewayConfigUpdate(BaseModel):
+    """Só os campos enviados são alterados. Credencial vazia ("") remove o valor."""
+
+    credenciais: Optional[dict[str, Optional[str]]] = None
+    webhook_token: Optional[str] = Field(default=None, max_length=500)
+    ativo: Optional[bool] = None
+    padrao: Optional[bool] = None
