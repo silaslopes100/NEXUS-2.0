@@ -134,15 +134,18 @@ async def store_academic_file(upload: UploadFile) -> StoredAcademicFile:
             content_type=content_type,
         )
     else:
-        ACADEMIC_FILES_DIRECTORY.mkdir(parents=True, exist_ok=True)
         destination = _storage_path(storage_key)
         temporary = destination.with_suffix(destination.suffix + ".tmp")
         try:
+            ACADEMIC_FILES_DIRECTORY.mkdir(parents=True, exist_ok=True)
             temporary.write_bytes(content)
             temporary.replace(destination)
         except OSError as exc:
-            temporary.unlink(missing_ok=True)
             logger.exception("Não foi possível armazenar arquivo acadêmico localmente")
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Não foi possível limpar arquivo acadêmico temporário")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Não foi possível armazenar o arquivo enviado.",

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import date
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -11,6 +12,7 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.core import file_storage as file_storage_module
+from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
@@ -773,6 +775,47 @@ async def test_professor_consulta_apenas_seus_conteudos_e_materiais(client: Asyn
     assert [item["id"] for item in itens[0]["conteudos"]] == ["conteudo-1"]
     assert [item["id"] for item in itens[0]["materiais"]] == ["material-1"]
     assert itens[0]["materiais"][0]["turma_nome"] == "Turma A"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_at", ["mkdir", "write"])
+async def test_upload_error_preserves_cors_when_temporary_cleanup_fails(
+    client: AsyncClient, repos, monkeypatch, tmp_path, caplog, fail_at
+):
+    _, professores_repo = repos
+    professores_repo.professores["docente-1"] = {"id": "docente-1", "usuario_id": "prof-1"}
+    professores_repo._sync_disciplina_ids("docente-1", ["disciplina-1"])
+    professores_repo.disciplinas["disciplina-1"] = {"id": "disciplina-1", "nome": "Matemática"}
+    monkeypatch.setattr(file_storage_module, "_uses_blob_storage", lambda: False)
+    monkeypatch.setattr(file_storage_module, "ACADEMIC_FILES_DIRECTORY", tmp_path)
+
+    def fail_write(self, data):
+        raise OSError("write failed")
+
+    def fail_mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        raise OSError("mkdir failed")
+
+    def fail_unlink(self, missing_ok=False):
+        raise OSError("cleanup failed")
+
+    if fail_at == "mkdir":
+        monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+    else:
+        monkeypatch.setattr(Path, "write_bytes", fail_write)
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+    origin = settings.CORS_ORIGINS[0]
+    response = await client.post(
+        "/professores/me/conteudos",
+        data={"disciplina_id": "disciplina-1", "titulo": "PDF", "modo": "arquivo"},
+        files={"arquivo": ("aula.pdf", b"%PDF-1.7\nconteudo", "application/pdf")},
+        headers={"Authorization": f"Bearer {_token('prof-1')}", "Origin": origin},
+    )
+
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == origin
+    assert response.json()["detail"] == "Não foi possível armazenar o arquivo enviado."
+    assert f"{fail_at} failed" in caplog.text
+    assert "cleanup failed" in caplog.text
 
 
 @pytest.mark.asyncio
