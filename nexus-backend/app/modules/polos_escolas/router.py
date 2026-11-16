@@ -20,6 +20,7 @@ from app.modules.polos_escolas.schemas import (
     AlertaListResponse,
     AulaEscolaListResponse,
     AlunoCreateRequest,
+    AlunoVincularUsuarioRequest,
     AlunoDesistenteListResponse,
     AlunoDrilldownEscolaListResponse,
     AlunoPoloListResponse,
@@ -597,6 +598,38 @@ async def get_boleto_pdf(
 # =========================================================================
 # 8. Alunos
 # =========================================================================
+
+@router.get("/polos/{polo_id}/alunos/usuarios-disponiveis", response_model=UsuarioVinculavelListResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def list_usuarios_aluno_disponiveis(
+    polo_id: str, escola_id: Optional[str] = None, q: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    check_polo_scope(current_user, polo_id)
+    somente_polo = perfil_do_usuario(current_user) == "escola"
+    if somente_polo and not escola_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Informe a própria escola")
+    if escola_id:
+        check_escola_scope(current_user, escola_id)
+    return service.list_usuarios_aluno_disponiveis(polo_id, escola_id, somente_polo, q, limit, offset)
+
+
+@router.post("/polos/{polo_id}/alunos/vincular-usuario", response_model=AlunoPoloResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def vincular_usuario_aluno(
+    polo_id: str, payload: AlunoVincularUsuarioRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    check_polo_scope(current_user, polo_id)
+    somente_polo = perfil_do_usuario(current_user) == "escola"
+    if payload.escola_id:
+        check_escola_scope(current_user, payload.escola_id)
+    elif somente_polo:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Secretário de escola só cadastra alunos da própria escola")
+    return service.vincular_usuario_aluno(polo_id, payload, somente_polo, current_user.id, client_ip)
+
 
 @router.get("/polos/{polo_id}/alunos", response_model=AlunoPoloListResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
 async def list_alunos_polo(

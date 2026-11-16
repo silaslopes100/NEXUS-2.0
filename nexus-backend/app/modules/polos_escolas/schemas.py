@@ -623,6 +623,13 @@ class AlunoCreateRequest(BaseModel):
     modalidade: str = Field(default="polo", pattern="^(polo|escola|ead)$")
 
 
+class AlunoVincularUsuarioRequest(BaseModel):
+    usuario_id: str = Field(min_length=1)
+    data_nascimento: date
+    escola_id: Optional[str] = None
+    modalidade: str = Field(default="polo", pattern="^(polo|escola|ead)$")
+
+
 class TrocaPoloRequest(BaseModel):
     polo_destino_id: str
 

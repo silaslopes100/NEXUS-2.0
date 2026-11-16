@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Plus, Trash2, X } from 'lucide-react';
 import { apiErrorMessage } from '@/features/alunos/api';
+import { AlunoFormModal } from '@/features/alunos/components/AlunoFormModal';
 import { AlunoTurma, Turma, turmasApi } from '@/features/turmas/api';
 import { inputCls } from '@/features/turmas/components/TurmaFormModal';
 
@@ -21,6 +22,7 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [alterado, setAlterado] = useState(false);
   const [erro, setErro] = useState('');
+  const [cadastrandoAluno, setCadastrandoAluno] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -134,7 +136,7 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
               </li>
             )}
             {!buscando && disponiveis.length === 0 && (
-              <li className="p-3 text-center text-sm text-slate-500">Nenhum aluno disponível.</li>
+              <li className="p-3 text-center text-sm text-slate-500">Nenhum aluno disponível. Usuários ainda sem cadastro acadêmico podem ser vinculados abaixo.</li>
             )}
             {!buscando &&
               disponiveis.map((aluno) => (
@@ -155,6 +157,12 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
                 </li>
               ))}
           </ul>
+          {turma.polo_id && (
+            <button type="button" onClick={() => setCadastrandoAluno(true)} className="text-sm text-blue-300 hover:text-blue-200">
+              Vincular usuário aluno existente
+            </button>
+          )}
+          {turma.polo_id && <p className="text-xs text-slate-500">Após vincular a conta, selecione o aluno para matriculá-lo na turma.</p>}
         </div>
 
         <div className="space-y-2">
@@ -212,6 +220,16 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
           )}
         </div>
       </section>
+      {cadastrandoAluno && turma.polo_id && (
+        <AlunoFormModal
+          poloId={turma.polo_id}
+          escolas={[]}
+          escolaFixaId={turma.escola_id}
+          inicialExistente
+          onClose={() => setCadastrandoAluno(false)}
+          onSuccess={() => { setCadastrandoAluno(false); setBusca(''); setVersao((atual) => atual + 1); }}
+        />
+      )}
     </div>
   );
 };

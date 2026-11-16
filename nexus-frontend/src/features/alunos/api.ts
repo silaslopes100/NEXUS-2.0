@@ -36,6 +36,20 @@ export interface AlunoCreatePayload {
   escola_id?: string | null;
 }
 
+export interface UsuarioAlunoDisponivel {
+  id: string;
+  nome: string;
+  sobrenome?: string | null;
+  email?: string | null;
+}
+
+export interface VincularUsuarioAlunoPayload {
+  usuario_id: string;
+  data_nascimento: string;
+  modalidade: Modalidade;
+  escola_id: string | null;
+}
+
 export interface EscolaOption {
   id: string;
   nome: string;
@@ -61,6 +75,18 @@ export const alunosApi = {
 
   criar: async (poloId: string, payload: AlunoCreatePayload): Promise<AlunoItem> => {
     const { data } = await apiClient.post(`/polos/${poloId}/alunos`, payload);
+    return data;
+  },
+
+  usuariosDisponiveis: async (
+    poloId: string, params: { escola_id?: string; q?: string; limit: number; offset: number }
+  ): Promise<{ total: number; items: UsuarioAlunoDisponivel[] }> => {
+    const { data } = await apiClient.get(`/polos/${poloId}/alunos/usuarios-disponiveis`, { params });
+    return data;
+  },
+
+  vincularUsuario: async (poloId: string, payload: VincularUsuarioAlunoPayload): Promise<AlunoItem> => {
+    const { data } = await apiClient.post(`/polos/${poloId}/alunos/vincular-usuario`, payload);
     return data;
   },
 

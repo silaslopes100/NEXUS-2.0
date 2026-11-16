@@ -155,6 +155,9 @@ class PolosEscolasRepositoryInterface(Protocol):
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
     def create_aluno(self, data: Dict[str, Any]) -> str: ...
+    def list_usuarios_aluno_disponiveis(self, polo_id: str, escola_id: Optional[str], somente_polo: bool, q: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]: ...
+    def aluno_existe_para_usuario(self, usuario_id: str) -> bool: ...
+    def create_aluno_de_usuario(self, data: Dict[str, Any]) -> str: ...
     def update_aluno(self, usuario_id: str, data: Dict[str, Any]) -> None: ...
     def create_password_reset(self, usuario_id: str, token_hash: str, expira_em: Any) -> None: ...
     def create_turma_escola(self, data: Dict[str, Any]) -> str: ...
@@ -997,9 +1000,50 @@ class PostgresPolosEscolasRepository:
 
     # ---------- Alunos ----------
 
+    def list_usuarios_aluno_disponiveis(self, polo_id: str, escola_id: Optional[str], somente_polo: bool, q: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]:
+        conds = ["lower(p.nome) = 'aluno'", "u.status = 'ativo'", "NOT EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id)"]
+        params: List[Any] = [str(polo_id)]
+        conds.append("u.polo_id = %s" if somente_polo else "(u.polo_id = %s OR (u.polo_id IS NULL AND u.escola_id IS NULL))")
+        if escola_id:
+            conds.append("(u.escola_id IS NULL OR u.escola_id = %s)")
+            params.append(str(escola_id))
+        else:
+            conds.append("u.escola_id IS NULL")
+        if q and q.strip():
+            conds.append("(lower(concat_ws(' ', u.nome, u.sobrenome)) LIKE %s OR lower(u.email) LIKE %s OR u.cpf LIKE %s)")
+            like = f"%{q.strip().lower()}%"
+            params.extend([like, like, like])
+        where = " AND ".join(conds)
+        with self._cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS total FROM usuarios u JOIN perfis p ON p.id = u.perfil_id WHERE {where}", tuple(params))
+            total = int(cur.fetchone()["total"])
+            cur.execute(f"""
+                SELECT u.id, u.nome, u.sobrenome, u.email, u.cpf, u.polo_id, u.escola_id, u.status, p.nome AS perfil_nome
+                FROM usuarios u JOIN perfis p ON p.id = u.perfil_id WHERE {where}
+                ORDER BY u.nome, u.id LIMIT %s OFFSET %s
+            """, tuple(params + [limit, offset]))
+            return total, [dict(row) for row in cur.fetchall()]
+
+    def aluno_existe_para_usuario(self, usuario_id: str) -> bool:
+        with self._cursor() as cur:
+            cur.execute("SELECT 1 FROM alunos WHERE usuario_id = %s LIMIT 1", (usuario_id,))
+            return cur.fetchone() is not None
+
+    def create_aluno_de_usuario(self, data: Dict[str, Any]) -> str:
+        aluno_id = str(uuid.uuid4())
+        with self._cursor() as cur:
+            cur.execute("""
+                INSERT INTO alunos (id, usuario_id, polo_id, escola_id, modalidade, numero_matricula,
+                                    data_nascimento, status, ultima_movimentacao_em, criado_em, atualizado_em)
+                VALUES (%s, %s, %s, %s, %s,
+                        'NX-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('seq_matricula_aluno')::text, 7, '0'),
+                        %s, 'ativo', now(), now(), now())
+            """, (aluno_id, data["usuario_id"], data["polo_id"], data.get("escola_id"), data["modalidade"], data["data_nascimento"]))
+        return aluno_id
+
     def get_aluno_usuario(self, aluno_id: str) -> Optional[Dict[str, Any]]:
         """Resolve por alunos.id (id canônico); retorna a linha de usuarios (id = usuarios.id) + dados de alunos."""
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 SELECT u.*, a.id AS aluno_id, a.numero_matricula, a.data_nascimento,
@@ -1645,7 +1689,7 @@ class InMemoryPolosEscolasRepository:
     @contextmanager
     def transacao_criacao_polo(self) -> Iterator[PolosEscolasRepositoryInterface]:
         with self._criacao_polo_lock:
-            usuarios, polos, escolas, logs = deepcopy((self.usuarios, self.polos, self.escolas, self.logs_auditoria))
+            usuarios, polos, escolas, alunos, logs = deepcopy((self.usuarios, self.polos, self.escolas, self.alunos, self.logs_auditoria))
             try:
                 yield self
             except BaseException:
@@ -1655,6 +1699,8 @@ class InMemoryPolosEscolasRepository:
                 self.polos.update(polos)
                 self.escolas.clear()
                 self.escolas.update(escolas)
+                self.alunos.clear()
+                self.alunos.update(alunos)
                 self.logs_auditoria[:] = logs
                 raise
 
@@ -2099,6 +2145,35 @@ class InMemoryPolosEscolasRepository:
         return result
 
     # ---------- Alunos ----------
+
+    def list_usuarios_aluno_disponiveis(self, polo_id: str, escola_id: Optional[str], somente_polo: bool, q: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]:
+        aluno_perfil = self.get_perfil_id_by_nome("aluno")
+        usuarios_com_aluno = {str(a["usuario_id"]) for a in self.alunos.values()}
+        items = [
+            u for u in self.usuarios.values()
+            if u.get("perfil_id") == aluno_perfil and u.get("status") == "ativo"
+            and str(u["id"]) not in usuarios_com_aluno
+            and (str(u.get("polo_id")) == str(polo_id) or (not somente_polo and not u.get("polo_id") and not u.get("escola_id")))
+            and (not u.get("escola_id") or (escola_id and str(u["escola_id"]) == str(escola_id)))
+        ]
+        if q and q.strip():
+            termo = q.strip().lower()
+            items = [u for u in items if any(termo in s.lower() for s in (
+                " ".join(filter(None, (u.get("nome"), u.get("sobrenome")))), u.get("email") or "", u.get("cpf") or ""
+            ))]
+        items.sort(key=lambda u: (u.get("nome") or "", str(u["id"])))
+        return len(items), [{**u, "perfil_nome": "aluno"} for u in items[offset:offset + limit]]
+
+    def aluno_existe_para_usuario(self, usuario_id: str) -> bool:
+        return any(str(a["usuario_id"]) == str(usuario_id) for a in self.alunos.values())
+
+    def create_aluno_de_usuario(self, data: Dict[str, Any]) -> str:
+        self._seq_matricula = getattr(self, "_seq_matricula", 0) + 1
+        aluno_id = str(uuid.uuid4())
+        self.alunos[aluno_id] = {
+            "id": aluno_id, **data, "numero_matricula": f"NX-{_now().year}-{self._seq_matricula:07d}", "status": "ativo"
+        }
+        return aluno_id
 
     def get_aluno_usuario(self, aluno_id: str) -> Optional[Dict[str, Any]]:
         a = self.alunos.get(str(aluno_id))

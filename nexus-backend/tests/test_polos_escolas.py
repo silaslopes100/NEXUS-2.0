@@ -21,7 +21,7 @@ from app.modules.polos_escolas.repository import (
     InMemoryPolosEscolasRepository,
     set_polos_escolas_repository,
 )
-from app.modules.polos_escolas.schemas import EscolaCreateRequest, PoloCreateRequest
+from app.modules.polos_escolas.schemas import AlunoVincularUsuarioRequest, EscolaCreateRequest, PoloCreateRequest
 from app.modules.polos_escolas.service import PolosEscolasService
 
 # Perfis compartilhados entre o repositorio de autenticacao e o de polos_escolas,
@@ -642,6 +642,227 @@ def dois_polos(repos):
 
 def _bearer(user_id: str) -> dict:
     return {"Authorization": f"Bearer {_token(user_id)}"}
+
+
+@pytest.mark.asyncio
+async def test_vincular_usuario_aluno_existente(client: AsyncClient, repos, dois_polos):
+    auth, repo = repos
+    polo, outro_polo, _, _ = dois_polos
+    _criar_usuario(auth, "aluno-sem-registro", "p-aluno", polo_id=polo)
+    _criar_usuario(auth, "aluno-outro", "p-aluno", polo_id=outro_polo)
+    _criar_usuario(auth, "aluno-inativo", "p-aluno", polo_id=polo)
+    auth.usuarios["aluno-inativo"]["status"] = "inativo"
+    usuario_antes = auth.usuarios["aluno-sem-registro"].copy()
+
+    disponiveis = await client.get(
+        f"/polos/{polo}/alunos/usuarios-disponiveis",
+        headers=_bearer("admin-1"),
+    )
+    assert disponiveis.status_code == 200, disponiveis.text
+    assert [u["id"] for u in disponiveis.json()["items"]] == ["aluno-sem-registro"]
+
+    payload = {"usuario_id": "aluno-sem-registro", "data_nascimento": "2000-01-01", "modalidade": "polo"}
+    criado = await client.post(f"/polos/{polo}/alunos/vincular-usuario", json=payload, headers=_bearer("admin-1"))
+    assert criado.status_code == 201, criado.text
+    assert criado.json()["usuario_id"] == "aluno-sem-registro"
+    assert criado.json()["id"] != "aluno-sem-registro"
+    assert criado.json()["numero_matricula"].startswith("NX-")
+    assert auth.usuarios["aluno-sem-registro"].get("senha_hash") == usuario_antes.get("senha_hash")
+    assert not getattr(repo, "password_reset", {})
+    assert (await client.get(f"/polos/{polo}/alunos", headers=_bearer("admin-1"))).json()["total"] == 1
+    duplicado = await client.post(f"/polos/{polo}/alunos/vincular-usuario", json=payload, headers=_bearer("admin-1"))
+    assert duplicado.status_code == 400
+    disponiveis = await client.get(f"/polos/{polo}/alunos/usuarios-disponiveis", headers=_bearer("admin-1"))
+    assert disponiveis.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("usuario_id", ["ausente", "outro-polo", "inativo", "perfil-errado"])
+async def test_vincular_aluno_rejeita_usuario_invalido(client: AsyncClient, repos, dois_polos, usuario_id):
+    auth, repo = repos
+    polo, outro_polo, _, _ = dois_polos
+    _criar_usuario(auth, "outro-polo", "p-aluno", polo_id=outro_polo)
+    _criar_usuario(auth, "inativo", "p-aluno", polo_id=polo)
+    auth.usuarios["inativo"]["status"] = "inativo"
+    _criar_usuario(auth, "perfil-errado", "p-professor", polo_id=polo)
+    res = await client.post(
+        f"/polos/{polo}/alunos/vincular-usuario",
+        json={"usuario_id": usuario_id, "data_nascimento": "2000-01-01", "modalidade": "polo"},
+        headers=_bearer("admin-1"),
+    )
+    assert res.status_code in (400, 404), res.text
+    assert not repo.alunos
+
+
+@pytest.mark.asyncio
+async def test_vincular_aluno_respeita_escopo_escola(client: AsyncClient, repos, dois_polos):
+    auth, repo = repos
+    polo, _, escola, outra = dois_polos
+    _criar_usuario(auth, "secretaria", "p-escola", polo_id=polo, escola_id=escola)
+    _criar_usuario(auth, "proprio", "p-aluno", polo_id=polo, escola_id=escola)
+    _criar_usuario(auth, "sem-escola", "p-aluno", polo_id=polo)
+    _criar_usuario(auth, "global", "p-aluno")
+    _criar_usuario(auth, "outra-escola", "p-aluno", polo_id=polo, escola_id=outra)
+    headers = _bearer("secretaria")
+    resposta = await client.get(
+        f"/polos/{polo}/alunos/usuarios-disponiveis", params={"escola_id": escola}, headers=headers,
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert {u["id"] for u in resposta.json()["items"]} == {"proprio", "sem-escola"}
+    for usuario in ("global", "outra-escola"):
+        resposta = await client.post(
+            f"/polos/{polo}/alunos/vincular-usuario",
+            json={"usuario_id": usuario, "data_nascimento": "2000-01-01", "modalidade": "escola", "escola_id": escola},
+            headers=headers,
+        )
+        assert resposta.status_code in (400, 403), resposta.text
+    assert not repo.alunos
+    resposta = await client.get(f"/polos/{polo}/alunos/usuarios-disponiveis", params={"escola_id": outra}, headers=headers)
+    assert resposta.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_vincular_aluno_desfaz_em_falha_de_auditoria(client: AsyncClient, repos, dois_polos, monkeypatch):
+    auth, repo = repos
+    polo, _, _, _ = dois_polos
+    _criar_usuario(auth, "aluno", "p-aluno")
+    antes = auth.usuarios["aluno"].copy()
+
+    def falhar(**kwargs):
+        raise RuntimeError("falha na auditoria")
+
+    monkeypatch.setattr(repo, "record_audit_log", falhar)
+    with pytest.raises(RuntimeError, match="falha na auditoria"):
+        await client.post(
+            f"/polos/{polo}/alunos/vincular-usuario",
+            json={"usuario_id": "aluno", "data_nascimento": "2000-01-01", "modalidade": "polo"},
+            headers=_bearer("admin-1"),
+        )
+    assert not repo.alunos
+    assert auth.usuarios["aluno"] == antes
+
+
+@pytest.mark.asyncio
+async def test_busca_usuarios_aluno_paginada(client: AsyncClient, repos, dois_polos):
+    auth, _ = repos
+    polo, _, _, _ = dois_polos
+    for i in range(3):
+        _criar_usuario(auth, f"aluno-{i}", "p-aluno", polo_id=polo, nome=f"Pessoa {i}")
+    resultado = await client.get(
+        f"/polos/{polo}/alunos/usuarios-disponiveis",
+        params={"q": "pessoa", "limit": 1, "offset": 1}, headers=_bearer("admin-1"),
+    )
+    assert resultado.status_code == 200
+    assert resultado.json()["total"] == 3
+    assert [u["id"] for u in resultado.json()["items"]] == ["aluno-1"]
+
+
+def test_vinculo_aluno_postgres_usa_transacao_e_desfaz_em_falha(monkeypatch):
+    class FakeConnection:
+        def __init__(self):
+            self.sql = []
+            self.last_sql = ""
+            self.commits = 0
+            self.rollbacks = 0
+
+        def cursor(self, **kwargs):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, sql, params=()):
+            assert sql.count("%s") == len(params)
+            self.last_sql = sql
+            self.sql.append(sql)
+            if "INSERT INTO logs_auditoria" in sql:
+                raise RuntimeError("falha na auditoria")
+
+        def fetchone(self):
+            if "FROM polos" in self.last_sql:
+                return {"id": "polo", "nome": "Polo"}
+            if "FROM usuarios" in self.last_sql and "FOR UPDATE" in self.last_sql:
+                return {"id": "usuario", "nome": "Aluno", "perfil_id": "perfil", "status": "ativo", "polo_id": None}
+            if "FROM perfis" in self.last_sql:
+                return {"id": "perfil"}
+            if "FROM alunos a JOIN usuarios" in self.last_sql:
+                return {"id": "usuario", "numero_matricula": "NX-2026-0000001"}
+            return None
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    conn = FakeConnection()
+
+    class FakePool:
+        def getconn(self):
+            return conn
+
+        def putconn(self, connection):
+            assert connection is conn
+
+    monkeypatch.setattr(database, "get_connection_pool", lambda: FakePool())
+    service = PolosEscolasService(polos_repository_module.PostgresPolosEscolasRepository())
+    with pytest.raises(RuntimeError, match="falha na auditoria"):
+        service.vincular_usuario_aluno(
+            "polo", AlunoVincularUsuarioRequest(usuario_id="usuario", data_nascimento="2000-01-01"),
+            False, None, None,
+        )
+    assert conn.commits == 1 and conn.rollbacks == 1
+    assert any("FOR UPDATE" in sql for sql in conn.sql)
+    assert any("UPDATE usuarios" in sql for sql in conn.sql)
+    assert any("INSERT INTO alunos" in sql for sql in conn.sql)
+
+
+def test_busca_postgres_usuarios_aluno_usa_filtros_e_paginacao():
+    class Cursor:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, sql, params):
+            assert sql.count("%s") == len(params)
+            self.calls.append((sql, params))
+
+        def fetchone(self):
+            return {"total": 1}
+
+        def fetchall(self):
+            return [{"id": "usuario", "nome": "Aluno"}]
+
+    cursor = Cursor()
+    repo = polos_repository_module.PostgresPolosEscolasRepository(cursor)
+    total, usuarios = repo.list_usuarios_aluno_disponiveis("polo", "escola", True, "Ana", 20, 40)
+    assert total == 1 and usuarios[0]["id"] == "usuario"
+    assert "NOT EXISTS" in cursor.calls[1][0]
+    assert cursor.calls[1][1] == ("polo", "escola", "%ana%", "%ana%", "%ana%", 20, 40)
+
+
+def test_vinculos_simultaneos_nao_duplicam_aluno(repos, dois_polos):
+    auth, repo = repos
+    polo, _, _, _ = dois_polos
+    _criar_usuario(auth, "aluno", "p-aluno", polo_id=polo)
+    service = PolosEscolasService(repo)
+    inicio = Barrier(2)
+    dados = AlunoVincularUsuarioRequest(usuario_id="aluno", data_nascimento="2000-01-01")
+
+    def vincular():
+        inicio.wait()
+        try:
+            return service.vincular_usuario_aluno(polo, dados, False, None, None).id
+        except HTTPException as exc:
+            return exc.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        resultados = list(executor.map(lambda _: vincular(), range(2)))
+    assert sum(isinstance(r, str) for r in resultados) == 1
+    assert 400 in resultados
+    assert len(repo.alunos) == 1
 
 
 @pytest.mark.asyncio

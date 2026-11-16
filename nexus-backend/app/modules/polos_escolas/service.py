@@ -21,6 +21,7 @@ from app.modules.polos_escolas.schemas import (
     AulaEscolaListResponse,
     AulaEscolaResponse,
     AlunoCreateRequest,
+    AlunoVincularUsuarioRequest,
     AlunoDesistenteListResponse,
     AlunoDesistenteResponse,
     AlunoDrilldownEscolaListResponse,
@@ -1024,6 +1025,71 @@ class PolosEscolasService:
             criado_em=criado.get("criado_em"),
             convite_enviado=convite,
         )
+
+    def list_usuarios_aluno_disponiveis(
+        self, polo_id: str, escola_id: Optional[str], somente_polo: bool,
+        q: Optional[str], limit: int, offset: int,
+    ) -> UsuarioVinculavelListResponse:
+        self.get_polo(polo_id)
+        self._validar_escola_do_polo(escola_id, polo_id)
+        total, items = self.repo.list_usuarios_aluno_disponiveis(polo_id, escola_id, somente_polo, q, limit, offset)
+        return UsuarioVinculavelListResponse(
+            total=total, limit=limit, offset=offset,
+            items=[UsuarioVinculavelResponse(
+                id=str(u["id"]), nome=u.get("nome", ""), sobrenome=u.get("sobrenome", ""),
+                email=u.get("email"), cpf=u.get("cpf"), perfil_nome=u.get("perfil_nome"),
+                polo_id=str(u["polo_id"]) if u.get("polo_id") else None,
+                escola_id=str(u["escola_id"]) if u.get("escola_id") else None, status=u.get("status"),
+            ) for u in items],
+        )
+
+    def vincular_usuario_aluno(
+        self, polo_id: str, dados: AlunoVincularUsuarioRequest, somente_polo: bool,
+        actor_id: Optional[str], ip: Optional[str],
+    ) -> AlunoPoloResponse:
+        self.get_polo(polo_id)
+        if dados.data_nascimento >= date.today():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Data de nascimento inválida")
+        if dados.modalidade == "ead" and dados.escola_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Aluno EAD não pode ser vinculado a uma escola")
+        if dados.modalidade == "escola" and not dados.escola_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Modalidade 'escola' exige escola_id")
+        self._validar_escola_do_polo(dados.escola_id, polo_id)
+        with self.repo.transacao_criacao_escola() as repo:
+            usuario = repo.get_usuario_para_vinculo(dados.usuario_id)
+            if not usuario:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+            perfil = repo.get_perfil_id_by_nome("aluno")
+            if not perfil or str(usuario.get("perfil_id")) != str(perfil) or usuario.get("status") != "ativo":
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário deve estar ativo e possuir perfil de aluno")
+            if usuario.get("polo_id") and str(usuario["polo_id"]) != str(polo_id):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário está vinculado a outro polo")
+            if somente_polo and str(usuario.get("polo_id")) != str(polo_id):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário não pertence a este polo")
+            if usuario.get("escola_id") and str(usuario["escola_id"]) != str(dados.escola_id):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário está vinculado a outra escola")
+            if not usuario.get("polo_id") and usuario.get("escola_id"):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário possui vínculo de escola sem polo")
+            if repo.aluno_existe_para_usuario(dados.usuario_id):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário já possui cadastro de aluno")
+            repo.update_usuario(dados.usuario_id, {"polo_id": polo_id, "escola_id": dados.escola_id})
+            aluno_id = repo.create_aluno_de_usuario({
+                "usuario_id": dados.usuario_id, "polo_id": polo_id, "escola_id": dados.escola_id,
+                "modalidade": dados.modalidade, "data_nascimento": dados.data_nascimento,
+            })
+            criado = repo.get_aluno_usuario(aluno_id)
+            if not criado:
+                raise RuntimeError("Não foi possível recuperar o aluno cadastrado")
+            repo.record_audit_log(
+                usuario_id=actor_id, acao="aluno_cadastrado", entidade="alunos", entidade_id=aluno_id,
+                dados_depois={"usuario_id": dados.usuario_id, "modalidade": dados.modalidade, "numero_matricula": criado.get("numero_matricula")}, ip=ip,
+            )
+            return AlunoPoloResponse(
+                id=aluno_id, usuario_id=dados.usuario_id, numero_matricula=criado.get("numero_matricula"),
+                data_nascimento=dados.data_nascimento, nome=usuario.get("nome", ""),
+                sobrenome=usuario.get("sobrenome") or "", email=usuario.get("email"), cpf=usuario.get("cpf"),
+                escola_id=dados.escola_id, modalidade=dados.modalidade, status="ativo", criado_em=criado.get("criado_em"),
+            )
 
     # ------------------------------------------------------------------
     # Turmas da escola

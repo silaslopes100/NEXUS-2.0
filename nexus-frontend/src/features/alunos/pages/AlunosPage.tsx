@@ -395,7 +395,9 @@ export const AlunosPage: React.FC = () => {
             setShowForm(false);
             setSucesso(
               `Aluno cadastrado com matrícula ${aluno.numero_matricula}. ${
-                aluno.convite_enviado ? 'Convite enviado por e-mail.' : 'Não foi possível enviar o convite por e-mail.'
+                aluno.convite_enviado == null
+                  ? 'Conta existente vinculada.'
+                  : aluno.convite_enviado ? 'Convite enviado por e-mail.' : 'Não foi possível enviar o convite por e-mail.'
               }`
             );
             setOffset(0);
