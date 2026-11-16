@@ -702,6 +702,44 @@ async def test_modulo_ead(client: AsyncClient):
 
 # 10. Notas & Histórico
 @pytest.mark.asyncio
+async def test_professor_lista_alunos_apenas_de_turmas_com_vinculo_ativo(client, monkeypatch):
+    monkeypatch.setattr(settings, "PG_DSN", "")
+    turma_ativa = "00000000-0000-0000-0000-000000000001"
+    turma_inativa = "00000000-0000-0000-0000-000000000002"
+    turma_alheia = "00000000-0000-0000-0000-000000000003"
+    professores_repo = InMemoryProfessoresRepository()
+    professores_repo.professores["professor-1"] = {
+        "id": "professor-1",
+        "usuario_id": "prof-1",
+    }
+    professores_repo.professor_disciplinas = [
+        {"id": "v1", "professor_id": "professor-1", "disciplina_id": "d1",
+         "turma_id": turma_ativa, "ativo": True},
+        {"id": "v2", "professor_id": "professor-1", "disciplina_id": "d1",
+         "turma_id": turma_inativa, "ativo": False},
+    ]
+    monkeypatch.setattr(professores_repository_module, "_repo_instance", professores_repo)
+    monkeypatch.setattr(
+        turmas_module, "_turmas_db",
+        {uid: {"id": uid, "nome": "Turma"} for uid in (turma_ativa, turma_inativa, turma_alheia)},
+    )
+    monkeypatch.setattr(
+        turmas_module, "_turma_alunos_db",
+        [{"turma_id": turma_ativa, "aluno_id": "aluno-1"}],
+    )
+    prof = {"Authorization": f"Bearer {_token('prof-1', 'prof@nexus.com.br', 'professor')}"}
+    aluno = {"Authorization": f"Bearer {_token('aluno-1', 'aluno@nexus.com.br', 'aluno')}"}
+
+    resposta = await client.get(f"/turmas/{turma_ativa}/alunos", headers=prof)
+    assert resposta.status_code == 200
+    assert [item["aluno_id"] for item in resposta.json()["items"]] == ["aluno-1"]
+    for turma in (turma_inativa, turma_alheia):
+        assert (await client.get(f"/turmas/{turma}/alunos", headers=prof)).status_code == 403
+    assert (await client.get(f"/turmas/{turma_ativa}/alunos", headers=aluno)).status_code == 403
+    assert (await client.get(f"/turmas/{turma_ativa}/alunos-disponiveis", headers=prof)).status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_modulo_notas_e_historico(client: AsyncClient, auth_setup, monkeypatch):
     monkeypatch.setattr(settings, "PG_DSN", "")
     t_prof = _token("prof-1", "prof@nexus.com.br", "professor")

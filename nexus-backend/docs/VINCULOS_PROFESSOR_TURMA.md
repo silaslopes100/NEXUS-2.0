@@ -16,6 +16,9 @@ arquivado for criado novamente, o registro existente e reativado.
 Arquivar desativa o vinculo sem excluir a linha de `professor_disciplinas`, para
 preservar materiais e atas associados. Vinculos inativos deixam de aparecer na
 area docente e nao autorizam acesso a materiais, presencas ou notas.
+O professor pode consultar a lista de alunos de uma turma apenas enquanto
+possuir ao menos um vinculo docente ativo com essa turma. As demais operacoes
+de gestao da turma continuam restritas aos perfis de gestao.
 
 Antes da implantacao, aplique
 `scripts/migrations/010_arquivamento_vinculos_professor_turma.sql`.

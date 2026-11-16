@@ -14,6 +14,7 @@ from app.modules.auth.dependencies import get_client_ip, get_current_user, requi
 from app.modules.auth.roles import perfil_do_usuario
 from app.modules.auth.schemas import UserResponse
 from app.modules.polos_escolas.repository import get_polos_escolas_repository
+from app.modules.professores.access import listar_vinculos_academicos_docente, usuario_eh_professor
 
 router = APIRouter(prefix="/turmas", tags=["Turmas & Calendários"])
 
@@ -713,7 +714,7 @@ async def delete_turma(
 @router.get(
     "/{turma_id}/alunos",
     response_model=AlunosTurmaPaginaSchema,
-    dependencies=[Depends(require_role(_PERFIS_TURMA))],
+    dependencies=[Depends(require_role([*_PERFIS_TURMA, "professor"]))],
 )
 async def list_alunos_turma(
     turma_id: uuid.UUID,
@@ -722,6 +723,14 @@ async def list_alunos_turma(
     current_user: UserResponse = Depends(get_current_user),
 ):
     uid = str(turma_id)
+    if usuario_eh_professor(current_user) and not any(
+        str(vinculo.get("turma_id")) == uid
+        for vinculo in listar_vinculos_academicos_docente(current_user)
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Professor sem vínculo ativo com esta turma",
+        )
     if not settings.PG_DSN:
         _exigir_no_escopo(_turma_memoria(uid), current_user)
         vinculos = [
