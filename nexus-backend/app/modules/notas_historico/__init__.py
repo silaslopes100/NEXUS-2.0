@@ -78,6 +78,21 @@ class AdminNotaListResponse(BaseModel):
     offset: int
 
 
+class AdminAlunoNotaResponse(BaseModel):
+    aluno_id: str
+    aluno_nome: Optional[str] = None
+    aluno_email: Optional[str] = None
+    aluno_matricula: Optional[str] = None
+    atualizado_em: Optional[datetime] = None
+
+
+class AdminAlunoNotaListResponse(BaseModel):
+    items: List[AdminAlunoNotaResponse]
+    total: int
+    limit: int
+    offset: int
+
+
 class HistoricoUnificadoSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -289,6 +304,34 @@ async def listar_notas_admin(
     limit: int = Query(default=30, ge=30, le=30),
     offset: int = Query(default=0, ge=0),
 ):
+    return _listar_notas_admin(q, aluno_id, disciplina_id, disciplina_nome, limit, offset)
+
+
+@router.get(
+    "/alunos/admin",
+    response_model=AdminAlunoNotaListResponse,
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def listar_alunos_admin(
+    q: Optional[str] = Query(default=None, max_length=100),
+    aluno_id: Optional[str] = None,
+    disciplina_id: Optional[str] = None,
+    disciplina_nome: Optional[str] = Query(default=None, max_length=255),
+    limit: int = Query(default=30, ge=30, le=30),
+    offset: int = Query(default=0, ge=0),
+):
+    return _listar_notas_admin(q, aluno_id, disciplina_id, disciplina_nome, limit, offset, por_aluno=True)
+
+
+def _listar_notas_admin(
+    q: Optional[str],
+    aluno_id: Optional[str],
+    disciplina_id: Optional[str],
+    disciplina_nome: Optional[str],
+    limit: int,
+    offset: int,
+    por_aluno: bool = False,
+) -> Dict[str, Any]:
     termo = (q or "").strip()
     if not settings.PG_DSN:
         notas = [_enriquecer_nota_memoria(nota) for nota in _notas_db.values()]
@@ -325,6 +368,15 @@ async def listar_notas_admin(
                 )
             ]
         notas.sort(key=_ordenacao_atualizacao, reverse=True)
+        if por_aluno:
+            alunos_vistos: set[str] = set()
+            notas_unicas = []
+            for nota in notas:
+                id_aluno = str(nota["aluno_id"])
+                if id_aluno not in alunos_vistos:
+                    alunos_vistos.add(id_aluno)
+                    notas_unicas.append(nota)
+            notas = notas_unicas
         total = len(notas)
         return {
             "items": notas[offset : offset + limit],
@@ -369,21 +421,37 @@ async def listar_notas_admin(
     """
     where_sql = " WHERE " + " AND ".join(conds) if conds else ""
     with get_db_cursor() as cur:
-        cur.execute(f"SELECT COUNT(*) AS total {from_sql}{where_sql}", tuple(params))
+        contagem = "COUNT(DISTINCT nota.aluno_id)" if por_aluno else "COUNT(*)"
+        cur.execute(f"SELECT {contagem} AS total {from_sql}{where_sql}", tuple(params))
         total = int(cur.fetchone()["total"])
-        sql = f"""
-        SELECT nota.id, nota.aluno_id,
+        campos = """
+               nota.id, nota.aluno_id,
                concat_ws(' ', usuario.nome, usuario.sobrenome) AS aluno_nome,
                usuario.email AS aluno_email, usuario.cpf AS aluno_cpf,
                aluno.numero_matricula AS aluno_matricula,
                nota.disciplina_id, disciplina.nome AS disciplina_nome,
                nota.turma_id, turma.nome AS turma_nome, nota.origem, nota.valor,
                nota.lancado_por, nota.lancado_em, nota.atualizado_em
-        {from_sql}
-        {where_sql}
-        ORDER BY nota.atualizado_em DESC NULLS LAST, nota.id DESC
-        LIMIT %s OFFSET %s
         """
+        if por_aluno:
+            sql = f"""
+            SELECT * FROM (
+                SELECT DISTINCT ON (nota.aluno_id) {campos}
+                {from_sql}
+                {where_sql}
+                ORDER BY nota.aluno_id, nota.atualizado_em DESC NULLS LAST, nota.id DESC
+            ) agrupadas
+            ORDER BY atualizado_em DESC NULLS LAST, id DESC
+            LIMIT %s OFFSET %s
+            """
+        else:
+            sql = f"""
+            SELECT {campos}
+            {from_sql}
+            {where_sql}
+            ORDER BY nota.atualizado_em DESC NULLS LAST, nota.id DESC
+            LIMIT %s OFFSET %s
+            """
         cur.execute(sql, (*params, limit, offset))
         items = [dict(row) for row in cur.fetchall()]
     return {"items": items, "total": total, "limit": limit, "offset": offset}
