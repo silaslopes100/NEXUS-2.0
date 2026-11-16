@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from contextlib import contextmanager
 from importlib import import_module
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -366,6 +367,24 @@ async def test_authenticated_photo_endpoint_returns_not_found_without_photo(clie
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Foto de perfil não encontrada"
+
+
+@pytest.mark.asyncio
+async def test_photo_write_preserves_original_error_when_cleanup_fails(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(perfil_module, "_uses_blob_storage", lambda: False)
+    monkeypatch.setattr(perfil_module, "PHOTO_DIRECTORY", tmp_path)
+
+    def fail_write(self, data):
+        raise OSError("photo write failed")
+
+    def fail_unlink(self, missing_ok=False):
+        raise OSError("photo cleanup failed")
+
+    monkeypatch.setattr(Path, "write_bytes", fail_write)
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+    with pytest.raises(OSError, match="photo write failed"):
+        await perfil_module._write_photo(b"photo", "png")
+    assert "photo cleanup failed" in caplog.text
 
 
 @pytest.mark.asyncio

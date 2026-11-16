@@ -20,17 +20,28 @@ Production e Preview conforme necessário. Não versione nem copie valores de
 
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
-| `ENVIRONMENT` | Sim | Use `production` no Vercel. |
-| `JWT_SECRET` | Sim | Segredo aleatório forte, exclusivo da produção. |
+| `ENVIRONMENT` | Sim | Use `production` em Production e Preview no Vercel. |
+| `JWT_SECRET` | Sim | Segredo aleatório forte, distinto para Production e Preview. |
 | `PG_DSN` ou `DATABASE_URL` | Sim | Connection string do PostgreSQL no Neon. Prefira a URL com pooling para funções serverless. |
 | `CORS_ORIGINS` | Sim | Origens exatas do frontend, sem barra final e separadas por vírgula; por exemplo `https://<frontend>.vercel.app` e seu domínio próprio, se houver. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | Se usados | Configuração do serviço de e-mail para fluxos que enviam mensagens. |
 
-Crie um **Vercel Blob privado** e conecte-o ao projeto da API. A conexão injeta
-`BLOB_STORE_ID` e a autenticação OIDC para o SDK Python; não cadastre tokens de
-Blob manualmente. Os endpoints de fotos mantêm a validação e autenticação da API
-e leem/gravam nesse Blob em produção. Em desenvolvimento continuam usando o
-diretório local.
+Antes do deploy, habilite **Enable access to System Environment Variables** no
+projeto da API. Quando a Vercel expõe `VERCEL=1`, a aplicação recusa iniciar em
+Production ou Preview se `ENVIRONMENT` não for `production`; com as variáveis
+de sistema desabilitadas, essa proteção não detecta o deploy. Esse valor também
+ativa as validações de segurança, banco e CORS: confira as variáveis necessárias
+em cada ambiente antes de publicar. Use banco, segredo e origens adequados ao
+Preview, sem compartilhar dados de produção inadvertidamente.
+
+Crie dois **Vercel Blobs privados**, conectando um exclusivamente a Production
+e outro exclusivamente a Preview no projeto da API. A conexão injeta
+`BLOB_STORE_ID` e disponibiliza autenticação OIDC para o SDK Python; não copie
+credenciais para o repositório. Fotos e arquivos acadêmicos usam o Blob no modo
+`production`; em desenvolvimento local continuam usando o diretório local.
+Antes de trocar uma conexão existente, avalie os arquivos já armazenados: as
+referências no banco não transferem os objetos entre stores automaticamente.
+Após alterar variáveis ou conexões, gere novos deployments dos ambientes afetados.
 O limite de upload é 4 MB para que o multipart permaneça abaixo do limite de
 requisição das funções Vercel.
 
@@ -79,6 +90,8 @@ execução fora do ciclo de requisição.
 
 Após configurar os dois projetos, valide `/health` na URL da API, navegação
 direta para uma rota interna do frontend, login, acesso ao PostgreSQL, envio e
-leitura autenticados de fotos e os fluxos de e-mail configurados. Teste também
-os domínios Preview separadamente; cada origem necessária deve constar em
-`CORS_ORIGINS`.
+leitura autenticados de fotos e arquivos acadêmicos e os fluxos de e-mail
+configurados. `/health` deve informar `environment: production` tanto em
+Production quanto em Preview. Confira que os arquivos de teste chegam ao Blob
+correspondente e remova-os após o teste. Teste também os domínios Preview
+separadamente; cada origem necessária deve constar em `CORS_ORIGINS`.

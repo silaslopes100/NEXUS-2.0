@@ -12,9 +12,10 @@ autorizacao para o conteudo ou vinculo academico correspondente.
 
 A migracao `scripts/migrations/009_conteudos_materiais_arquivos.sql` deve ser
 aplicada antes da implantacao. Em desenvolvimento, os arquivos ficam em
-`uploads/academic_materials/`. Em producao no Vercel, a API usa Vercel Blob
-privado; configure o Blob e suas credenciais no projeto da API antes de habilitar
-uploads. As chaves internas de armazenamento nao sao expostas pela API.
+`uploads/academic_materials/`. Na Vercel, configure `ENVIRONMENT=production`
+em Production e Preview, cada um com seu Blob privado conectado, antes de
+habilitar uploads. Consulte `DEPLOY_VERCEL.md` para os demais requisitos.
+As chaves internas de armazenamento nao sao expostas pela API.
 
 Conteudos disciplinares podem ser abertos no visualizador integrado da plataforma.
 PDFs e imagens enviados sao exibidos diretamente pelo navegador; documentos

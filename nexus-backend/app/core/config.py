@@ -14,6 +14,12 @@ load_dotenv(Path.cwd() / ".env", override=False)
 class Settings:
     # --- Ambiente ---
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    if (
+        os.getenv("VERCEL") == "1"
+        and os.getenv("VERCEL_ENV") != "development"
+        and ENVIRONMENT.lower() != "production"
+    ):
+        raise RuntimeError("Configure ENVIRONMENT=production for Vercel deployments.")
 
     # --- Segurança e JWT ---
     _secret_key: str = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY", "")

@@ -10,5 +10,6 @@ O banco mantém somente o nome gerado do arquivo em `usuarios.foto_url`; a leitu
 `GET /auth/me/foto` nos avatares compartilhados do layout. Ambos exigem
 autenticação e retornam somente a foto do próprio usuário.
 Em desenvolvimento, os arquivos ficam em `nexus-backend/uploads/profile_photos/`.
-Em produção no Vercel, são armazenados em um Blob privado conectado ao projeto da
-API. O Blob deve estar configurado antes de receber uploads em produção.
+Na Vercel, configure `ENVIRONMENT=production` em Production e Preview, cada um
+com seu Blob privado conectado à API antes de receber uploads. Consulte
+`DEPLOY_VERCEL.md` para os demais requisitos.

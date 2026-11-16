@@ -192,7 +192,10 @@ async def _write_photo(content: bytes, extension: str) -> str:
         temporary.write_bytes(content)
         temporary.replace(destination)
     except OSError:
-        temporary.unlink(missing_ok=True)
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            logger.exception("Não foi possível limpar foto temporária")
         raise
     return filename
 
