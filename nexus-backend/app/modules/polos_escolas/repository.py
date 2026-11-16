@@ -39,6 +39,7 @@ _COLUNAS_BOLETO = (
 
 class PolosEscolasRepositoryInterface(Protocol):
     def transacao_criacao_polo(self) -> ContextManager[PolosEscolasRepositoryInterface]: ...
+    def transacao_criacao_escola(self) -> ContextManager[PolosEscolasRepositoryInterface]: ...
     def get_usuario_para_vinculo(self, usuario_id: str) -> Optional[Dict[str, Any]]: ...
     # ---------- Usuários auxiliares ----------
     def get_perfil_id_by_nome(self, nome: str) -> Optional[str]: ...
@@ -243,6 +244,9 @@ class PostgresPolosEscolasRepository:
     def transacao_criacao_polo(self) -> Iterator[PolosEscolasRepositoryInterface]:
         with get_db_cursor() as cursor:
             yield PostgresPolosEscolasRepository(cursor)
+
+    def transacao_criacao_escola(self) -> ContextManager[PolosEscolasRepositoryInterface]:
+        return self.transacao_criacao_polo()
 
     def get_usuario_para_vinculo(self, usuario_id: str) -> Optional[Dict[str, Any]]:
         with self._cursor() as cur:
@@ -449,7 +453,7 @@ class PostgresPolosEscolasRepository:
 
     def create_escola(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO escolas (
@@ -487,7 +491,7 @@ class PostgresPolosEscolasRepository:
             )
 
     def get_escola(self, escola_id: str) -> Optional[Dict[str, Any]]:
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 f"""
                 SELECT e.*, {_SECRETARIO_COLS}
@@ -1641,7 +1645,7 @@ class InMemoryPolosEscolasRepository:
     @contextmanager
     def transacao_criacao_polo(self) -> Iterator[PolosEscolasRepositoryInterface]:
         with self._criacao_polo_lock:
-            usuarios, polos, logs = deepcopy((self.usuarios, self.polos, self.logs_auditoria))
+            usuarios, polos, escolas, logs = deepcopy((self.usuarios, self.polos, self.escolas, self.logs_auditoria))
             try:
                 yield self
             except BaseException:
@@ -1649,8 +1653,13 @@ class InMemoryPolosEscolasRepository:
                 self.usuarios.update(usuarios)
                 self.polos.clear()
                 self.polos.update(polos)
+                self.escolas.clear()
+                self.escolas.update(escolas)
                 self.logs_auditoria[:] = logs
                 raise
+
+    def transacao_criacao_escola(self) -> ContextManager[PolosEscolasRepositoryInterface]:
+        return self.transacao_criacao_polo()
 
     def get_usuario_para_vinculo(self, usuario_id: str) -> Optional[Dict[str, Any]]:
         return self.get_usuario_by_id(usuario_id)

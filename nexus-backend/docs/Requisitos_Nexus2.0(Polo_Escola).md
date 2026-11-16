@@ -54,6 +54,8 @@ Os dados de cadastro do **Responsável do Polo** devem ser **os mesmos** do **Co
 
 **Fluxo atual:** o formulário de polo vincula um usuário existente com perfil de polo/coordenador; a API também aceita os dados para criar um coordenador. A criação do polo, o vínculo, os dados fiscais e a auditoria são confirmados em uma única transação.
 
+O cadastro de escola permite criar um secretário ou selecionar um usuário ativo com perfil de escola/secretário de escola. O usuário selecionado não pode estar vinculado a outra escola ou a outro polo; a criação da escola, o vínculo e a auditoria são confirmados em uma única transação.
+
 Nos cadastros e edições de polos e escolas, um CEP completo consulta o ViaCEP e preenche endereço, bairro, cidade e UF. O usuário pode editar os campos e preencher o endereço manualmente se a consulta falhar.
 
 ## RN-02 — Fluxo de Licenças (crítico)

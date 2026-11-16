@@ -21,7 +21,7 @@ from app.modules.polos_escolas.repository import (
     InMemoryPolosEscolasRepository,
     set_polos_escolas_repository,
 )
-from app.modules.polos_escolas.schemas import PoloCreateRequest
+from app.modules.polos_escolas.schemas import EscolaCreateRequest, PoloCreateRequest
 from app.modules.polos_escolas.service import PolosEscolasService
 
 # Perfis compartilhados entre o repositorio de autenticacao e o de polos_escolas,
@@ -343,6 +343,177 @@ async def test_rn01_create_escola_gera_secretario(client: AsyncClient, repos):
     assert secretario is not None
     assert secretario["perfil_id"] == "p-secescola"
     assert secretario["escola_id"] == escola["id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("perfil", ["p-escola", "p-secescola"])
+async def test_create_escola_vincula_usuario_existente(client: AsyncClient, repos, perfil):
+    auth_repo, polos_repo = repos
+    polo_id = polos_repo.create_polo({"nome": "Polo"})
+    _criar_usuario(auth_repo, "sec-existente", perfil, polo_id=polo_id)
+    original = auth_repo.usuarios["sec-existente"].copy()
+
+    res = await client.post(
+        f"/polos/{polo_id}/escolas",
+        json={"nome": "Escola nova", "secretario_usuario_id": "sec-existente"},
+        headers=_bearer("admin-1"),
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["secretario_id"] == "sec-existente"
+    assert auth_repo.usuarios["sec-existente"]["escola_id"] == res.json()["id"]
+    assert auth_repo.usuarios["sec-existente"]["email"] == original["email"]
+    assert auth_repo.usuarios["sec-existente"]["perfil_id"] == original["perfil_id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("usuario", "perfil", "polo_outro", "escola_id", "status", "esperado"),
+    [
+        ("ausente", None, False, None, "ativo", 404),
+        ("professor", "p-professor", False, None, "ativo", 400),
+        ("ocupado", "p-escola", False, "outra-escola", "ativo", 400),
+        ("outro-polo", "p-escola", True, None, "ativo", 400),
+        ("inativo", "p-escola", False, None, "inativo", 400),
+    ],
+)
+async def test_create_escola_rejeita_secretario_indisponivel(
+    client: AsyncClient, repos, usuario, perfil, polo_outro, escola_id, status, esperado
+):
+    auth_repo, polos_repo = repos
+    polo_id = polos_repo.create_polo({"nome": "Polo"})
+    if perfil:
+        _criar_usuario(auth_repo, usuario, perfil, polo_id="outro" if polo_outro else polo_id, escola_id=escola_id)
+        auth_repo.usuarios[usuario]["status"] = status
+    resposta = await client.post(
+        f"/polos/{polo_id}/escolas",
+        json={"nome": "Escola", "secretario_usuario_id": usuario},
+        headers=_bearer("admin-1"),
+    )
+    assert resposta.status_code == esperado, resposta.text
+    assert not polos_repo.escolas
+
+
+@pytest.mark.asyncio
+async def test_create_escola_desfaz_vinculo_quando_auditoria_falha(client: AsyncClient, repos, monkeypatch):
+    auth_repo, polos_repo = repos
+    polo_id = polos_repo.create_polo({"nome": "Polo"})
+    _criar_usuario(auth_repo, "sec-existente", "p-escola")
+    original = auth_repo.usuarios["sec-existente"].copy()
+
+    def falhar_auditoria(**kwargs):
+        raise RuntimeError("falha na auditoria")
+
+    monkeypatch.setattr(polos_repo, "record_audit_log", falhar_auditoria)
+    with pytest.raises(RuntimeError, match="falha na auditoria"):
+        await client.post(
+            f"/polos/{polo_id}/escolas",
+            json={"nome": "Escola", "secretario_usuario_id": "sec-existente"},
+            headers=_bearer("admin-1"),
+        )
+    assert not polos_repo.escolas
+    assert auth_repo.usuarios["sec-existente"] == original
+
+
+@pytest.mark.asyncio
+async def test_create_escola_nao_aceita_mistura_de_usuario_existente_e_dados(client: AsyncClient, repos):
+    _, polos_repo = repos
+    polo_id = polos_repo.create_polo({"nome": "Polo"})
+    resposta = await client.post(
+        f"/polos/{polo_id}/escolas",
+        json={"nome": "Escola", "secretario_usuario_id": "usuario", "secretario_nome": "Outro"},
+        headers=_bearer("admin-1"),
+    )
+    assert resposta.status_code == 422
+    assert not polos_repo.escolas
+
+
+def test_create_escola_postgres_mantem_operacoes_na_mesma_transacao(monkeypatch):
+    class FakeConnection:
+        def __init__(self):
+            self.sql = []
+            self.last_sql = ""
+            self.rollbacks = 0
+            self.commits = 0
+
+        def cursor(self, **kwargs):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, sql, params=()):
+            self.last_sql = sql
+            self.sql.append(sql)
+            if "INSERT INTO logs_auditoria" in sql:
+                raise RuntimeError("falha na auditoria")
+
+        def fetchone(self):
+            if "FROM polos" in self.last_sql:
+                return {"id": "polo"}
+            if "FROM perfis" in self.last_sql:
+                return {"id": "perfil"}
+            if "FROM usuarios" in self.last_sql:
+                return {"id": "usuario", "perfil_id": "perfil", "polo_id": None, "escola_id": None, "status": "ativo"}
+            return None
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    conn = FakeConnection()
+
+    class FakePool:
+        obtidas = 0
+        devolvidas = 0
+
+        def getconn(self):
+            self.obtidas += 1
+            return conn
+
+        def putconn(self, connection):
+            assert connection is conn
+            self.devolvidas += 1
+
+    pool = FakePool()
+    monkeypatch.setattr(database, "get_connection_pool", lambda: pool)
+    service = PolosEscolasService(polos_repository_module.PostgresPolosEscolasRepository())
+    with pytest.raises(RuntimeError, match="falha na auditoria"):
+        service.create_escola("polo", EscolaCreateRequest(nome="Escola", secretario_usuario_id="usuario"), None, None)
+
+    assert pool.obtidas == pool.devolvidas == 1
+    assert conn.rollbacks == 1 and conn.commits == 0
+    assert any("FOR UPDATE" in sql for sql in conn.sql)
+    assert any("INSERT INTO escolas" in sql for sql in conn.sql)
+    assert any("UPDATE usuarios" in sql for sql in conn.sql)
+
+
+def test_criacoes_simultaneas_nao_vinculam_secretario_a_duas_escolas(repos):
+    auth_repo, polos_repo = repos
+    polo_id = polos_repo.create_polo({"nome": "Polo"})
+    _criar_usuario(auth_repo, "sec-simultaneo", "p-escola")
+    service = PolosEscolasService(polos_repo)
+    inicio = Barrier(2)
+
+    def criar(nome):
+        inicio.wait()
+        try:
+            return service.create_escola(
+                polo_id, EscolaCreateRequest(nome=nome, secretario_usuario_id="sec-simultaneo"), None, None
+            )
+        except HTTPException as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        resultados = list(executor.map(criar, ("Escola A", "Escola B")))
+
+    assert sum(isinstance(result, HTTPException) and result.status_code == 400 for result in resultados) == 1
+    assert len(polos_repo.escolas) == 1
+    assert auth_repo.usuarios["sec-simultaneo"]["escola_id"] in polos_repo.escolas
 
 
 @pytest.mark.asyncio

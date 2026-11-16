@@ -387,14 +387,40 @@ class PolosEscolasService:
     def create_escola(
         self, polo_id: str, dados: EscolaCreateRequest, actor_id: Optional[str], ip: Optional[str]
     ) -> EscolaResponse:
+        with self.repo.transacao_criacao_escola() as repo:
+            return PolosEscolasService(repo)._create_escola_na_transacao(polo_id, dados, actor_id, ip)
+
+    def _create_escola_na_transacao(
+        self, polo_id: str, dados: EscolaCreateRequest, actor_id: Optional[str], ip: Optional[str]
+    ) -> EscolaResponse:
         if not self.repo.get_polo(polo_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Polo não encontrado")
-
-        self._validar_email_cpf_unicos(dados.secretario_email, dados.secretario_cpf)
 
         perfil_id = self._perfil_id_do_papel("secretario_escola")
         if not perfil_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Perfil 'secretario_escola' não configurado")
+
+        if dados.secretario_usuario_id:
+            secretario = self.repo.get_usuario_para_vinculo(dados.secretario_usuario_id)
+            if not secretario:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Usuário secretário informado não encontrado")
+            perfis_escola = {
+                str(perfil)
+                for nome in nomes_equivalentes("secretario_escola")
+                if (perfil := self.repo.get_perfil_id_by_nome(nome))
+            }
+            if str(secretario.get("perfil_id") or "") not in perfis_escola:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário não possui perfil de escola")
+            if secretario.get("status") != "ativo":
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário secretário está inativo")
+            if secretario.get("escola_id"):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário já está vinculado a uma escola")
+            if secretario.get("polo_id") and str(secretario["polo_id"]) != str(polo_id):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Usuário está vinculado a outro polo")
+        else:
+            if not dados.secretario_nome or not dados.secretario_cpf or not dados.secretario_email or not dados.secretario_senha:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dados do secretário incompletos")
+            self._validar_email_cpf_unicos(dados.secretario_email, dados.secretario_cpf)
 
         endereco = dados.endereco or EnderecoSchema()
         escola_id = self.repo.create_escola(
@@ -411,18 +437,24 @@ class PolosEscolasService:
             }
         )
 
-        secretario_id = self.repo.create_usuario(
-            {
-                "nome": dados.secretario_nome,
-                "email": dados.secretario_email,
-                "cpf": dados.secretario_cpf,
-                "senha_hash": hash_password(dados.secretario_senha),
-                "senha_algoritmo": "argon2id",
-                "perfil_id": perfil_id,
-                "polo_id": polo_id,
-                "escola_id": escola_id,
-            }
-        )
+        if dados.secretario_usuario_id:
+            secretario_id = dados.secretario_usuario_id
+            self.repo.update_usuario(secretario_id, {"polo_id": polo_id, "escola_id": escola_id})
+        else:
+            if not dados.secretario_senha:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dados do secretário incompletos")
+            secretario_id = self.repo.create_usuario(
+                {
+                    "nome": dados.secretario_nome,
+                    "email": dados.secretario_email,
+                    "cpf": dados.secretario_cpf,
+                    "senha_hash": hash_password(dados.secretario_senha),
+                    "senha_algoritmo": "argon2id",
+                    "perfil_id": perfil_id,
+                    "polo_id": polo_id,
+                    "escola_id": escola_id,
+                }
+            )
 
         self.repo.record_audit_log(
             usuario_id=actor_id,

@@ -17,10 +17,17 @@ vi.mock('@/stores/authStore', () => ({
 
 vi.mock('@/features/polos_escolas/api', () => ({
   polosEscolasApi: {
-    listarUsuariosVinculaveis: vi.fn().mockResolvedValue({ items: [{ id: 'coord', nome: 'Coordenador' }], total: 1 }),
-    listarPolos: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    listarUsuariosVinculaveis: vi.fn().mockImplementation(({ perfil }) => Promise.resolve(perfil === 'escola'
+      ? { items: [
+          { id: 'secretaria', nome: 'Ana', sobrenome: 'Silva', email: 'ana@example.test', status: 'ativo' },
+          { id: 'ocupado', nome: 'Ocupado', status: 'ativo', escola_id: 'outra' },
+          { id: 'outro', nome: 'Outro', status: 'ativo', polo_id: 'p2' },
+        ], total: 3 }
+      : { items: [{ id: 'coord', nome: 'Coordenador' }], total: 1 })),
+    listarPolos: vi.fn().mockResolvedValue({ items: [{ id: 'p1', nome: 'Polo teste', endereco: {}, status: 'ativo' }], total: 1 }),
     listarEscolas: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     criarPolo: vi.fn().mockResolvedValue({ id: 'p1' }),
+    criarEscola: vi.fn().mockResolvedValue({ id: 'e1' }),
   },
 }));
 
@@ -30,6 +37,7 @@ const addressResponse = {
 const jsonResponse = (data: object) => ({ ok: true, json: async () => data });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(addressResponse)));
 });
 
@@ -129,6 +137,66 @@ it('mostra erro de criação dentro do formulário', async () => {
   fireEvent.change(screen.getByRole('listbox'), { target: { value: 'coord' } });
   fireEvent.click(screen.getByText('Salvar'));
   expect((await screen.findByRole('alert')).textContent).toContain('Usuário já é coordenador');
+});
+
+describe.each([
+  ['polos e escolas', async () => {
+    render(<PolosEscolasPage />);
+    fireEvent.click(screen.getByText('Nova escola'));
+    fireEvent.change(screen.getByPlaceholderText('Nome da unidade'), { target: { value: 'Escola nova' } });
+    fireEvent.change(screen.getByPlaceholderText('Cidade'), { target: { value: 'Recife' } });
+  }],
+  ['gestão de escolas', async () => {
+    render(<MemoryRouter><EscolasPage /></MemoryRouter>);
+    await screen.findByText('Cadastrar escola');
+    fireEvent.click(screen.getByText('Cadastrar escola'));
+    fireEvent.change(screen.getByPlaceholderText('Nome da escola'), { target: { value: 'Escola nova' } });
+  }],
+] as const)('cadastro de escola em %s', (_name, open) => {
+  it('consulta usuários de escola e vincula o responsável selecionado', async () => {
+    await open();
+    const option = await screen.findByRole('option', { name: 'Polo teste' });
+    fireEvent.change(option.parentElement!, { target: { value: 'p1' } });
+    await screen.findByRole('option', { name: /Ana Silva/ });
+    expect(vi.mocked(polosEscolasApi.listarUsuariosVinculaveis)).toHaveBeenCalledWith(
+      expect.objectContaining({ perfil: 'escola' }),
+    );
+    expect((screen.getByRole('option', { name: /Ocupado/ }) as HTMLOptionElement).disabled).toBe(true);
+    expect((screen.getByRole('option', { name: /Outro/ }) as HTMLOptionElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Usuário responsável da escola'), { target: { value: 'secretaria' } });
+    fireEvent.change(screen.getByLabelText('Buscar usuário de escola'), { target: { value: 'Ana' } });
+    await waitFor(() => expect(polosEscolasApi.listarUsuariosVinculaveis).toHaveBeenCalledWith(
+      expect.objectContaining({ perfil: 'escola', q: 'Ana' }),
+    ));
+    fireEvent.click(screen.getByRole('button', { name: /^(Salvar|Cadastrar)$/ }));
+    await waitFor(() => expect(polosEscolasApi.criarEscola).toHaveBeenCalledWith(
+      'p1', expect.objectContaining({ nome: 'Escola nova', secretario_usuario_id: 'secretaria' }),
+    ));
+  });
+
+  it('mantém a opção de criar um responsável novo', async () => {
+    await open();
+    const option = await screen.findByRole('option', { name: 'Polo teste' });
+    fireEvent.change(option.parentElement!, { target: { value: 'p1' } });
+    fireEvent.click(screen.getByLabelText('Criar usuário'));
+    fireEvent.change(screen.getByPlaceholderText('Nome'), { target: { value: 'Secretária' } });
+    fireEvent.change(screen.getByPlaceholderText('CPF'), { target: { value: '12345678900' } });
+    fireEvent.change(screen.getByPlaceholderText('E-mail'), { target: { value: 'sec@example.test' } });
+    fireEvent.change(screen.getByPlaceholderText('Senha inicial'), { target: { value: 'senha123' } });
+    fireEvent.click(screen.getByRole('button', { name: /^(Salvar|Cadastrar)$/ }));
+    await waitFor(() => expect(polosEscolasApi.criarEscola).toHaveBeenCalledWith(
+      'p1', expect.objectContaining({ secretario_nome: 'Secretária', secretario_usuario_id: '' }),
+    ));
+  });
+});
+
+it('permite tentar novamente quando a consulta de usuários falha', async () => {
+  vi.mocked(polosEscolasApi.listarUsuariosVinculaveis).mockRejectedValueOnce(new Error('rede'));
+  render(<MemoryRouter><EscolasPage /></MemoryRouter>);
+  fireEvent.click(screen.getByText('Cadastrar escola'));
+  expect((await screen.findByRole('alert')).textContent).toContain('Não foi possível consultar os usuários');
+  fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+  await screen.findByRole('option', { name: /Ana Silva/ });
 });
 
 describe.each([

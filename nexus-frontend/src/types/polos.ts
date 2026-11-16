@@ -59,6 +59,7 @@ export interface EscolaCreatePayload {
   polo_id: string;
   nome: string;
   endereco?: EnderecoCompleto;
+  secretario_usuario_id?: string;
   secretario_nome: string;
   secretario_cpf: string;
   secretario_email: string;

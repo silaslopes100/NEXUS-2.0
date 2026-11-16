@@ -1,5 +1,6 @@
 import { PoloEditModal } from '@/features/polos_escolas/components/PoloEditModal';
 import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
+import { SecretarioEscolaFields } from '@/features/polos_escolas/components/SecretarioEscolaFields';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -280,8 +281,9 @@ export const PolosEscolasPage: React.FC = () => {
     setSaving(true);
     try {
       await polosEscolasApi.criarEscola(escolaForm.polo_id, escolaForm);
-      setFeedback('Escola e secretário criados com sucesso.');
+      setFeedback('Escola cadastrada com sucesso.');
       setModal(null);
+      setEscolaForm({ polo_id: user?.polo_id || '', nome: '', endereco: emptyAddress, secretario_nome: '', secretario_cpf: '', secretario_email: '', secretario_senha: '', secretario_usuario_id: '' });
       if (selectedPolo) await abrirPolo(selectedPolo.id);
       else await loadPolos(query);
     } catch (error: any) {
@@ -310,7 +312,17 @@ export const PolosEscolasPage: React.FC = () => {
       </div>
       <div className="flex gap-2">
         {isAdmin && <button onClick={() => { setErroModal(''); setModal('polo'); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"><Plus size={16} /> Novo polo</button>}
-        <button onClick={() => { setErroModal(''); setEscolaForm((form) => ({ ...form, polo_id: user?.polo_id || selectedPolo?.id || '' })); setModal('escola'); }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"><Plus size={16} /> Nova escola</button>
+        <button onClick={() => {
+          setErroModal('');
+          setEscolaForm((form) => ({ ...form, polo_id: user?.polo_id || selectedPolo?.id || '', secretario_usuario_id: '' }));
+          if (!polos.length) {
+            searchTriggeredRef.current = true;
+            setSearchTriggered(true);
+            setQuery('');
+            void loadPolos('');
+          }
+          setModal('escola');
+        }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"><Plus size={16} /> Nova escola</button>
       </div>
     </header>
 
@@ -570,18 +582,12 @@ export const PolosEscolasPage: React.FC = () => {
         </div>
         {erroModal && <p role="alert" className="text-sm text-red-300">{erroModal}</p>}
         <input className={inputClass} required minLength={2} placeholder="Nome da unidade" value={modal === 'polo' ? poloForm.nome : escolaForm.nome} onChange={(event) => modal === 'polo' ? setPoloForm({ ...poloForm, nome: event.target.value }) : setEscolaForm({ ...escolaForm, nome: event.target.value })} />
-        {modal === 'escola' && <select className={inputClass} required value={escolaForm.polo_id} onChange={(event) => setEscolaForm({ ...escolaForm, polo_id: event.target.value })}><option value="">Selecione o polo</option>{polos.map((polo) => <option key={polo.id} value={polo.id}>{polo.nome}</option>)}</select>}
+        {modal === 'escola' && <select className={inputClass} required value={escolaForm.polo_id} onChange={(event) => setEscolaForm({ ...escolaForm, polo_id: event.target.value, secretario_usuario_id: '' })}><option value="">Selecione o polo</option>{polos.map((polo) => <option key={polo.id} value={polo.id}>{polo.nome}</option>)}</select>}
         <div className="grid gap-3 sm:grid-cols-2">
           {(['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado'] as const).map((key) => <input key={key} className={inputClass} required={key === 'cidade' || key === 'estado'} placeholder={key[0].toUpperCase() + key.slice(1)} value={(modal === 'polo' ? poloForm.endereco?.[key] : escolaForm.endereco?.[key]) || ''} onChange={(event) => changeAddress(key, event.target.value)} />)}
         </div>
         {cepLookup.message && <p role={cepLookup.status === 'error' ? 'alert' : 'status'} className={`text-xs ${cepLookup.status === 'error' ? 'text-red-300' : 'text-slate-400'}`}>{cepLookup.message}</p>}
-        <div className="grid gap-3 sm:grid-cols-2">
-          {modal === 'escola' && (['nome', 'cpf', 'email', 'senha'] as const).map((key) => {
-            const prefix = 'secretario';
-            const field = `${prefix}_${key}` as Exclude<keyof EscolaCreatePayload, 'endereco'>;
-            return <input key={key} className={inputClass} required minLength={key === 'senha' ? 8 : undefined} type={key === 'senha' ? 'password' : 'text'} placeholder={key[0].toUpperCase() + key.slice(1)} value={escolaForm[field] || ''} onChange={(event) => setEscolaForm({ ...escolaForm, [field]: event.target.value })} />;
-          })}
-        </div>
+        {modal === 'escola' && <SecretarioEscolaFields poloId={escolaForm.polo_id} values={escolaForm} onChange={(update) => setEscolaForm((form) => ({ ...form, ...update }))} />}
         {modal === 'polo' && (
           <div className="border-t border-slate-800 pt-4">
             <label className="mb-1 block text-sm font-medium text-slate-300">Vincular Usuário Coordenador</label>

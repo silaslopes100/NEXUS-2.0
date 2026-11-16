@@ -133,14 +133,26 @@ class PoloListResponse(BaseModel):
 # =========================================================================
 
 class EscolaCreateRequest(BaseModel):
-    """Cria a Escola e, na mesma transação, o usuário secretário (RN-01)."""
+    """Cria a escola e cria ou vincula seu secretário."""
 
     nome: str = Field(min_length=2)
     endereco: Optional[EnderecoSchema] = None
-    secretario_nome: str = Field(min_length=1)
-    secretario_cpf: str = Field(min_length=11, max_length=14)
-    secretario_email: EmailStr
-    secretario_senha: str = Field(min_length=8)
+    secretario_usuario_id: Optional[str] = None
+    secretario_nome: Optional[str] = Field(default=None, min_length=1)
+    secretario_cpf: Optional[str] = Field(default=None, min_length=11, max_length=14)
+    secretario_email: Optional[EmailStr] = None
+    secretario_senha: Optional[str] = Field(default=None, min_length=8)
+
+    @model_validator(mode="after")
+    def _validar_secretario(self):
+        if self.secretario_usuario_id is not None:
+            self.secretario_usuario_id = self.secretario_usuario_id.strip() or None
+        if self.secretario_usuario_id:
+            if any((self.secretario_nome, self.secretario_cpf, self.secretario_email, self.secretario_senha)):
+                raise ValueError("Informe um usuário existente ou os dados de um novo secretário, não ambos")
+        elif not all((self.secretario_nome, self.secretario_cpf, self.secretario_email, self.secretario_senha)):
+            raise ValueError("Informe um usuário existente ou todos os dados do novo secretário")
+        return self
 
 
 class EscolaUpdateRequest(BaseModel):

@@ -83,7 +83,18 @@ export const polosEscolasApi = {
   },
 
   criarEscola: async (poloId: string, payload: EscolaCreatePayload) => {
-    const { polo_id: _poloId, ...body } = payload;
+    const {
+      polo_id: _poloId,
+      secretario_usuario_id,
+      secretario_nome,
+      secretario_cpf,
+      secretario_email,
+      secretario_senha,
+      ...escola
+    } = payload;
+    const body = secretario_usuario_id
+      ? { ...escola, secretario_usuario_id }
+      : { ...escola, secretario_nome, secretario_cpf, secretario_email, secretario_senha };
     const { data } = await http.post(`/polos/${poloId}/escolas`, body);
     return data;
   },

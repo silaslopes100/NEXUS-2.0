@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { alunosApi } from '@/features/alunos/api';
 import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
+import { SecretarioEscolaFields } from '@/features/polos_escolas/components/SecretarioEscolaFields';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import { useCepAddress } from '@/features/polos_escolas/useCepAddress';
 import {
@@ -95,6 +96,7 @@ export const EscolasPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState('');
   const [form, setForm] = useState<EscolaCreatePayload>(initialForm);
   const { changeAddress, lookup: cepLookup } = useCepAddress(
     (update) => setForm((current) => ({ ...current, endereco: update(current.endereco || {}) })),
@@ -209,9 +211,10 @@ export const EscolasPage: React.FC = () => {
     event.preventDefault();
     const poloId = isAdmin ? form.polo_id : user?.polo_id || '';
     if (!poloId) {
-      setFeedback('Selecione um polo para cadastrar a escola.');
+      setCreateError('Selecione um polo para cadastrar a escola.');
       return;
     }
+    setCreateError('');
     setSaving(true);
     try {
       await polosEscolasApi.criarEscola(poloId, { ...form, polo_id: poloId });
@@ -222,9 +225,11 @@ export const EscolasPage: React.FC = () => {
       setAppliedQuery('');
       setStatusFilter('');
       setOffset(0);
+      if (!appliedQuery && !statusFilter && offset === 0) await loadSchools();
     } catch (error) {
       const err = error as { response?: { data?: { detail?: string } } };
-      setFeedback(err.response?.data?.detail || 'Não foi possível cadastrar a escola.');
+      const detail = err.response?.data?.detail;
+      setCreateError(typeof detail === 'string' ? detail : 'Não foi possível cadastrar a escola.');
     } finally {
       setSaving(false);
     }
@@ -273,6 +278,7 @@ export const EscolasPage: React.FC = () => {
           type="button"
           onClick={() => {
             setForm({ ...initialForm, polo_id: user?.polo_id || '' });
+            setCreateError('');
             setCreateOpen(true);
           }}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
@@ -444,18 +450,14 @@ export const EscolasPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <form onSubmit={createSchool} className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6">
             <div className="flex items-center justify-between"><h2 className="text-xl font-bold text-white">Cadastrar escola</h2><button type="button" onClick={() => setCreateOpen(false)} aria-label="Fechar"><X /></button></div>
+            {createError && <p role="alert" className="text-sm text-red-300">{createError}</p>}
             <input required minLength={2} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="Nome da escola" value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} />
-            {isAdmin && <select required className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={form.polo_id} onChange={(event) => setForm({ ...form, polo_id: event.target.value })}><option value="">Selecione o polo</option>{poles.map((polo) => <option key={polo.id} value={polo.id}>{polo.nome}</option>)}</select>}
+            {isAdmin && <select required className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={form.polo_id} onChange={(event) => setForm({ ...form, polo_id: event.target.value, secretario_usuario_id: '' })}><option value="">Selecione o polo</option>{poles.map((polo) => <option key={polo.id} value={polo.id}>{polo.nome}</option>)}</select>}
             <div className="grid gap-3 sm:grid-cols-2">
               {(['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado'] as const).map((field) => <input key={field} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder={field[0].toUpperCase() + field.slice(1)} value={form.endereco?.[field] || ''} onChange={(event) => changeAddress(field, event.target.value)} />)}
             </div>
             {cepLookup.message && <p role={cepLookup.status === 'error' ? 'alert' : 'status'} className={`text-xs ${cepLookup.status === 'error' ? 'text-red-300' : 'text-slate-400'}`}>{cepLookup.message}</p>}
-            <div className="border-t border-slate-800 pt-4"><h3 className="mb-3 text-sm font-semibold text-slate-200">Responsável da escola</h3><div className="grid gap-3 sm:grid-cols-2">
-              <input required className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="Nome" value={form.secretario_nome} onChange={(event) => setForm({ ...form, secretario_nome: event.target.value })} />
-              <input required minLength={11} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="CPF" value={form.secretario_cpf} onChange={(event) => setForm({ ...form, secretario_cpf: event.target.value })} />
-              <input required type="email" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="E-mail" value={form.secretario_email} onChange={(event) => setForm({ ...form, secretario_email: event.target.value })} />
-              <input required minLength={8} type="password" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="Senha inicial" value={form.secretario_senha} onChange={(event) => setForm({ ...form, secretario_senha: event.target.value })} />
-            </div></div>
+            <SecretarioEscolaFields poloId={form.polo_id} values={form} onChange={(update) => setForm((current) => ({ ...current, ...update }))} />
             <div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateOpen(false)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving && <Loader2 className="animate-spin" size={15} />}Cadastrar</button></div>
           </form>
         </div>
