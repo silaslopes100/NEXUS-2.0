@@ -387,7 +387,7 @@ class PostgresPolosEscolasRepository:
                 INSERT INTO polos (
                     id, nome, logradouro, numero, complemento, bairro, cidade, uf, cep,
                     coordenador_usuario_id, status, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
@@ -455,7 +455,7 @@ class PostgresPolosEscolasRepository:
                 INSERT INTO escolas (
                     id, polo_id, nome, logradouro, numero, complemento, bairro, cidade, uf, cep,
                     status, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,

@@ -161,6 +161,9 @@ describe.each([
       return input;
     };
     expect(fetch).not.toHaveBeenCalled();
+    if (!editing) {
+      expect(field('Cep').compareDocumentPosition(field('Logradouro')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
     fireEvent.change(field('Cep'), { target: { value: '01000000' } });
     await waitFor(() => expect(field('Cidade').value).toBe('São Paulo'));
     expect(field('Estado').value).toBe('SP');

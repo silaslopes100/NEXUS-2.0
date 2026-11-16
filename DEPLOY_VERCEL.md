@@ -77,6 +77,14 @@ que o esquema e as migrações existentes foram aplicados e que o usuário da
 aplicação tem as permissões necessárias. Não execute as migrações às cegas em um
 banco com dados.
 
+Para editar polos com dados fiscais, o banco da API deve ter a migração
+[`018_polos_fiscal_gateway_clientes.sql`](./nexus-backend/scripts/migrations/018_polos_fiscal_gateway_clientes.sql).
+Antes de aplicá-la, confirme o banco e o esquema corretos, faça backup e verifique
+as migrações anteriores, incluindo a 016, que cria `webhook_eventos`. A 018 também
+cria `gateway_clientes` e um índice de webhooks; se qualquer etapa falhar, sua
+transação é revertida. Aplique-a pelo procedimento de migração do ambiente e
+confirme as quatro colunas fiscais em `polos` antes de tentar novamente.
+
 Arquivos em `nexus-backend/uploads/profile_photos/` não são publicados com o
 repositório. Se houver fotos existentes, migre-as para o Blob privado mantendo
 os nomes registrados em `usuarios.foto_url` antes de apontar o frontend para a

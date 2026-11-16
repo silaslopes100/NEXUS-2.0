@@ -166,6 +166,63 @@ async def test_create_polo_desfaz_vinculo_quando_auditoria_falha(client: AsyncCl
     assert auth_repo.usuarios["coord-existente"] == usuario_antes
 
 
+@pytest.mark.parametrize("entidade", ["polo", "escola"])
+def test_insert_postgres_polo_escola_tem_parametros_corretos(monkeypatch, entidade):
+    class Cursor:
+        def execute(self, sql, params):
+            self.sql = sql
+            self.params = params
+
+    cursor = Cursor()
+
+    @contextmanager
+    def database_cursor():
+        yield cursor
+
+    monkeypatch.setattr(polos_repository_module, "get_db_cursor", database_cursor)
+    repo = polos_repository_module.PostgresPolosEscolasRepository()
+    dados = {
+        "nome": "Unidade",
+        "logradouro": "Rua A",
+        "numero": "10",
+        "complemento": "Sala 1",
+        "bairro": "Centro",
+        "cidade": "Recife",
+        "estado": "PE",
+        "cep": "50000-000",
+        "status": "inativo",
+    }
+    if entidade == "polo":
+        dados["coordenador_usuario_id"] = "coordenador"
+        criado_id = repo.create_polo(dados)
+        inicio_colunas = ["id", "nome"]
+        fim_colunas = ["coordenador_usuario_id", "status"]
+        inicio_params = (criado_id, "Unidade")
+        fim_params = ("coordenador", "inativo")
+    else:
+        dados["polo_id"] = "polo"
+        criado_id = repo.create_escola(dados)
+        inicio_colunas = ["id", "polo_id", "nome"]
+        fim_colunas = ["status"]
+        inicio_params = (criado_id, "polo", "Unidade")
+        fim_params = ("inativo",)
+
+    colunas = cursor.sql.split("(", 1)[1].split(")", 1)[0].split(",")
+    valores = cursor.sql.split("VALUES", 1)[1].strip()[1:-1].split(",")
+    assert [coluna.strip() for coluna in colunas] == (
+        inicio_colunas
+        + ["logradouro", "numero", "complemento", "bairro", "cidade", "uf", "cep"]
+        + fim_colunas
+        + ["criado_em", "atualizado_em"]
+    )
+    assert [valor.strip() for valor in valores] == ["%s"] * 11 + ["now()", "now()"]
+    assert cursor.params == (
+        inicio_params
+        + ("Rua A", "10", "Sala 1", "Centro", "Recife", "PE", "50000-000")
+        + fim_params
+    )
+
+
 def test_create_polo_postgres_usa_mesma_transacao_e_desfaz_em_falha(monkeypatch):
     class FakeConnection:
         def __init__(self):
