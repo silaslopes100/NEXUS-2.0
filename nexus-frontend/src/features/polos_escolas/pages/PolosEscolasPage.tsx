@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
+import { useCepAddress } from '@/features/polos_escolas/useCepAddress';
 import {
   EscolaCreatePayload,
   EscolaItem,
@@ -135,6 +136,14 @@ export const PolosEscolasPage: React.FC = () => {
   const [usuariosDisponiveis, setUsuariosDisponiveis] = useState<Array<{ id: string; nome: string; email?: string; cpf?: string; perfil_nome?: string }>>([]);
   const [buscaUsuario, setBuscaUsuario] = useState('');
   const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+  const [erroModal, setErroModal] = useState('');
+  const { changeAddress, lookup: cepLookup } = useCepAddress((update) => {
+    if (modal === 'polo') {
+      setPoloForm((form) => ({ ...form, endereco: update(form.endereco || {}) }));
+    } else if (modal === 'escola') {
+      setEscolaForm((form) => ({ ...form, endereco: update(form.endereco || {}) }));
+    }
+  }, modal);
 
   // Carrega usuários quando abre o modal de polo
   useEffect(() => {
@@ -150,6 +159,7 @@ export const PolosEscolasPage: React.FC = () => {
       setUsuariosDisponiveis(resp.items || []);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
+      setErroModal('Não foi possível carregar os coordenadores. Feche e abra o formulário para tentar novamente.');
     } finally {
       setLoadingUsuarios(false);
     }
@@ -246,19 +256,27 @@ export const PolosEscolasPage: React.FC = () => {
   // ---------- Criação ----------
   const savePolo = async (event: React.FormEvent) => {
     event.preventDefault();
+    setErroModal('');
     setSaving(true);
     try {
       await polosEscolasApi.criarPolo(poloForm);
-      setFeedback('Polo e coordenador criados com sucesso.');
+      setFeedback('Polo cadastrado e coordenador vinculado com sucesso.');
       setModal(null);
-      await loadPolos(query);
+      setPoloForm({ nome: '', endereco: emptyAddress, coordenador_usuario_id: '' });
+      setBuscaUsuario('');
+      setQuery('');
+      searchTriggeredRef.current = true;
+      setSearchTriggered(true);
+      await loadPolos('');
     } catch (error: any) {
-      setFeedback(error.response?.data?.detail || 'Falha ao criar o polo.');
+      const detail = error.response?.data?.detail;
+      setErroModal(typeof detail === 'string' ? detail : 'Falha ao criar o polo. Confira os dados informados.');
     } finally { setSaving(false); }
   };
 
   const saveEscola = async (event: React.FormEvent) => {
     event.preventDefault();
+    setErroModal('');
     setSaving(true);
     try {
       await polosEscolasApi.criarEscola(escolaForm.polo_id, escolaForm);
@@ -267,16 +285,9 @@ export const PolosEscolasPage: React.FC = () => {
       if (selectedPolo) await abrirPolo(selectedPolo.id);
       else await loadPolos(query);
     } catch (error: any) {
-      setFeedback(error.response?.data?.detail || 'Falha ao criar a escola.');
+      const detail = error.response?.data?.detail;
+      setErroModal(typeof detail === 'string' ? detail : 'Falha ao criar a escola. Confira os dados informados.');
     } finally { setSaving(false); }
-  };
-
-  const updateAddress = (type: 'polo' | 'escola', key: keyof typeof emptyAddress, value: string) => {
-    if (type === 'polo') {
-      setPoloForm((form) => ({ ...form, endereco: { ...form.endereco, [key]: value } }));
-    } else {
-      setEscolaForm((form) => ({ ...form, endereco: { ...form.endereco, [key]: value } }));
-    }
   };
 
   const escolasFiltradas = useMemo(() => {
@@ -298,8 +309,8 @@ export const PolosEscolasPage: React.FC = () => {
         <p className="mt-1 text-sm text-slate-400">Cadastros, responsáveis e visão operacional por unidade.</p>
       </div>
       <div className="flex gap-2">
-        {isAdmin && <button onClick={() => setModal('polo')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"><Plus size={16} /> Novo polo</button>}
-        <button onClick={() => { setEscolaForm((form) => ({ ...form, polo_id: user?.polo_id || selectedPolo?.id || '' })); setModal('escola'); }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"><Plus size={16} /> Nova escola</button>
+        {isAdmin && <button onClick={() => { setErroModal(''); setModal('polo'); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"><Plus size={16} /> Novo polo</button>}
+        <button onClick={() => { setErroModal(''); setEscolaForm((form) => ({ ...form, polo_id: user?.polo_id || selectedPolo?.id || '' })); setModal('escola'); }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"><Plus size={16} /> Nova escola</button>
       </div>
     </header>
 
@@ -362,7 +373,6 @@ export const PolosEscolasPage: React.FC = () => {
             <Edit2 size={14} /> Editar polo
           </button>}
         </div>
-
         {loadingDetalhe || !selectedPolo ? (
           <div className="flex justify-center rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-blue-400"><Loader2 className="animate-spin" /></div>
         ) : (
@@ -555,14 +565,16 @@ export const PolosEscolasPage: React.FC = () => {
     {modal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <form onSubmit={modal === 'polo' ? savePolo : saveEscola} className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">{modal === 'polo' ? 'Novo polo e coordenador' : 'Nova escola e secretário'}</h2>
+          <h2 className="text-xl font-bold text-white">{modal === 'polo' ? 'Novo polo' : 'Nova escola e secretário'}</h2>
           <button type="button" onClick={() => setModal(null)} className="text-slate-400"><X /></button>
         </div>
-        <input className={inputClass} required placeholder="Nome da unidade" value={modal === 'polo' ? poloForm.nome : escolaForm.nome} onChange={(event) => modal === 'polo' ? setPoloForm({ ...poloForm, nome: event.target.value }) : setEscolaForm({ ...escolaForm, nome: event.target.value })} />
+        {erroModal && <p role="alert" className="text-sm text-red-300">{erroModal}</p>}
+        <input className={inputClass} required minLength={2} placeholder="Nome da unidade" value={modal === 'polo' ? poloForm.nome : escolaForm.nome} onChange={(event) => modal === 'polo' ? setPoloForm({ ...poloForm, nome: event.target.value }) : setEscolaForm({ ...escolaForm, nome: event.target.value })} />
         {modal === 'escola' && <select className={inputClass} required value={escolaForm.polo_id} onChange={(event) => setEscolaForm({ ...escolaForm, polo_id: event.target.value })}><option value="">Selecione o polo</option>{polos.map((polo) => <option key={polo.id} value={polo.id}>{polo.nome}</option>)}</select>}
         <div className="grid gap-3 sm:grid-cols-2">
-          {(['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'cep'] as const).map((key) => <input key={key} className={inputClass} required={key === 'cidade' || key === 'estado'} placeholder={key[0].toUpperCase() + key.slice(1)} value={(modal === 'polo' ? poloForm.endereco?.[key] : escolaForm.endereco?.[key]) || ''} onChange={(event) => updateAddress(modal, key, event.target.value)} />)}
+          {(['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'cep'] as const).map((key) => <input key={key} className={inputClass} required={key === 'cidade' || key === 'estado'} placeholder={key[0].toUpperCase() + key.slice(1)} value={(modal === 'polo' ? poloForm.endereco?.[key] : escolaForm.endereco?.[key]) || ''} onChange={(event) => changeAddress(key, event.target.value)} />)}
         </div>
+        {cepLookup.message && <p role={cepLookup.status === 'error' ? 'alert' : 'status'} className={`text-xs ${cepLookup.status === 'error' ? 'text-red-300' : 'text-slate-400'}`}>{cepLookup.message}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
           {modal === 'escola' && (['nome', 'cpf', 'email', 'senha'] as const).map((key) => {
             const prefix = 'secretario';

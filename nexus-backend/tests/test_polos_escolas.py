@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 import json
+from threading import Barrier
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.core.security import create_access_token, hash_password
+from app.core import database
 from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
 from app.modules.polos_escolas import repository as polos_repository_module
@@ -17,6 +21,8 @@ from app.modules.polos_escolas.repository import (
     InMemoryPolosEscolasRepository,
     set_polos_escolas_repository,
 )
+from app.modules.polos_escolas.schemas import PoloCreateRequest
+from app.modules.polos_escolas.service import PolosEscolasService
 
 # Perfis compartilhados entre o repositorio de autenticacao e o de polos_escolas,
 # para que usuarios criados via polos_escolas sejam resolvidos no login (mesma
@@ -110,6 +116,141 @@ async def test_rn01_create_polo_gera_coordenador_sem_endpoint_separado(client: A
     assert coordenador is not None
     assert coordenador["perfil_id"] == "p-coordpolo"
     assert coordenador["polo_id"] == polo["id"]
+
+
+@pytest.mark.asyncio
+async def test_create_polo_vincula_usuario_existente(client: AsyncClient, repos):
+    auth_repo, _ = repos
+    _criar_usuario(auth_repo, "coord-existente", "p-polo")
+    res = await client.post(
+        "/polos",
+        json={"nome": "Polo novo", "coordenador_usuario_id": "coord-existente"},
+        headers=_bearer("admin-1"),
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["coordenador_id"] == "coord-existente"
+    assert auth_repo.usuarios["coord-existente"]["polo_id"] == res.json()["id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("coordenador_id", ["ausente", "ja-vinculado"])
+async def test_create_polo_invalido_nao_deixa_polo_parcial(client: AsyncClient, repos, coordenador_id):
+    auth_repo, polo_repo = repos
+    _criar_usuario(auth_repo, "ja-vinculado", "p-polo", polo_id="outro-polo")
+    res = await client.post(
+        "/polos",
+        json={"nome": "Polo novo", "coordenador_usuario_id": coordenador_id},
+        headers=_bearer("admin-1"),
+    )
+    assert res.status_code in (400, 404), res.text
+    assert not polo_repo.polos
+
+
+@pytest.mark.asyncio
+async def test_create_polo_desfaz_vinculo_quando_auditoria_falha(client: AsyncClient, repos, monkeypatch):
+    auth_repo, polo_repo = repos
+    _criar_usuario(auth_repo, "coord-existente", "p-polo")
+    usuario_antes = auth_repo.usuarios["coord-existente"].copy()
+
+    def falhar_auditoria(**kwargs):
+        raise RuntimeError("falha na auditoria")
+
+    monkeypatch.setattr(polo_repo, "record_audit_log", falhar_auditoria)
+    with pytest.raises(RuntimeError, match="falha na auditoria"):
+        await client.post(
+            "/polos",
+            json={"nome": "Polo novo", "coordenador_usuario_id": "coord-existente"},
+            headers=_bearer("admin-1"),
+        )
+    assert not polo_repo.polos
+    assert auth_repo.usuarios["coord-existente"] == usuario_antes
+
+
+def test_create_polo_postgres_usa_mesma_transacao_e_desfaz_em_falha(monkeypatch):
+    class FakeConnection:
+        def __init__(self):
+            self.sql = []
+            self.last_sql = ""
+            self.commits = 0
+            self.rollbacks = 0
+
+        def cursor(self, **kwargs):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, sql, params=()):
+            self.last_sql = sql
+            self.sql.append(sql)
+            if "INSERT INTO logs_auditoria" in sql:
+                raise RuntimeError("falha na auditoria")
+
+        def fetchone(self):
+            if "FROM perfis" in self.last_sql:
+                return {"id": "perfil"}
+            if "FROM usuarios" in self.last_sql:
+                return {"id": "coordenador", "perfil_id": "perfil", "polo_id": None}
+            return None
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    conn = FakeConnection()
+
+    class FakePool:
+        def __init__(self):
+            self.obtidas = 0
+            self.devolvidas = 0
+
+        def getconn(self):
+            self.obtidas += 1
+            return conn
+
+        def putconn(self, connection):
+            assert connection is conn
+            self.devolvidas += 1
+
+    pool = FakePool()
+    monkeypatch.setattr(database, "get_connection_pool", lambda: pool)
+    service = PolosEscolasService(polos_repository_module.PostgresPolosEscolasRepository())
+    with pytest.raises(RuntimeError, match="falha na auditoria"):
+        service.create_polo(PoloCreateRequest(nome="Polo", coordenador_usuario_id="coordenador"), None, None)
+
+    assert pool.obtidas == pool.devolvidas == 1
+    assert conn.rollbacks == 1 and conn.commits == 0
+    assert any("FOR UPDATE" in sql for sql in conn.sql)
+    assert any("INSERT INTO polos" in sql for sql in conn.sql)
+    assert any("UPDATE usuarios" in sql for sql in conn.sql)
+
+
+def test_criacoes_simultaneas_nao_vinculam_coordenador_a_dois_polos(repos):
+    auth_repo, polo_repo = repos
+    _criar_usuario(auth_repo, "coord-simultaneo", "p-polo")
+    service = PolosEscolasService(polo_repo)
+    inicio = Barrier(2)
+
+    def criar(nome):
+        inicio.wait()
+        try:
+            return service.create_polo(
+                PoloCreateRequest(nome=nome, coordenador_usuario_id="coord-simultaneo"), None, None
+            )
+        except HTTPException as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        resultados = list(executor.map(criar, ("Polo A", "Polo B")))
+
+    assert sum(isinstance(result, HTTPException) and result.status_code == 400 for result in resultados) == 1
+    assert len(polo_repo.polos) == 1
+    assert auth_repo.usuarios["coord-simultaneo"]["polo_id"] in polo_repo.polos
 
 
 @pytest.mark.asyncio

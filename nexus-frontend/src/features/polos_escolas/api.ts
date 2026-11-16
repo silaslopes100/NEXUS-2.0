@@ -1,6 +1,7 @@
 import { apiClient } from '@/api/client';
 import {
   EscolaCreatePayload,
+  PoloCreatePayload,
   ResumoOperacionalEscola,
   ResumoOperacionalPolo,
 } from '@/types/polos';
@@ -45,7 +46,7 @@ export const polosEscolasApi = {
     return data;
   },
 
-  criarPolo: async (payload: any) => {
+  criarPolo: async (payload: PoloCreatePayload) => {
     const { data } = await http.post('/polos', payload);
     return data;
   },

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
+import { useCepAddress } from '@/features/polos_escolas/useCepAddress';
 
 interface EnderecoSchema {
   logradouro?: string;
@@ -73,6 +74,10 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
     secretario_cpf: escola.secretario_cpf || '',
     secretario_senha: '',
   });
+  const { changeAddress, lookup: cepLookup } = useCepAddress(
+    (update) => setForm((current) => ({ ...current, endereco: update(current.endereco) })),
+    escola.id,
+  );
 
   const [usuarios, setUsuarios] = useState<UsuarioVinculavel[]>([]);
   const [usuarioSelecionado, setUsuarioSelecionado] = useState<UsuarioVinculavel | null>(
@@ -123,13 +128,6 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
 
   const handleChange = (field: string, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleAddressChange = (key: keyof EnderecoSchema, value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      endereco: { ...prev.endereco, [key]: value },
-    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -213,12 +211,13 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
                 <input
                   type="text"
                   value={form.endereco[key] || ''}
-                  onChange={(e) => handleAddressChange(key, e.target.value)}
+                  onChange={(e) => changeAddress(key, e.target.value)}
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                 />
               </div>
             ))}
           </div>
+          {cepLookup.message && <p role={cepLookup.status === 'error' ? 'alert' : 'status'} className={`text-xs ${cepLookup.status === 'error' ? 'text-red-300' : 'text-slate-400'}`}>{cepLookup.message}</p>}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-300">Status</label>

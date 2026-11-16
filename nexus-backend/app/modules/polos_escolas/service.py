@@ -202,6 +202,10 @@ class PolosEscolasService:
     # ------------------------------------------------------------------
 
     def create_polo(self, dados: PoloCreateRequest, actor_id: Optional[str], ip: Optional[str]) -> PoloResponse:
+        with self.repo.transacao_criacao_polo() as repo:
+            return PolosEscolasService(repo)._create_polo_na_transacao(dados, actor_id, ip)
+
+    def _create_polo_na_transacao(self, dados: PoloCreateRequest, actor_id: Optional[str], ip: Optional[str]) -> PoloResponse:
         perfil_id = self._perfil_id_do_papel("coordenador_polo")
         if not perfil_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Perfil 'coordenador_polo' não configurado")
@@ -226,7 +230,7 @@ class PolosEscolasService:
 
         if dados.coordenador_usuario_id:
             # Vincula usuário existente; promove ao perfil coordenador_polo se necessário
-            coord = self.repo.get_usuario_by_id(dados.coordenador_usuario_id)
+            coord = self.repo.get_usuario_para_vinculo(dados.coordenador_usuario_id)
             if not coord:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND,
@@ -234,14 +238,19 @@ class PolosEscolasService:
                 )
             # Bloqueia apenas se o usuário já for COORDENADOR de outro polo.
             # (Ter polo_id comum — aluno, professor — não impede a promoção.)
-            ja_eh_coordenador = coord.get("perfil_id") == perfil_id
+            perfis_coordenador = {
+                str(perfil)
+                for nome in nomes_equivalentes("coordenador_polo")
+                if (perfil := self.repo.get_perfil_id_by_nome(nome))
+            }
+            ja_eh_coordenador = str(coord.get("perfil_id") or "") in perfis_coordenador
             if ja_eh_coordenador and coord.get("polo_id") and str(coord["polo_id"]) != str(polo_id):
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     detail="Usuário já é coordenador de outro polo",
                 )
             # Promove ao perfil coordenador_polo se ainda não tiver
-            if coord.get("perfil_id") != perfil_id:
+            if str(coord.get("perfil_id") or "") != str(perfil_id):
                 self.repo.update_usuario(str(coord["id"]), {"perfil_id": perfil_id})
             # Vincula o usuário ao polo
             self.repo.update_usuario(str(coord["id"]), {"polo_id": polo_id})

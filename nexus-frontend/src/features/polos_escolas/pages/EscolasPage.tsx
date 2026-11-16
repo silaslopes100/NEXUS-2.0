@@ -20,6 +20,7 @@ import {
 import { alunosApi } from '@/features/alunos/api';
 import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
+import { useCepAddress } from '@/features/polos_escolas/useCepAddress';
 import {
   EscolaCreatePayload,
   EscolaItem,
@@ -95,6 +96,10 @@ export const EscolasPage: React.FC = () => {
   const [feedback, setFeedback] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState<EscolaCreatePayload>(initialForm);
+  const { changeAddress, lookup: cepLookup } = useCepAddress(
+    (update) => setForm((current) => ({ ...current, endereco: update(current.endereco || {}) })),
+    createOpen ? 'escola' : null,
+  );
   const [selectedSchool, setSelectedSchool] = useState<EscolaItem | null>(null);
   const [summary, setSummary] = useState<ResumoOperacionalEscola | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -442,8 +447,9 @@ export const EscolasPage: React.FC = () => {
             <input required minLength={2} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="Nome da escola" value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} />
             {isAdmin && <select required className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={form.polo_id} onChange={(event) => setForm({ ...form, polo_id: event.target.value })}><option value="">Selecione o polo</option>{poles.map((polo) => <option key={polo.id} value={polo.id}>{polo.nome}</option>)}</select>}
             <div className="grid gap-3 sm:grid-cols-2">
-              {(['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'cep'] as const).map((field) => <input key={field} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder={field[0].toUpperCase() + field.slice(1)} value={form.endereco?.[field] || ''} onChange={(event) => setForm({ ...form, endereco: { ...form.endereco, [field]: event.target.value } })} />)}
+              {(['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'cep'] as const).map((field) => <input key={field} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder={field[0].toUpperCase() + field.slice(1)} value={form.endereco?.[field] || ''} onChange={(event) => changeAddress(field, event.target.value)} />)}
             </div>
+            {cepLookup.message && <p role={cepLookup.status === 'error' ? 'alert' : 'status'} className={`text-xs ${cepLookup.status === 'error' ? 'text-red-300' : 'text-slate-400'}`}>{cepLookup.message}</p>}
             <div className="border-t border-slate-800 pt-4"><h3 className="mb-3 text-sm font-semibold text-slate-200">Responsável da escola</h3><div className="grid gap-3 sm:grid-cols-2">
               <input required className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="Nome" value={form.secretario_nome} onChange={(event) => setForm({ ...form, secretario_nome: event.target.value })} />
               <input required minLength={11} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" placeholder="CPF" value={form.secretario_cpf} onChange={(event) => setForm({ ...form, secretario_cpf: event.target.value })} />

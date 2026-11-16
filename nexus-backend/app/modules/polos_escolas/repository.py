@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import json
 import uuid
+from contextlib import contextmanager, nullcontext
+from copy import deepcopy
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from threading import RLock
+from typing import Any, ContextManager, Dict, Iterator, List, Optional, Protocol, Tuple
 
 from app.core.database import get_db_cursor
 from app.modules.auth.roles import nomes_equivalentes
@@ -35,6 +38,8 @@ _COLUNAS_BOLETO = (
 
 
 class PolosEscolasRepositoryInterface(Protocol):
+    def transacao_criacao_polo(self) -> ContextManager[PolosEscolasRepositoryInterface]: ...
+    def get_usuario_para_vinculo(self, usuario_id: str) -> Optional[Dict[str, Any]]: ...
     # ---------- Usuários auxiliares ----------
     def get_perfil_id_by_nome(self, nome: str) -> Optional[str]: ...
     def get_usuario_by_email(self, email: str) -> Optional[Dict[str, Any]]: ...
@@ -228,23 +233,40 @@ def _colunas_endereco(data: Dict[str, Any]) -> Dict[str, Any]:
 class PostgresPolosEscolasRepository:
     """Implementação PostgreSQL do repositório de Polos & Escolas."""
 
+    def __init__(self, cursor: Any = None) -> None:
+        self._cursor_transacao = cursor
+
+    def _cursor(self):
+        return nullcontext(self._cursor_transacao) if self._cursor_transacao is not None else get_db_cursor()
+
+    @contextmanager
+    def transacao_criacao_polo(self) -> Iterator[PolosEscolasRepositoryInterface]:
+        with get_db_cursor() as cursor:
+            yield PostgresPolosEscolasRepository(cursor)
+
+    def get_usuario_para_vinculo(self, usuario_id: str) -> Optional[Dict[str, Any]]:
+        with self._cursor() as cur:
+            cur.execute("SELECT * FROM usuarios WHERE id = %s LIMIT 1 FOR UPDATE", (str(usuario_id),))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
     # ---------- Usuários auxiliares ----------
 
     def get_perfil_id_by_nome(self, nome: str) -> Optional[str]:
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute("SELECT id FROM perfis WHERE lower(nome) = lower(%s) LIMIT 1", (nome.strip(),))
             row = cur.fetchone()
             return str(row["id"]) if row else None
 
     def get_usuario_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute("SELECT * FROM usuarios WHERE lower(email) = lower(%s) LIMIT 1", (email.strip(),))
             row = cur.fetchone()
             return dict(row) if row else None
 
     def get_usuario_by_cpf(self, cpf: str) -> Optional[Dict[str, Any]]:
         clean = "".join(filter(str.isdigit, cpf))
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 "SELECT * FROM usuarios WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = %s LIMIT 1", (clean,)
             )
@@ -252,7 +274,7 @@ class PostgresPolosEscolasRepository:
             return dict(row) if row else None
 
     def get_usuario_by_id(self, usuario_id: str) -> Optional[Dict[str, Any]]:
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute("SELECT * FROM usuarios WHERE id = %s LIMIT 1", (str(usuario_id),))
             row = cur.fetchone()
             return dict(row) if row else None
@@ -268,7 +290,7 @@ class PostgresPolosEscolasRepository:
 
     def create_usuario(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO usuarios (
@@ -298,7 +320,7 @@ class PostgresPolosEscolasRepository:
         fields = [f"{k} = %s" for k in data]
         params = list(data.values())
         params.append(str(usuario_id))
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 f"UPDATE usuarios SET {', '.join(fields)}, atualizado_em = now() WHERE id = %s",
                 tuple(params),
@@ -359,7 +381,7 @@ class PostgresPolosEscolasRepository:
 
     def create_polo(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO polos (
@@ -390,14 +412,14 @@ class PostgresPolosEscolasRepository:
         fields = [f"{k} = %s" for k in data]
         params = list(data.values())
         params.append(str(polo_id))
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 f"UPDATE polos SET {', '.join(fields)}, atualizado_em = now() WHERE id = %s",
                 tuple(params),
             )
 
     def get_polo(self, polo_id: str) -> Optional[Dict[str, Any]]:
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute("SELECT * FROM polos WHERE id = %s LIMIT 1", (str(polo_id),))
             row = cur.fetchone()
             return dict(row) if row else None
@@ -1560,7 +1582,7 @@ class PostgresPolosEscolasRepository:
         dados_depois: Optional[Dict[str, Any]] = None,
         ip: Optional[str] = None,
     ) -> None:
-        with get_db_cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO logs_auditoria (
@@ -1583,6 +1605,7 @@ class InMemoryPolosEscolasRepository:
     """Implementação em memória para testes unitários isolados."""
 
     def __init__(self) -> None:
+        self._criacao_polo_lock = RLock()
         self.usuarios: Dict[str, Dict[str, Any]] = {}
         self.alunos: Dict[str, Dict[str, Any]] = {}
         self.perfis: Dict[str, str] = {
@@ -1614,6 +1637,23 @@ class InMemoryPolosEscolasRepository:
         self.treinamentos: Dict[str, Dict[str, Any]] = {}
         self.treinamentos_inscricoes: Dict[str, Dict[str, Any]] = {}
         self.logs_auditoria: List[Dict[str, Any]] = []
+
+    @contextmanager
+    def transacao_criacao_polo(self) -> Iterator[PolosEscolasRepositoryInterface]:
+        with self._criacao_polo_lock:
+            usuarios, polos, logs = deepcopy((self.usuarios, self.polos, self.logs_auditoria))
+            try:
+                yield self
+            except BaseException:
+                self.usuarios.clear()
+                self.usuarios.update(usuarios)
+                self.polos.clear()
+                self.polos.update(polos)
+                self.logs_auditoria[:] = logs
+                raise
+
+    def get_usuario_para_vinculo(self, usuario_id: str) -> Optional[Dict[str, Any]]:
+        return self.get_usuario_by_id(usuario_id)
 
     # ---------- Usuários ----------
 

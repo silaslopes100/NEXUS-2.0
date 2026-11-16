@@ -43,14 +43,18 @@ Permissões granulares: `p_dashboard_polo`, `p_licencas`, `p_alunos_polo`, `p_pr
 # ⚠️ REGRAS DE NEGÓCIO CRÍTICAS
 
 ## RN-01 — Cadastro unificado do Responsável/Coordenador de Polo
-Os dados de cadastro do **Responsável do Polo** devem ser **os mesmos** do **Coordenador do Polo**. **NÃO** deve existir endpoint separado `/polos/{id}/coordenador`. O cadastro do coordenador é feito automaticamente ao criar o Polo.
+Os dados de cadastro do **Responsável do Polo** devem ser **os mesmos** do **Coordenador do Polo**. **NÃO** deve existir endpoint separado `/polos/{id}/coordenador`. Ao criar o polo, o coordenador é criado ou vinculado na mesma operação.
 
 **Implicações:**
-- `POST /polos` cria o Polo **e** o usuário `coordenador_polo` em uma única transação
+- `POST /polos` cria o Polo e cria ou vincula o usuário `coordenador_polo` em uma única transação
 - `PUT /polos/{id}` sincroniza dados do coordenador (nome, CPF, e-mail, senha se enviada)
 - `DELETE /polos/{id}` desativa o usuário coordenador vinculado
 - O coordenador **não** aparece como cadastro independente em "Usuários e Staff"
 - Mesmo raciocínio para **Secretário de Escola** ao criar Escola
+
+**Fluxo atual:** o formulário de polo vincula um usuário existente com perfil de polo/coordenador; a API também aceita os dados para criar um coordenador. A criação do polo, o vínculo, os dados fiscais e a auditoria são confirmados em uma única transação.
+
+Nos cadastros e edições de polos e escolas, um CEP completo consulta o ViaCEP e preenche endereço, bairro, cidade e UF. O usuário pode editar os campos e preencher o endereço manualmente se a consulta falhar.
 
 ## RN-02 — Fluxo de Licenças (crítico)
 Implementar o fluxo completo de licenças:
