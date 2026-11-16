@@ -29,6 +29,7 @@ def comprar_licencas(
             "quantidade": dados.quantidade,
             "valor_unitario": dados.valor_unitario,
             "data_compra": dados.data,
+            "actor_id": actor_id,
         }
     )
     repo.ajustar_estoque(polo_id=polo_id, escola_id=None, delta_disponivel=dados.quantidade)

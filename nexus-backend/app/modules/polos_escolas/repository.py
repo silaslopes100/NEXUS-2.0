@@ -26,6 +26,14 @@ _SECRETARIO_JOIN = """
 """
 
 
+# Boletos no formato legado (BoletoResponse) lidos da tabela canônica `pagamentos`.
+_COLUNAS_BOLETO = (
+    "id, polo_id, pedido_id AS compra_id, valor, COALESCE(status, 'pendente') AS status, "
+    "vencimento_em AS data_vencimento, COALESCE(gateway_payment_id, asaas_payment_id) AS asaas_id, "
+    "COALESCE(boleto_url, invoice_url) AS url_pdf, criado_em"
+)
+
+
 class PolosEscolasRepositoryInterface(Protocol):
     # ---------- Usuários auxiliares ----------
     def get_perfil_id_by_nome(self, nome: str) -> Optional[str]: ...
@@ -623,41 +631,51 @@ class PostgresPolosEscolasRepository:
             row = cur.fetchone()
             result = {key: int(row[key] or 0) for key in row.keys()} if row else {}
 
-            # pedidos_* vêm do schema legado; a tabela pode não existir em bancos novos
+            # Tabela única `pedidos` (migrations 016/017).
             cur.execute(
-                "SELECT to_regclass('pedidos_licenca') IS NOT NULL AS lic, "
-                "to_regclass('pedidos_livros') IS NOT NULL AS liv"
+                f"""
+                SELECT COUNT(*) FILTER (WHERE tipo = 'licenca') AS lic,
+                       COUNT(*) FILTER (WHERE tipo = 'livro') AS liv
+                  FROM pedidos WHERE {escopo} = %s
+                """,
+                (valor,),
             )
-            guard = cur.fetchone()
-            result["pedidos_licencas"] = 0
-            result["pedidos_livros"] = 0
-            if guard["lic"]:
-                cur.execute(f"SELECT COUNT(*) AS total FROM pedidos_licenca WHERE {escopo} = %s", (valor,))
-                result["pedidos_licencas"] = int(cur.fetchone()["total"] or 0)
-            if guard["liv"]:
-                cur.execute(f"SELECT COUNT(*) AS total FROM pedidos_livros WHERE {escopo} = %s", (valor,))
-                result["pedidos_livros"] = int(cur.fetchone()["total"] or 0)
+            contagem = cur.fetchone()
+            result["pedidos_licencas"] = int(contagem["lic"] or 0)
+            result["pedidos_livros"] = int(contagem["liv"] or 0)
             return result
 
     # ---------- Movimentações / compras / boletos ----------
 
     def registrar_compra(self, data: Dict[str, Any]) -> str:
+        """Compra de licenças já paga (RN-02.1): vira um pedido `licenca/concluido`."""
         new_id = str(uuid.uuid4())
+        quantidade = int(data["quantidade"])
+        unitario = data.get("valor_unitario") or 0
+        total = unitario * quantidade
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO compras_licencas (id, polo_id, fornecedor, quantidade, valor_unitario, valor_total, data_compra, criado_em)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, now())
+                INSERT INTO pedidos (id, tipo, polo_id, solicitante_id, status, fornecedor,
+                                     valor_bruto, valor_total, pago_em, criado_em, atualizado_em)
+                VALUES (%s, 'licenca', %s, %s, 'concluido', %s, %s, %s, %s::date, now(), now())
                 """,
-                (
-                    new_id,
-                    data["polo_id"],
-                    data.get("fornecedor"),
-                    data["quantidade"],
-                    data.get("valor_unitario", 0),
-                    data.get("valor_unitario", 0) * data["quantidade"],
-                    data["data_compra"],
-                ),
+                (new_id, data["polo_id"], data.get("actor_id"), data.get("fornecedor"),
+                 total, total, data["data_compra"]),
+            )
+            cur.execute(
+                """
+                INSERT INTO pedidos_itens (pedido_id, descricao, quantidade, valor_unitario, valor_total)
+                VALUES (%s, 'Licenças', %s, %s, %s)
+                """,
+                (new_id, quantidade, unitario, total),
+            )
+            cur.execute(
+                """
+                INSERT INTO pedidos_status_historico (pedido_id, status_de, status_para, usuario_id, origem, observacao)
+                VALUES (%s, NULL, 'concluido', %s, 'usuario', 'Compra de licenças registrada')
+                """,
+                (new_id, data.get("actor_id")),
             )
         return new_id
 
@@ -724,7 +742,12 @@ class PostgresPolosEscolasRepository:
     def sum_compradas(self, polo_id: str) -> int:
         with get_db_cursor() as cur:
             cur.execute(
-                "SELECT COALESCE(SUM(quantidade), 0) as total FROM compras_licencas WHERE polo_id = %s",
+                """
+                SELECT COALESCE(SUM(pi.quantidade), 0) AS total
+                  FROM pedidos_itens pi
+                  JOIN pedidos p ON p.id = pi.pedido_id
+                 WHERE p.polo_id = %s AND p.tipo = 'licenca' AND p.status = 'concluido'
+                """,
                 (str(polo_id),),
             )
             return int(cur.fetchone()["total"])
@@ -748,39 +771,63 @@ class PostgresPolosEscolasRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        conds = ["polo_id = %s"]
+        # Compras = pedidos de licença concluídos (tabela única `pedidos`), no
+        # formato legado de CompraLicencaResponse.
+        data_compra = "COALESCE(p.pago_em, p.criado_em)::date"
+        conds = ["p.polo_id = %s", "p.tipo = 'licenca'", "p.status = 'concluido'"]
         params: List[Any] = [str(polo_id)]
         if data_inicio:
-            conds.append("data_compra >= %s")
+            conds.append(f"{data_compra} >= %s")
             params.append(data_inicio)
         if data_fim:
-            conds.append("data_compra <= %s")
+            conds.append(f"{data_compra} <= %s")
             params.append(data_fim)
         where = "WHERE " + " AND ".join(conds)
         with get_db_cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) as total FROM compras_licencas {where}", tuple(params))
+            cur.execute(f"SELECT COUNT(*) as total FROM pedidos p {where}", tuple(params))
             total = int(cur.fetchone()["total"])
             cur.execute(
-                f"SELECT * FROM compras_licencas {where} ORDER BY data_compra DESC LIMIT %s OFFSET %s",
+                f"""
+                SELECT p.id, p.polo_id, p.fornecedor,
+                       COALESCE(q.quantidade, 0) AS quantidade,
+                       CASE WHEN COALESCE(q.quantidade, 0) > 0
+                            THEN ROUND(p.valor_total / q.quantidade, 2) END AS valor_unitario,
+                       p.valor_total, {data_compra} AS data_compra,
+                       (SELECT pg.id FROM pagamentos pg
+                         WHERE pg.pedido_id = p.id AND pg.billing_type = 'BOLETO'
+                         ORDER BY pg.criado_em DESC LIMIT 1) AS boleto_id,
+                       p.criado_em
+                  FROM pedidos p
+                  LEFT JOIN LATERAL (
+                       SELECT SUM(pi.quantidade) AS quantidade FROM pedidos_itens pi WHERE pi.pedido_id = p.id
+                  ) q ON TRUE
+                {where}
+                ORDER BY {data_compra} DESC, p.criado_em DESC
+                LIMIT %s OFFSET %s
+                """,
                 tuple(params + [limit, offset]),
             )
             return total, [dict(r) for r in cur.fetchall()]
 
     def create_boleto(self, data: Dict[str, Any]) -> str:
         new_id = str(uuid.uuid4())
+        # Boletos vivem em `pagamentos` (billing_type = 'BOLETO').
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO boletos (id, polo_id, compra_id, valor, status, data_vencimento, asaas_id, url_pdf, criado_em)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
+                INSERT INTO pagamentos (id, pedido_id, polo_id, gateway, billing_type, valor, status,
+                                        vencimento_em, gateway_payment_id, asaas_payment_id, boleto_url,
+                                        criado_em, atualizado_em)
+                VALUES (%s, %s, %s, 'asaas', 'BOLETO', %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
-                    data["polo_id"],
                     data.get("compra_id"),
+                    data["polo_id"],
                     data.get("valor"),
                     data.get("status", "pendente"),
                     data.get("data_vencimento"),
+                    data.get("asaas_id"),
                     data.get("asaas_id"),
                     data.get("url_pdf"),
                 ),
@@ -789,7 +836,10 @@ class PostgresPolosEscolasRepository:
 
     def get_boleto(self, boleto_id: str) -> Optional[Dict[str, Any]]:
         with get_db_cursor() as cur:
-            cur.execute("SELECT * FROM boletos WHERE id = %s LIMIT 1", (str(boleto_id),))
+            cur.execute(
+                f"SELECT {_COLUNAS_BOLETO} FROM pagamentos WHERE id = %s AND billing_type = 'BOLETO' LIMIT 1",
+                (str(boleto_id),),
+            )
             row = cur.fetchone()
             return dict(row) if row else None
 
@@ -801,20 +851,21 @@ class PostgresPolosEscolasRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[int, List[Dict[str, Any]]]:
-        conds = ["polo_id = %s"]
+        conds = ["polo_id = %s", "billing_type = 'BOLETO'"]
         params: List[Any] = [str(polo_id)]
         if data_inicio:
-            conds.append("data_vencimento >= %s")
+            conds.append("vencimento_em >= %s")
             params.append(data_inicio)
         if data_fim:
-            conds.append("data_vencimento <= %s")
+            conds.append("vencimento_em <= %s")
             params.append(data_fim)
         where = "WHERE " + " AND ".join(conds)
         with get_db_cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) as total FROM boletos {where}", tuple(params))
+            cur.execute(f"SELECT COUNT(*) as total FROM pagamentos {where}", tuple(params))
             total = int(cur.fetchone()["total"])
             cur.execute(
-                f"SELECT * FROM boletos {where} ORDER BY data_vencimento DESC LIMIT %s OFFSET %s",
+                f"SELECT {_COLUNAS_BOLETO} FROM pagamentos {where} "
+                "ORDER BY vencimento_em DESC NULLS LAST, criado_em DESC LIMIT %s OFFSET %s",
                 tuple(params + [limit, offset]),
             )
             return total, [dict(r) for r in cur.fetchall()]

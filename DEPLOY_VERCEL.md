@@ -40,6 +40,25 @@ Configure `VITE_API_BASE_URL` com a URL pública da API, sem barra final, por
 exemplo `https://<api>.vercel.app`. Como o valor é incorporado ao build do Vite,
 configure-o também nos ambientes e gere um novo deploy após alterá-lo.
 
+### Pagamentos (Financeiro & Logística)
+
+| Variável | Obrigatória | Descrição |
+| --- | --- | --- |
+| `PAYMENT_ENV` | Sim | `sandbox` ou `producao`: ambiente dos gateways usado nas novas cobranças. |
+| `PAYMENT_SECRETS_KEY` | Sim | Chave Fernet que criptografa as credenciais dos gateways no banco. Gere com `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Trocar a chave obriga a recadastrar as credenciais. |
+| `PUBLIC_API_URL` | Sim | URL pública da API, sem barra final. Base das URLs de webhook (`{PUBLIC_API_URL}/financeiro/webhooks/{gateway}/{ambiente}`). |
+| `CRON_SECRET` | Sim | Segredo aleatório. A Vercel envia `Authorization: Bearer <CRON_SECRET>` ao chamar o cron. |
+
+As credenciais de cada gateway (API Key do Asaas, token do PagBank, access
+token do Mercado Pago e tokens de webhook) **não** vão em variáveis de
+ambiente: são cadastradas pelo admin na tela **Gateways de Pagamento** e ficam
+criptografadas na tabela `gateways_config`.
+
+O arquivo `nexus-backend/vercel.json` agenda `GET /financeiro/cron/reconciliar`
+uma vez por dia (limite do plano Hobby). No plano Pro, reduza o intervalo (por
+exemplo `*/30 * * * *`). O cron reprocessa webhooks com erro e consulta nos
+gateways as cobranças pendentes.
+
 ## Banco e dados existentes
 
 Antes do primeiro deploy, confirme que o PostgreSQL está acessível pelo Vercel,

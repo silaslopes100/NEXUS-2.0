@@ -18,17 +18,18 @@ from app.modules.comunicacao import router as comunicacao_router
 from app.modules.cupons import router as cupons_router
 from app.modules.cursos_disciplinas import router as cursos_disciplinas_router
 from app.modules.ead import router as ead_router
+from app.modules.financeiro import router as financeiro_router
 from app.modules.notas_historico import router as notas_historico_router
-from app.modules.pedidos_livros import router as pedidos_livros_router
 from app.modules.polos_escolas import router as polos_escolas_router
 from app.modules.presencas import router as presencas_router
 from app.modules.professores import router as professores_router
 from app.modules.transferencias import router as transferencias_router
 from app.modules.turmas import router as turmas_router
 
-# Nota: os módulos legados de gestão `alunos`, `licencas` e `financeiro` foram
-# absorvidos por `polos_escolas`. O router isolado de perfil
-# self-service do aluno é registrado separadamente, sem expor o CRUD legado.
+# Nota: os módulos legados de gestão `alunos` e `licencas` foram absorvidos por
+# `polos_escolas`. O router isolado de perfil self-service do aluno é registrado
+# separadamente, sem expor o CRUD legado. `financeiro` (2.4) substitui os
+# antigos `financeiro`/`pedidos_livros` e usa a tabela única `pedidos`.
 
 
 @asynccontextmanager
@@ -72,7 +73,7 @@ app.include_router(ead_router)
 app.include_router(notas_historico_router)
 app.include_router(certificados_router)
 app.include_router(cupons_router)
-app.include_router(pedidos_livros_router)
+app.include_router(financeiro_router)
 app.include_router(transferencias_router)
 app.include_router(comunicacao_router)
 

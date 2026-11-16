@@ -161,7 +161,9 @@ async def test_delete_disciplina_checks_database_references(
         reference_sql, params = cursor.executions[1]
         assert "professor_disciplinas" in reference_sql
         assert "disciplina_conteudos" in reference_sql
-        assert params == (str(disciplina_id),) * 10
+        assert "pedidos_itens" in reference_sql
+        assert "licencas_estoque" in reference_sql
+        assert params == (str(disciplina_id),) * 11
     assert (cursor.executions[-1][0].startswith("DELETE")) is delete_expected
 
 

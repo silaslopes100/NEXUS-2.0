@@ -1,7 +1,7 @@
 """Dependências FastAPI para autenticação, perfis e permissões granulares."""
 from __future__ import annotations
 
-from typing import Callable, List, Optional
+from typing import Callable, List, Literal, Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -76,12 +76,28 @@ async def get_current_active_user(
     return current_user
 
 
+# Perfis que enxergam dados de todos os Polos/Escolas.
+PERFIS_ESCOPO_GLOBAL = frozenset({"admin", "financeiro", "logistica"})
+
+
+def _tem_permissao(current_user: UserResponse, chave: str) -> bool:
+    """True se o usuário possui `chave` (aceita 'x' ou 'p_x')."""
+    target_key = chave.lower().strip()
+    target_p_key = f"p_{target_key}" if not target_key.startswith("p_") else target_key
+    user_perms = {p.lower().strip() for p in current_user.permissoes}
+    return (
+        target_key in user_perms
+        or target_p_key in user_perms
+        or (target_key.startswith("p_") and target_key[2:] in user_perms)
+    )
+
+
 async def get_scoped_user(
     current_user: UserResponse = Depends(get_current_user),
 ) -> dict:
     """Aplica o escopo de visibilidade com base no perfil do usuário."""
     perfil = perfil_do_usuario(current_user)
-    if perfil == "admin":
+    if perfil in PERFIS_ESCOPO_GLOBAL:
         return {"user": current_user, "polo_id": None, "escola_id": None}
     if perfil == "polo":
         if not current_user.polo_id:
@@ -124,7 +140,6 @@ def require_permissao(chave: str) -> Callable:
     Para outros perfis, valida se a chave (ou sua variante 'p_<chave>') está associada ao usuário.
     """
     target_key = chave.lower().strip()
-    target_p_key = f"p_{target_key}" if not target_key.startswith("p_") else target_key
 
     async def permissao_checker(
         current_user: UserResponse = Depends(get_current_user),
@@ -133,14 +148,7 @@ def require_permissao(chave: str) -> Callable:
         if current_user.perfil and current_user.perfil.nome.lower() == "admin":
             return current_user
 
-        user_perms = {p.lower().strip() for p in current_user.permissoes}
-        has_permission = (
-            target_key in user_perms
-            or target_p_key in user_perms
-            or (target_key.startswith("p_") and target_key[2:] in user_perms)
-        )
-
-        if not has_permission:
+        if not _tem_permissao(current_user, target_key):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Acesso negado: usuário não possui a permissão '{chave}'",
@@ -148,3 +156,20 @@ def require_permissao(chave: str) -> Callable:
         return current_user
 
     return permissao_checker
+
+
+def require_area(area: Literal["financeiro", "logistica"]) -> Callable:
+    """Acesso às áreas do módulo 2.4: admin, o perfil da própria área ou a permissão `p_<area>`."""
+
+    async def area_checker(
+        current_user: UserResponse = Depends(get_current_user),
+    ) -> UserResponse:
+        perfil = perfil_do_usuario(current_user)
+        if perfil in ("admin", area) or _tem_permissao(current_user, area):
+            return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Acesso negado: requer acesso à área '{area}'",
+        )
+
+    return area_checker
