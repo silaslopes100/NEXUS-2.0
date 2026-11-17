@@ -34,6 +34,7 @@ type DisciplinaForm = {
   qtd_aulas_prevista: string;
   tipo: string;
   eh_extra_grade: boolean;
+  preco: string;
 };
 
 const initialForm: DisciplinaForm = {
@@ -45,6 +46,19 @@ const initialForm: DisciplinaForm = {
   qtd_aulas_prevista: '10',
   tipo: 'presencial',
   eh_extra_grade: false,
+  preco: '',
+};
+
+const formatBRL = (valor?: number | null) =>
+  valor == null ? '-' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+
+/** "49,90" ou "49.90" -> 49.9; vazio -> null; inválido/negativo -> NaN. */
+const parsePreco = (valor: string): number | null => {
+  const texto = valor.trim().replace(/\s|R\$/g, '');
+  if (!texto) return null;
+  const normalizado = texto.includes(',') ? texto.replace(/\./g, '').replace(',', '.') : texto;
+  const numero = Number(normalizado);
+  return Number.isFinite(numero) && numero >= 0 ? Math.round(numero * 100) / 100 : Number.NaN;
 };
 
 const inputClass =
@@ -170,6 +184,7 @@ export const DisciplinasPage: React.FC = () => {
         disciplina.qtd_aulas_prevista == null ? '' : String(disciplina.qtd_aulas_prevista),
       tipo: disciplina.tipo || 'presencial',
       eh_extra_grade: disciplina.eh_extra_grade ?? false,
+      preco: disciplina.preco == null ? '' : Number(disciplina.preco).toFixed(2).replace('.', ','),
     });
     setFormError('');
     setIsFormOpen(true);
@@ -177,11 +192,17 @@ export const DisciplinasPage: React.FC = () => {
 
   const salvarDisciplina = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const preco = parsePreco(form.preco);
+    if (preco !== null && Number.isNaN(preco)) {
+      setFormError('Preço inválido. Use um valor como 49,90.');
+      return;
+    }
     setIsSaving(true);
     setFormError('');
     setFeedback(null);
 
     const payload: DisciplinaInput = {
+      preco,
       curso_id: form.curso_id || null,
       semestre: optionalNumber(form.semestre),
       nome: form.nome.trim(),
@@ -334,6 +355,7 @@ export const DisciplinasPage: React.FC = () => {
                   <th className="p-4">Carga horária</th>
                   <th className="p-4">Aulas previstas</th>
                   <th className="p-4">Tipo</th>
+                  <th className="p-4">Preço</th>
                   <th className="p-4">Aulas registradas</th>
                   <th className="p-4 text-right">Ações</th>
                 </tr>
@@ -358,6 +380,9 @@ export const DisciplinasPage: React.FC = () => {
                     </td>
                     <td className="p-4">{disciplina.qtd_aulas_prevista ?? '—'}</td>
                     <td className="p-4 capitalize">{disciplina.tipo || '—'}</td>
+                    <td className="p-4 whitespace-nowrap">
+                      {disciplina.preco == null ? '—' : formatBRL(Number(disciplina.preco))}
+                    </td>
                     <td className="p-4">
                       {(() => {
                         const resumo = aulasPorDisciplina.get(disciplina.id);
@@ -426,7 +451,7 @@ export const DisciplinasPage: React.FC = () => {
                 ))}
                 {disciplinasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-slate-500">
+                    <td colSpan={8} className="p-12 text-center text-slate-500">
                       {disciplinas.length
                         ? 'Nenhuma disciplina corresponde aos filtros.'
                         : 'Nenhuma disciplina cadastrada.'}
@@ -656,6 +681,17 @@ export const DisciplinasPage: React.FC = () => {
                   value={form.tipo}
                   onChange={(event) => setForm({ ...form, tipo: event.target.value })}
                 />
+              </label>
+              <label className="space-y-1.5 text-sm text-slate-300">
+                <span>Preço (R$)</span>
+                <input
+                  inputMode="decimal"
+                  placeholder="Ex.: 49,90"
+                  className={inputClass}
+                  value={form.preco}
+                  onChange={(event) => setForm({ ...form, preco: event.target.value })}
+                />
+                <span className="block text-xs text-slate-500">Informativo. Deixe em branco se não houver.</span>
               </label>
               <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-300">
                 <input

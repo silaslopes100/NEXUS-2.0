@@ -408,29 +408,71 @@ class RelatorioDrilldownResponse(BaseModel):
 # 6. Fluxo de Licenças (RN-02)
 # =========================================================================
 
+# Estoque por disciplina (Fase 3A): `disciplina_id` ausente/None = saldo "Sem disciplina".
+
 class LicencaCompraRequest(BaseModel):
     quantidade: int = Field(gt=0)
     fornecedor: str = Field(min_length=1)
     valor_unitario: float = Field(ge=0)
     data: date
+    disciplina_id: Optional[str] = None
 
 
 class LicencaDistribuirRequest(BaseModel):
     escola_id: str
     quantidade: int = Field(gt=0)
+    disciplina_id: Optional[str] = None
 
 
 class LicencaVenderRequest(BaseModel):
     aluno_id: str
     quantidade: int = Field(gt=0, le=1)
+    disciplina_id: Optional[str] = None
 
 
 class LicencaDevolverEscolaRequest(BaseModel):
     quantidade: int = Field(gt=0)
+    disciplina_id: Optional[str] = None
 
 
 class LicencaDevolverAlunoRequest(BaseModel):
+    """Devolução da licença do aluno. Com várias licenças ativas, informe `licenca_id`."""
+
+    aluno_id: Optional[str] = None
+    licenca_id: Optional[str] = None
+
+
+class LicencaReclassificarRequest(BaseModel):
+    """Move saldo do Polo entre disciplinas (padrão: do balde "Sem disciplina")."""
+
+    de_disciplina_id: Optional[str] = None
+    para_disciplina_id: Optional[str] = None
+    quantidade: int = Field(gt=0)
+
+
+class EstoqueDisciplinaItem(BaseModel):
+    materia_id: Optional[str] = None
+    disciplina_nome: Optional[str] = None
+    quantidade_disponivel: int = 0
+    quantidade_vendida: int = 0
+
+
+class EstoqueDisciplinaResponse(BaseModel):
+    polo_id: Optional[str] = None
+    escola_id: Optional[str] = None
+    total_disponivel: int
+    total_vendida: int
+    items: List[EstoqueDisciplinaItem]
+
+
+class LicencaAlunoAtivaResponse(BaseModel):
+    id: str
     aluno_id: str
+    escola_id: Optional[str] = None
+    polo_id: Optional[str] = None
+    materia_id: Optional[str] = None
+    disciplina_nome: Optional[str] = None
+    ativada_em: Optional[datetime] = None
 
 
 class MovimentacaoLicencaResponse(BaseModel):
@@ -441,6 +483,8 @@ class MovimentacaoLicencaResponse(BaseModel):
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
     aluno_id: Optional[str] = None
+    materia_id: Optional[str] = None
+    disciplina_nome: Optional[str] = None
     quantidade: int
     valor_unitario: Optional[float] = None
     status: str

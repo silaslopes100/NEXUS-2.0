@@ -42,6 +42,12 @@ import { PagamentosPage } from '@/features/financeiro/pages/PagamentosPage';
 import { PedidosLivrosUnidadePage } from '@/features/financeiro/pages/PedidosLivrosUnidadePage';
 import { PedidosPage } from '@/features/financeiro/pages/PedidosPage';
 import { ProdutosPage } from '@/features/financeiro/pages/ProdutosPage';
+import { ComprarLicencasPage } from '@/features/financeiro/pages/ComprarLicencasPage';
+import { LogisticaPage } from '@/features/financeiro/pages/LogisticaPage';
+import { RegrasPagamentoPage } from '@/features/financeiro/pages/RegrasPagamentoPage';
+import { VendasPage } from '@/features/financeiro/pages/VendasPage';
+import { FinanceiroDashboardPage } from '@/pages/dashboard/FinanceiroDashboardPage';
+import { LogisticaDashboardPage } from '@/pages/dashboard/LogisticaDashboardPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -87,16 +93,31 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/presencas" element={<PresencasPage />} />
           <Route path="/admin/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/admin/licencas" element={<LicencasPage />} />
-          <Route path="/admin/financeiro" element={<PagamentosPage />} />
-          <Route path="/admin/produtos" element={<ProdutosPage />} />
-          <Route path="/admin/gateways" element={<GatewaysPage />} />
           <Route path="/admin/cupons" element={<ModulePlaceholderPage />} />
-          <Route path="/admin/pedidos-livros" element={<PedidosPage />} />
           <Route path="/admin/transferencias" element={<TransferenciasPage />} />
           <Route path="/admin/auditoria" element={<LogsAuditoriaPage />} />
           <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="/admin/execucoes-batch" element={<ExecucoesBatchPage />} />
           <Route path="/admin/etl" element={<ExecucoesBatchPage />} />
+        </Route>
+
+        {/* Módulo 2.4 — Financeiro (admin + perfil financeiro; o backend restringe por área) */}
+        <Route element={<RequireRole roles={['admin', 'financeiro']} />}>
+          <Route path="/financeiro/dashboard" element={<FinanceiroDashboardPage />} />
+          <Route path="/admin/financeiro" element={<PagamentosPage />} />
+          <Route path="/admin/vendas" element={<VendasPage />} />
+          <Route path="/admin/pedidos" element={<PedidosPage />} />
+          <Route path="/admin/regras-pagamento" element={<RegrasPagamentoPage />} />
+          <Route path="/admin/produtos" element={<ProdutosPage />} />
+          <Route path="/admin/gateways" element={<GatewaysPage />} />
+        </Route>
+
+        {/* Módulo 2.4 — Logística (admin + perfil logística) */}
+        <Route element={<RequireRole roles={['admin', 'logistica']} />}>
+          <Route path="/logistica/dashboard" element={<LogisticaDashboardPage />} />
+          <Route path="/admin/logistica/pendentes" element={<LogisticaPage modo="pendentes" />} />
+          <Route path="/admin/logistica/historico" element={<LogisticaPage modo="historico" />} />
+          <Route path="/admin/pedidos-livros" element={<Navigate to="/admin/logistica/pendentes" replace />} />
         </Route>
 
         {/* Módulo Polo */}
@@ -111,7 +132,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/polo/transferencias" element={<TransferenciasPage />} />
           <Route path="/polo/licencas" element={<LicencasPage />} />
-          <Route path="/polo/comprar-licencas" element={<ModulePlaceholderPage />} />
+          <Route path="/polo/comprar-licencas" element={<ComprarLicencasPage />} />
           <Route path="/polo/livros" element={<PedidosLivrosUnidadePage />} />
         </Route>
 

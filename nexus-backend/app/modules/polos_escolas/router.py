@@ -48,9 +48,13 @@ from app.modules.polos_escolas.schemas import (
     FeedPostResponse,
     LembreteCreateRequest,
     LembreteResponse,
+    EstoqueDisciplinaResponse,
+    LicencaAlunoAtivaResponse,
     LicencaCompraRequest,
+    LicencaDevolverAlunoRequest,
     LicencaDevolverEscolaRequest,
     LicencaDistribuirRequest,
+    LicencaReclassificarRequest,
     LicencaVenderRequest,
     MessageResponse,
     MigracaoModalidadeRequest,
@@ -88,6 +92,10 @@ from app.modules.polos_escolas.service import PolosEscolasService
 router = APIRouter(tags=["Polos & Escolas"])
 
 _PERFIS_GESTAO = ["admin", "secretario_geral", "coordenador_polo"]
+# Perfis do módulo 2.4 (escopo global, sem polo_id): só LEEM a lista de Polos/Escolas
+# para os filtros das telas financeiras e de logística.
+_PERFIS_MODULO_COMERCIAL = ("financeiro", "logistica")
+_PERFIS_LEITURA_UNIDADES = _PERFIS_GESTAO + list(_PERFIS_MODULO_COMERCIAL)
 _PERFIS_ESCOLA = _PERFIS_GESTAO + ["secretario_escola"]
 _PERFIS_PROFESSOR = _PERFIS_ESCOLA + ["professor"]
 
@@ -139,7 +147,7 @@ async def create_polo(
     return service.create_polo(payload, current_user.id, client_ip)
 
 
-@router.get("/polos", response_model=PoloListResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+@router.get("/polos", response_model=PoloListResponse, dependencies=[Depends(require_role(_PERFIS_LEITURA_UNIDADES))])
 async def list_polos(
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
@@ -191,7 +199,7 @@ async def delete_polo(
 # 2. Escolas (RN-01)
 # =========================================================================
 
-@router.get("/escolas", response_model=EscolaListResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+@router.get("/escolas", response_model=EscolaListResponse, dependencies=[Depends(require_role(_PERFIS_LEITURA_UNIDADES))])
 async def list_escolas_gerenciamento(
     q: Optional[str] = Query(None, max_length=255),
     status_filter: Optional[str] = Query(None, alias="status", pattern="^(ativo|inativo)$"),
@@ -206,7 +214,7 @@ async def list_escolas_gerenciamento(
         if polo_id and str(polo_id) != polo_escopo:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Acesso negado a este Polo")
         polo_id = polo_escopo
-    elif polo_id:
+    elif polo_id and perfil_do_usuario(current_user) not in _PERFIS_MODULO_COMERCIAL:
         check_polo_scope(current_user, polo_id)
     return service.list_escolas(
         polo_id=polo_id,
@@ -397,7 +405,7 @@ async def relatorio_drilldown_pdf(
 # 5. Fluxo de Licenças (RN-02)
 # =========================================================================
 
-@router.post("/polos/{polo_id}/licencas/compra", response_model=MessageResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+@router.post("/polos/{polo_id}/licencas/compra", response_model=MessageResponse, dependencies=[Depends(require_role(["admin"]))])
 async def comprar_licencas(
     polo_id: str,
     payload: LicencaCompraRequest,
@@ -405,6 +413,7 @@ async def comprar_licencas(
     service: PolosEscolasService = Depends(get_polos_escolas_service),
     client_ip: Optional[str] = Depends(get_client_ip),
 ):
+    """Admin: registra compra externa já paga. O Polo compra pelo checkout (/financeiro/checkout)."""
     check_polo_scope(current_user, polo_id)
     return service.comprar_licencas(polo_id, payload, current_user.id, client_ip)
 
@@ -448,11 +457,54 @@ async def devolver_licencas_escola(
 @router.post("/alunos/{aluno_id}/licencas/devolver", response_model=MessageResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
 async def devolver_licenca_aluno(
     aluno_id: str,
+    payload: Optional[LicencaDevolverAlunoRequest] = None,
     current_user: UserResponse = Depends(get_current_user),
     service: PolosEscolasService = Depends(get_polos_escolas_service),
     client_ip: Optional[str] = Depends(get_client_ip),
 ):
-    return service.devolver_aluno(aluno_id, current_user.id, client_ip)
+    """Devolve a licença do aluno. Com mais de uma ativa (disciplinas diferentes), envie `licenca_id`."""
+    return service.devolver_aluno(aluno_id, current_user.id, client_ip, payload.licenca_id if payload else None)
+
+
+@router.get("/alunos/{aluno_id}/licencas", response_model=List[LicencaAlunoAtivaResponse], dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def list_licencas_aluno(
+    aluno_id: str,
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    """Licenças ativas do aluno (uma por disciplina)."""
+    return service.licencas_ativas_aluno(aluno_id)
+
+
+@router.get("/polos/{polo_id}/licencas/estoque", response_model=EstoqueDisciplinaResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+async def estoque_polo_por_disciplina(
+    polo_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    check_polo_scope(current_user, polo_id)
+    return service.estoque_por_disciplina(polo_id=polo_id)
+
+
+@router.get("/escolas/{escola_id}/licencas/estoque", response_model=EstoqueDisciplinaResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def estoque_escola_por_disciplina(
+    escola_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    check_escola_scope(current_user, escola_id)
+    return service.estoque_por_disciplina(escola_id=escola_id)
+
+
+@router.post("/polos/{polo_id}/licencas/reclassificar", response_model=MessageResponse, dependencies=[Depends(require_role(["admin"]))])
+async def reclassificar_licencas(
+    polo_id: str,
+    payload: LicencaReclassificarRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    """Admin: move saldo do Polo entre disciplinas (ex.: do saldo "Sem disciplina")."""
+    return service.reclassificar_licencas(polo_id, payload, current_user.id, client_ip)
 
 
 @router.get("/polos/{polo_id}/licencas/movimentacoes", response_model=MovimentacaoListResponse, dependencies=[Depends(require_role(_PERFIS_GESTAO))])

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Package, Pencil, Plus, RefreshCw, X } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
 import { Produto, TIPO_PEDIDO, TipoPedido, erroApi, formatBRL } from '@/features/financeiro/types';
+import { useDisciplinas } from '@/features/licencas/components/EstoqueDisciplina';
 
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500';
 const labelCls = 'mb-1 block text-xs font-semibold text-slate-400';
@@ -11,12 +12,13 @@ interface FormState {
   sku: string;
   nome: string;
   descricao: string;
+  disciplina_id: string;
   preco: string;
   peso_g: string;
   ativo: boolean;
 }
 
-const VAZIO: FormState = { tipo: 'livro', sku: '', nome: '', descricao: '', preco: '', peso_g: '', ativo: true };
+const VAZIO: FormState = { tipo: 'livro', sku: '', nome: '', descricao: '', disciplina_id: '', preco: '', peso_g: '', ativo: true };
 
 /** Catálogo de livros e licenças vendidos aos Polos (preço usado nos pedidos). */
 export const ProdutosPage: React.FC = () => {
@@ -27,6 +29,18 @@ export const ProdutosPage: React.FC = () => {
   const [form, setForm] = useState<FormState>(VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState('');
+  const disciplinas = useDisciplinas();
+  const nomeDisciplina = (id?: string | null) => disciplinas.find((d) => d.id === id)?.nome;
+
+  /** Ao escolher a disciplina, sugere o preço informativo dela se o campo estiver vazio. */
+  const escolherDisciplina = (id: string) => {
+    const disc = disciplinas.find((d) => d.id === id);
+    setForm((atual) => ({
+      ...atual,
+      disciplina_id: id,
+      preco: !atual.preco && disc?.preco != null ? Number(disc.preco).toFixed(2).replace('.', ',') : atual.preco,
+    }));
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +63,7 @@ export const ProdutosPage: React.FC = () => {
       sku: produto.sku,
       nome: produto.nome,
       descricao: produto.descricao || '',
+      disciplina_id: produto.disciplina_id || '',
       preco: String(produto.preco),
       peso_g: produto.peso_g != null ? String(produto.peso_g) : '',
       ativo: produto.ativo,
@@ -59,11 +74,13 @@ export const ProdutosPage: React.FC = () => {
     event.preventDefault();
     const preco = Number(form.preco.replace(',', '.'));
     if (Number.isNaN(preco) || preco < 0) { setErroForm('Preço inválido.'); return; }
+    if (form.tipo === 'licenca' && !form.disciplina_id) { setErroForm('Licença exige uma disciplina.'); return; }
     setSalvando(true);
     setErroForm('');
     const payload = {
       nome: form.nome.trim(),
       descricao: form.descricao.trim() || null,
+      disciplina_id: form.disciplina_id || null,
       preco,
       peso_g: form.peso_g ? Number(form.peso_g) : null,
       ativo: form.ativo,
@@ -121,7 +138,10 @@ export const ProdutosPage: React.FC = () => {
                 {items.map((p) => (
                   <tr key={p.id} className="text-slate-300 hover:bg-slate-800/40">
                     <td className="p-4 font-mono text-xs text-white">{p.sku}</td>
-                    <td className="p-4">{p.nome}</td>
+                    <td className="p-4">
+                      {p.nome}
+                      {p.disciplina_id && <p className="text-xs text-slate-500">{nomeDisciplina(p.disciplina_id) || 'Disciplina'}</p>}
+                    </td>
                     <td className="p-4 text-xs">{TIPO_PEDIDO[p.tipo]}</td>
                     <td className="p-4 text-right font-semibold text-white">{formatBRL(p.preco)}</td>
                     <td className="p-4 text-xs">{p.ativo ? <span className="text-emerald-400">Ativo</span> : <span className="text-slate-500">Inativo</span>}</td>
@@ -161,6 +181,19 @@ export const ProdutosPage: React.FC = () => {
             <div>
               <label className={labelCls}>Nome</label>
               <input className={inputClass} required minLength={2} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>Disciplina{form.tipo === 'licenca' ? ' *' : ' (opcional)'}</label>
+              <select
+                className={inputClass}
+                required={form.tipo === 'licenca'}
+                value={form.disciplina_id}
+                onChange={(e) => escolherDisciplina(e.target.value)}
+              >
+                <option value="">{form.tipo === 'licenca' ? 'Selecione' : 'Nenhuma'}</option>
+                {disciplinas.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
+              </select>
+              {form.tipo === 'licenca' && <p className="mt-1 text-[11px] text-slate-500">A licença paga entra no estoque desta disciplina no Polo.</p>}
             </div>
             <div>
               <label className={labelCls}>Descrição</label>

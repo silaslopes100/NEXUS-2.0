@@ -202,7 +202,10 @@ class AlunosGestaoService:
 
         try:
             matricula = self.repo.reingressar(
-                aluno_id, DadosReingresso(dados.modalidade, polo_id, escola_id, licencas), ator_id, ip
+                aluno_id,
+                DadosReingresso(dados.modalidade, polo_id, escola_id, licencas,
+                                _texto(dados.disciplina_id) if licencas else None),
+                ator_id, ip,
             )
         except ConflitoNegocio as exc:
             raise _erro(status.HTTP_409_CONFLICT, str(exc)) from exc

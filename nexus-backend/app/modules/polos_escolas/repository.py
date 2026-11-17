@@ -36,6 +36,18 @@ _COLUNAS_BOLETO = (
     "COALESCE(boleto_url, invoice_url) AS url_pdf, criado_em"
 )
 
+# Estoque por disciplina (migração 020): `materia_id=None` é o balde "Sem disciplina";
+# `TODAS_DISCIPLINAS` soma todos os saldos do local (KPIs e dashboards).
+TODAS_DISCIPLINAS = "*"
+
+
+def _filtro_local(polo_id: Optional[str], escola_id: Optional[str], alias: str = "") -> Tuple[str, str]:
+    """Linha de estoque do Polo (escola_id NULL) ou da Escola (polo_id NULL)."""
+    p = f"{alias}." if alias else ""
+    if escola_id:
+        return f"{p}escola_id = %s AND {p}polo_id IS NULL", str(escola_id)
+    return f"{p}polo_id = %s AND {p}escola_id IS NULL", str(polo_id)
+
 
 class PolosEscolasRepositoryInterface(Protocol):
     def transacao_criacao_polo(self) -> ContextManager[PolosEscolasRepositoryInterface]: ...
@@ -85,7 +97,8 @@ class PolosEscolasRepositoryInterface(Protocol):
 
     # ---------- Estoque de licenças ----------
     def get_estoque(
-        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None,
+        materia_id: Optional[str] = TODAS_DISCIPLINAS,
     ) -> Dict[str, Any]: ...
     def ajustar_estoque(
         self,
@@ -93,8 +106,13 @@ class PolosEscolasRepositoryInterface(Protocol):
         escola_id: Optional[str],
         delta_disponivel: int,
         delta_vendida: int = 0,
+        materia_id: Optional[str] = None,
     ) -> None: ...
+    def list_estoque_por_disciplina(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]: ...
     def list_estoques_escolas_do_polo(self, polo_id: str) -> List[Dict[str, Any]]: ...
+    def get_disciplina_nome(self, disciplina_id: str) -> Optional[str]: ...
 
     # NOVO: contagens operacionais agregadas (tela de detalhe Polo/Escola)
     def contagens_operacionais(
@@ -133,7 +151,11 @@ class PolosEscolasRepositoryInterface(Protocol):
 
     # ---------- Licenças de alunos ----------
     def vincular_licenca_aluno(self, data: Dict[str, Any]) -> str: ...
-    def get_licenca_aluno_ativa(self, aluno_id: str) -> Optional[Dict[str, Any]]: ...
+    def get_licenca_aluno_ativa(
+        self, aluno_id: str, materia_id: Optional[str] = TODAS_DISCIPLINAS
+    ) -> Optional[Dict[str, Any]]: ...
+    def get_licenca_aluno(self, licenca_id: str) -> Optional[Dict[str, Any]]: ...
+    def list_licencas_aluno_ativas(self, aluno_id: str) -> List[Dict[str, Any]]: ...
     def devolver_licenca_aluno(self, licenca_id: str) -> None: ...
     def count_licencas_vendidas_polo(self, polo_id: str) -> int: ...
     def count_licencas_vendidas_escola(self, escola_id: str) -> int: ...
@@ -548,23 +570,31 @@ class PostgresPolosEscolasRepository:
     # ---------- Estoque ----------
 
     def get_estoque(
-        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None,
+        materia_id: Optional[str] = TODAS_DISCIPLINAS,
     ) -> Dict[str, Any]:
-        col, value = ("polo_id", polo_id) if polo_id and not escola_id else ("escola_id", escola_id)
+        filtro, valor = _filtro_local(polo_id, escola_id)
+        params: List[Any] = [valor]
+        if materia_id != TODAS_DISCIPLINAS:
+            filtro += " AND materia_id IS NOT DISTINCT FROM %s::uuid"
+            params.append(str(materia_id) if materia_id else None)
         with get_db_cursor() as cur:
             cur.execute(
-                f"SELECT * FROM licencas_estoque WHERE {col} = %s AND {'escola_id IS NULL' if col == 'polo_id' else 'polo_id IS NOT NULL'} LIMIT 1",
-                (str(value),),
+                f"""
+                SELECT COALESCE(SUM(quantidade_disponivel), 0) AS quantidade_disponivel,
+                       COALESCE(SUM(quantidade_vendida), 0) AS quantidade_vendida
+                  FROM licencas_estoque WHERE {filtro}
+                """,
+                tuple(params),
             )
-            row = cur.fetchone()
-            if row:
-                return dict(row)
-            return {
-                "polo_id": polo_id,
-                "escola_id": escola_id,
-                "quantidade_disponivel": 0,
-                "quantidade_vendida": 0,
-            }
+            row = cur.fetchone() or {}
+        return {
+            "polo_id": None if escola_id else polo_id,
+            "escola_id": escola_id,
+            "materia_id": None if materia_id == TODAS_DISCIPLINAS else materia_id,
+            "quantidade_disponivel": int(row.get("quantidade_disponivel") or 0),
+            "quantidade_vendida": int(row.get("quantidade_vendida") or 0),
+        }
 
     def ajustar_estoque(
         self,
@@ -572,28 +602,36 @@ class PostgresPolosEscolasRepository:
         escola_id: Optional[str],
         delta_disponivel: int,
         delta_vendida: int = 0,
+        materia_id: Optional[str] = None,
     ) -> None:
+        """Ajusta o saldo de um local/disciplina (None = "Sem disciplina"). Nunca deixa negativo."""
+        filtro, valor = _filtro_local(polo_id, escola_id)
+        materia = str(materia_id) if materia_id else None
+        selecionar = f"""
+            SELECT id, quantidade_disponivel, quantidade_vendida FROM licencas_estoque
+             WHERE {filtro} AND materia_id IS NOT DISTINCT FROM %s::uuid
+             LIMIT 1 FOR UPDATE
+        """
         with get_db_cursor() as cur:
-            col, value = ("polo_id", polo_id) if polo_id and not escola_id else ("escola_id", escola_id)
-            other_check = "escola_id IS NULL" if col == "polo_id" else "polo_id IS NOT NULL"
-            cur.execute(
-                f"SELECT id, quantidade_disponivel, quantidade_vendida FROM licencas_estoque WHERE {col} = %s AND {other_check} LIMIT 1 FOR UPDATE",
-                (str(value),),
-            )
+            cur.execute(selecionar, (valor, materia))
             row = cur.fetchone()
             if row is None:
-                nova_disponivel = max(0, delta_disponivel)
-                nova_vendida = max(0, delta_vendida)
+                # Os índices únicos da 020 fazem a inserção concorrente virar no-op.
                 cur.execute(
                     """
-                    INSERT INTO licencas_estoque (polo_id, escola_id, quantidade_disponivel, quantidade_vendida, atualizado_em)
-                    VALUES (%s, %s, %s, %s, now())
+                    INSERT INTO licencas_estoque (polo_id, escola_id, materia_id, quantidade_disponivel,
+                                                  quantidade_vendida, atualizado_em)
+                    VALUES (%s, %s, %s, 0, 0, now())
+                    ON CONFLICT DO NOTHING
                     """,
-                    (polo_id, escola_id, nova_disponivel, nova_vendida),
+                    (None if escola_id else str(polo_id), str(escola_id) if escola_id else None, materia),
                 )
-                return
+                cur.execute(selecionar, (valor, materia))
+                row = cur.fetchone()
+            if row is None:
+                raise ValueError("Linha de estoque não encontrada")
             nova_disponivel = row["quantidade_disponivel"] + delta_disponivel
-            nova_vendida = row["quantidade_vendida"] + delta_vendida
+            nova_vendida = max(0, row["quantidade_vendida"] + delta_vendida)
             if nova_disponivel < 0:
                 raise ValueError("Estoque insuficiente para esta operação")
             cur.execute(
@@ -601,20 +639,49 @@ class PostgresPolosEscolasRepository:
                 (nova_disponivel, nova_vendida, row["id"]),
             )
 
+    def list_estoque_por_disciplina(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        filtro, valor = _filtro_local(polo_id, escola_id, alias="le")
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT le.materia_id, d.nome AS disciplina_nome,
+                       le.quantidade_disponivel, le.quantidade_vendida, le.atualizado_em
+                  FROM licencas_estoque le
+                  LEFT JOIN disciplinas d ON d.id = le.materia_id
+                 WHERE {filtro}
+                 ORDER BY (le.materia_id IS NULL) DESC, d.nome ASC
+                """,
+                (valor,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
     def list_estoques_escolas_do_polo(self, polo_id: str) -> List[Dict[str, Any]]:
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                SELECT e.id as escola_id, e.nome, COALESCE(le.quantidade_disponivel, 0) as disponivel,
-                       COALESCE(le.quantidade_vendida, 0) as vendida
+                SELECT e.id as escola_id, e.nome, COALESCE(SUM(le.quantidade_disponivel), 0) as disponivel,
+                       COALESCE(SUM(le.quantidade_vendida), 0) as vendida
                 FROM escolas e
-                LEFT JOIN licencas_estoque le ON le.escola_id = e.id
+                LEFT JOIN licencas_estoque le ON le.escola_id = e.id AND le.polo_id IS NULL
                 WHERE e.polo_id = %s
+                GROUP BY e.id, e.nome
                 ORDER BY e.nome ASC
                 """,
                 (str(polo_id),),
             )
             return [dict(r) for r in cur.fetchall()]
+
+    def get_disciplina_nome(self, disciplina_id: str) -> Optional[str]:
+        try:
+            uuid.UUID(str(disciplina_id))
+        except ValueError:
+            return None
+        with get_db_cursor() as cur:
+            cur.execute("SELECT nome FROM disciplinas WHERE id = %s", (str(disciplina_id),))
+            row = cur.fetchone()
+            return row["nome"] if row else None
 
     # NOVO: contagens operacionais agregadas (tela de detalhe Polo/Escola)
     def contagens_operacionais(
@@ -694,10 +761,10 @@ class PostgresPolosEscolasRepository:
             )
             cur.execute(
                 """
-                INSERT INTO pedidos_itens (pedido_id, descricao, quantidade, valor_unitario, valor_total)
-                VALUES (%s, 'Licenças', %s, %s, %s)
+                INSERT INTO pedidos_itens (pedido_id, disciplina_id, descricao, quantidade, valor_unitario, valor_total)
+                VALUES (%s, %s, 'Licenças', %s, %s, %s)
                 """,
-                (new_id, quantidade, unitario, total),
+                (new_id, data.get("materia_id"), quantidade, unitario, total),
             )
             cur.execute(
                 """
@@ -714,9 +781,9 @@ class PostgresPolosEscolasRepository:
             cur.execute(
                 """
                 INSERT INTO licencas_movimentacoes (
-                    id, tipo, polo_id, escola_id, aluno_id, quantidade, valor_unitario,
+                    id, tipo, polo_id, escola_id, aluno_id, materia_id, quantidade, valor_unitario,
                     status, actor_id, observacao, criado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
                 """,
                 (
                     new_id,
@@ -724,6 +791,7 @@ class PostgresPolosEscolasRepository:
                     data.get("polo_id"),
                     data.get("escola_id"),
                     data.get("aluno_id"),
+                    data.get("materia_id"),
                     data["quantidade"],
                     data.get("valor_unitario"),
                     data.get("status", "ativa"),
@@ -743,8 +811,11 @@ class PostgresPolosEscolasRepository:
             total = int(cur.fetchone()["total"])
             cur.execute(
                 """
-                SELECT * FROM licencas_movimentacoes WHERE polo_id = %s
-                ORDER BY criado_em DESC LIMIT %s OFFSET %s
+                SELECT lm.*, d.nome AS disciplina_nome
+                  FROM licencas_movimentacoes lm
+                  LEFT JOIN disciplinas d ON d.id = lm.materia_id
+                 WHERE lm.polo_id = %s
+                ORDER BY lm.criado_em DESC LIMIT %s OFFSET %s
                 """,
                 (str(polo_id), limit, offset),
             )
@@ -761,8 +832,11 @@ class PostgresPolosEscolasRepository:
             total = int(cur.fetchone()["total"])
             cur.execute(
                 """
-                SELECT * FROM licencas_movimentacoes WHERE escola_id = %s
-                ORDER BY criado_em DESC LIMIT %s OFFSET %s
+                SELECT lm.*, d.nome AS disciplina_nome
+                  FROM licencas_movimentacoes lm
+                  LEFT JOIN disciplinas d ON d.id = lm.materia_id
+                 WHERE lm.escola_id = %s
+                ORDER BY lm.criado_em DESC LIMIT %s OFFSET %s
                 """,
                 (str(escola_id), limit, offset),
             )
@@ -906,21 +980,47 @@ class PostgresPolosEscolasRepository:
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO licencas_alunos (id, aluno_id, escola_id, polo_id, movimentacao_id, status, ativada_em)
-                VALUES (%s, %s, %s, %s, %s, 'ativa', now())
+                INSERT INTO licencas_alunos (id, aluno_id, escola_id, polo_id, materia_id, movimentacao_id,
+                                             status, ativada_em)
+                VALUES (%s, %s, %s, %s, %s, %s, 'ativa', now())
                 """,
-                (new_id, data["aluno_id"], data.get("escola_id"), data.get("polo_id"), data.get("movimentacao_id")),
+                (new_id, data["aluno_id"], data.get("escola_id"), data.get("polo_id"),
+                 data.get("materia_id"), data.get("movimentacao_id")),
             )
         return new_id
 
-    def get_licenca_aluno_ativa(self, aluno_id: str) -> Optional[Dict[str, Any]]:
+    def get_licenca_aluno_ativa(
+        self, aluno_id: str, materia_id: Optional[str] = TODAS_DISCIPLINAS
+    ) -> Optional[Dict[str, Any]]:
+        sql = "SELECT * FROM licencas_alunos WHERE aluno_id = %s AND status = 'ativa'"
+        params: List[Any] = [str(aluno_id)]
+        if materia_id != TODAS_DISCIPLINAS:
+            sql += " AND materia_id IS NOT DISTINCT FROM %s::uuid"
+            params.append(str(materia_id) if materia_id else None)
         with get_db_cursor() as cur:
-            cur.execute(
-                "SELECT * FROM licencas_alunos WHERE aluno_id = %s AND status = 'ativa' LIMIT 1",
-                (str(aluno_id),),
-            )
+            cur.execute(sql + " ORDER BY ativada_em DESC LIMIT 1", tuple(params))
             row = cur.fetchone()
             return dict(row) if row else None
+
+    def get_licenca_aluno(self, licenca_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM licencas_alunos WHERE id = %s", (str(licenca_id),))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def list_licencas_aluno_ativas(self, aluno_id: str) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT la.*, d.nome AS disciplina_nome
+                  FROM licencas_alunos la
+                  LEFT JOIN disciplinas d ON d.id = la.materia_id
+                 WHERE la.aluno_id = %s AND la.status = 'ativa'
+                 ORDER BY la.ativada_em DESC
+                """,
+                (str(aluno_id),),
+            )
+            return [dict(r) for r in cur.fetchall()]
 
     def devolver_licenca_aluno(self, licenca_id: str) -> None:
         with get_db_cursor() as cur:
@@ -1876,17 +1976,31 @@ class InMemoryPolosEscolasRepository:
 
     # ---------- Estoque ----------
 
-    def _estoque_key(self, polo_id: Optional[str], escola_id: Optional[str]) -> Tuple[str, str]:
-        return (str(polo_id) if polo_id else "", str(escola_id) if escola_id else "")
+    def _estoque_key(
+        self, polo_id: Optional[str], escola_id: Optional[str], materia_id: Optional[str] = None
+    ) -> Tuple[str, str, str]:
+        # Linha da escola não guarda polo_id (mesma regra do CHECK no Postgres).
+        if escola_id:
+            return ("", str(escola_id), str(materia_id) if materia_id else "")
+        return (str(polo_id) if polo_id else "", "", str(materia_id) if materia_id else "")
 
     def get_estoque(
-        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None,
+        materia_id: Optional[str] = TODAS_DISCIPLINAS,
     ) -> Dict[str, Any]:
-        key = self._estoque_key(polo_id, escola_id)
-        estoque = self.estoques.get(key)
-        if estoque:
-            return estoque.copy()
-        return {"polo_id": polo_id, "escola_id": escola_id, "quantidade_disponivel": 0, "quantidade_vendida": 0}
+        base = self._estoque_key(polo_id, escola_id)[:2]
+        if materia_id == TODAS_DISCIPLINAS:
+            linhas = [e for k, e in self.estoques.items() if k[:2] == base]
+        else:
+            e = self.estoques.get(self._estoque_key(polo_id, escola_id, materia_id))
+            linhas = [e] if e else []
+        return {
+            "polo_id": None if escola_id else polo_id,
+            "escola_id": escola_id,
+            "materia_id": None if materia_id == TODAS_DISCIPLINAS else materia_id,
+            "quantidade_disponivel": sum(e["quantidade_disponivel"] for e in linhas),
+            "quantidade_vendida": sum(e["quantidade_vendida"] for e in linhas),
+        }
 
     def ajustar_estoque(
         self,
@@ -1894,16 +2008,40 @@ class InMemoryPolosEscolasRepository:
         escola_id: Optional[str],
         delta_disponivel: int,
         delta_vendida: int = 0,
+        materia_id: Optional[str] = None,
     ) -> None:
-        key = self._estoque_key(polo_id, escola_id)
+        key = self._estoque_key(polo_id, escola_id, materia_id)
         estoque = self.estoques.setdefault(
-            key, {"polo_id": polo_id, "escola_id": escola_id, "quantidade_disponivel": 0, "quantidade_vendida": 0}
+            key, {"polo_id": None if escola_id else polo_id, "escola_id": escola_id, "materia_id": materia_id or None,
+                  "quantidade_disponivel": 0, "quantidade_vendida": 0}
         )
         nova_disponivel = estoque["quantidade_disponivel"] + delta_disponivel
         if nova_disponivel < 0:
             raise ValueError("Estoque insuficiente para esta operação")
         estoque["quantidade_disponivel"] = nova_disponivel
-        estoque["quantidade_vendida"] += delta_vendida
+        estoque["quantidade_vendida"] = max(0, estoque["quantidade_vendida"] + delta_vendida)
+
+    def list_estoque_por_disciplina(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        base = self._estoque_key(polo_id, escola_id)[:2]
+        nomes = getattr(self, "disciplinas", {})
+        itens = []
+        for k, e in self.estoques.items():
+            if k[:2] != base:
+                continue
+            materia = e.get("materia_id")
+            itens.append({
+                "materia_id": materia,
+                "disciplina_nome": (nomes.get(str(materia)) or {}).get("nome") if materia else None,
+                "quantidade_disponivel": e["quantidade_disponivel"],
+                "quantidade_vendida": e["quantidade_vendida"],
+            })
+        itens.sort(key=lambda i: (i["materia_id"] is not None, i["disciplina_nome"] or ""))
+        return itens
+
+    def get_disciplina_nome(self, disciplina_id: str) -> Optional[str]:
+        return (getattr(self, "disciplinas", {}).get(str(disciplina_id)) or {}).get("nome")
 
     def list_estoques_escolas_do_polo(self, polo_id: str) -> List[Dict[str, Any]]:
         result = []
@@ -2079,11 +2217,27 @@ class InMemoryPolosEscolasRepository:
         }
         return new_id
 
-    def get_licenca_aluno_ativa(self, aluno_id: str) -> Optional[Dict[str, Any]]:
+    def get_licenca_aluno_ativa(
+        self, aluno_id: str, materia_id: Optional[str] = TODAS_DISCIPLINAS
+    ) -> Optional[Dict[str, Any]]:
         for lic in self.licencas_alunos.values():
-            if str(lic["aluno_id"]) == str(aluno_id) and lic["status"] == "ativa":
+            if str(lic["aluno_id"]) != str(aluno_id) or lic["status"] != "ativa":
+                continue
+            if materia_id == TODAS_DISCIPLINAS or (lic.get("materia_id") or None) == (materia_id or None):
                 return lic.copy()
         return None
+
+    def get_licenca_aluno(self, licenca_id: str) -> Optional[Dict[str, Any]]:
+        lic = self.licencas_alunos.get(str(licenca_id))
+        return lic.copy() if lic else None
+
+    def list_licencas_aluno_ativas(self, aluno_id: str) -> List[Dict[str, Any]]:
+        nomes = getattr(self, "disciplinas", {})
+        return [
+            {**lic, "disciplina_nome": (nomes.get(str(lic.get("materia_id"))) or {}).get("nome")}
+            for lic in self.licencas_alunos.values()
+            if str(lic["aluno_id"]) == str(aluno_id) and lic["status"] == "ativa"
+        ]
 
     def devolver_licenca_aluno(self, licenca_id: str) -> None:
         lic = self.licencas_alunos.get(str(licenca_id))

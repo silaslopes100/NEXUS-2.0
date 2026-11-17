@@ -29,13 +29,22 @@ CAMPOS_CREDENCIAIS: Dict[str, List[Dict[str, Any]]] = {
          "obrigatorio": False},
     ],
     "mercadopago": [{"campo": "access_token", "label": "Access Token (TEST-... no sandbox)", "obrigatorio": True}],
+    "fake": [],  # Simulador: sem credenciais
 }
 ROTULO_WEBHOOK_TOKEN = {
     "asaas": "Token de autenticação do webhook (o mesmo cadastrado no painel Asaas)",
     "pagbank": None,  # PagBank assina com ECDSA (chave pública)
     "mercadopago": "Assinatura secreta do webhook (painel Mercado Pago)",
+    "fake": None,  # Simulador: pagamentos confirmados pelo botão "Simular"
 }
-GATEWAYS_DISPONIVEIS = ("asaas", "pagbank", "mercadopago")
+GATEWAYS_DISPONIVEIS = ("asaas", "pagbank", "mercadopago", "fake")
+# Ambientes aceitos por gateway (o Simulador nunca roda em produção).
+AMBIENTES_POR_GATEWAY: Dict[str, tuple] = {
+    "asaas": ("sandbox", "producao"),
+    "pagbank": ("sandbox", "producao"),
+    "mercadopago": ("sandbox", "producao"),
+    "fake": ("sandbox",),
+}
 
 _override: Optional[Callable[[str, str, Optional[Dict[str, Any]]], PaymentGateway]] = None
 
@@ -60,6 +69,11 @@ def construir(gateway: str, ambiente: str, config: Optional[Dict[str, Any]], exi
         return _override(gateway, ambiente, config)
     if gateway not in ADAPTERS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Gateway '{gateway}' desconhecido")
+    if ambiente not in AMBIENTES_POR_GATEWAY.get(gateway, ()):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Gateway {gateway} não pode ser usado no ambiente '{ambiente}'",
+        )
     if not config or (exigir_ativo and not config.get("ativo")):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

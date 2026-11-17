@@ -46,6 +46,24 @@ CAMPOS_STATUS_EXTRA = frozenset(
     {"pago_em", "cancelado_em", "motivo_cancelamento", "enviado_em", "entregue_em"}
 )
 CAMPOS_GATEWAY_CONFIG = ("credenciais_cripto", "webhook_token_cripto", "ativo", "padrao", "atualizado_por")
+COLUNAS_REGRA = (
+    "nome", "aplica_tipo_pedido", "aplica_polo_id", "meios_permitidos", "gateway_preferido",
+    "dias_vencimento", "multa_pct", "juros_mes_pct", "desconto_antecipado_pct", "valor_minimo",
+    "prioridade", "ativo",
+)
+COLUNAS_ENVIO = ("transportadora", "codigo_rastreio", "volumes", "peso_total_g", "observacao", "etiqueta_gerada_em")
+# Campos do pedido editáveis pela logística/financeiro (Fase 3C).
+CAMPOS_PEDIDO_EDITAVEIS = frozenset({
+    "entrega_nome", "entrega_cep", "entrega_logradouro", "entrega_numero", "entrega_complemento",
+    "entrega_bairro", "entrega_cidade", "entrega_uf", "entrega_telefone", "observacao",
+    "valor_bruto", "desconto", "valor_total",
+})
+
+
+def regra_generica(regra: Dict[str, Any]) -> bool:
+    """Regra sem filtros (fallback do checkout)."""
+    return (not regra.get("aplica_tipo_pedido") and not regra.get("aplica_polo_id")
+            and float(regra.get("valor_minimo") or 0) == 0)
 GATEWAYS_REAIS = ("asaas", "pagbank", "mercadopago")
 COLUNAS_PAGAMENTO = (
     "pedido_id", "polo_id", "escola_id", "aluno_id", "gateway", "ambiente",
@@ -85,6 +103,8 @@ def where_periodo(
     coluna_status: Optional[str] = None,
     coluna_tipo: Optional[str] = None,
     coluna_pedido: Optional[str] = None,
+    coluna_gateway: Optional[str] = None,
+    coluna_meio: Optional[str] = None,
 ) -> Tuple[List[str], List[Any]]:
     """Monta condições SQL + parâmetros para os filtros de período/unidade.
 
@@ -132,6 +152,12 @@ def where_periodo(
     if filtros.pedido_id and coluna_pedido:
         conds.append(f"{coluna_pedido} = %s")
         params.append(filtros.pedido_id)
+    if filtros.gateway and coluna_gateway:
+        conds.append(f"{coluna_gateway} = %s")
+        params.append(filtros.gateway)
+    if filtros.meio and coluna_meio:
+        conds.append(f"{coluna_meio} = %s")
+        params.append(filtros.meio)
     return conds, params
 
 
@@ -176,7 +202,23 @@ class FinanceiroRepositoryInterface(Protocol):
     # apoio
     def get_endereco_polo(self, polo_id: str) -> Optional[Dict[str, Any]]: ...
     def get_dados_cobranca_polo(self, polo_id: str) -> Optional[Dict[str, Any]]: ...
-    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]: ...
+    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str], valor: Optional[float] = None) -> Optional[Dict[str, Any]]: ...
+    # regras de pagamento (Fase 3B)
+    def list_regras(self) -> List[Dict[str, Any]]: ...
+    def get_regra(self, regra_id: str) -> Optional[Dict[str, Any]]: ...
+    def create_regra(self, dados: Dict[str, Any]) -> Dict[str, Any]: ...
+    def update_regra(self, regra_id: str, campos: Dict[str, Any]) -> Optional[Dict[str, Any]]: ...
+    # logística (Fase 3C)
+    def registrar_envio(self, pedido_id: str, dados: Dict[str, Any], usuario_id: Optional[str]) -> str: ...
+    def update_pedido(self, pedido_id: str, campos: Dict[str, Any], itens: Optional[List[Dict[str, Any]]],
+                      usuario_id: Optional[str], observacao: str) -> None: ...
+    # exportação e etiqueta (Fase 4)
+    def ultimos_envios(self, pedido_ids: Sequence[str]) -> Dict[str, Dict[str, Any]]: ...
+    def get_configuracao(self, chave: str) -> Any: ...
+    def marcar_etiqueta_gerada(self, envio_id: str) -> None: ...
+    # vendas (Fase 3D)
+    def kpis_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> Dict[str, Any]: ...
+    def serie_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> List[Dict[str, Any]]: ...
     # gateways
     def get_gateway_config(self, gateway: str, ambiente: str) -> Optional[Dict[str, Any]]: ...
     def list_gateway_configs(self) -> List[Dict[str, Any]]: ...
@@ -191,7 +233,8 @@ class FinanceiroRepositoryInterface(Protocol):
                           payment_id: Optional[str], payload: Any) -> Optional[str]: ...
     def finalizar_webhook(self, webhook_id: str, status: str, erro: Optional[str] = None) -> None: ...
     def get_webhook(self, webhook_id: str) -> Optional[Dict[str, Any]]: ...
-    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]: ...
+    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int,
+                      payment_id: Optional[str] = None) -> Tuple[int, List[Dict[str, Any]]]: ...
     def list_webhooks_com_erro(self, max_tentativas: int = 5, limite: int = 50) -> List[Dict[str, Any]]: ...
 
 
@@ -410,6 +453,7 @@ class PostgresFinanceiroRepository:
         conds, params = where_periodo(
             filtros, escopo, alias="pg", coluna_data="pg.criado_em",
             coluna_status="pg.status", coluna_tipo="p.tipo", coluna_pedido="pg.pedido_id",
+            coluna_gateway="pg.gateway", coluna_meio="pg.billing_type",
         )
         where = _where(conds)
         with get_db_cursor() as cur:
@@ -457,7 +501,8 @@ class PostgresFinanceiroRepository:
             )
             return _limpar(cur.fetchone())
 
-    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str], valor: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        """Regra mais específica (Polo > tipo) e, no empate, a de menor prioridade."""
         with get_db_cursor() as cur:
             cur.execute(
                 """
@@ -465,12 +510,209 @@ class PostgresFinanceiroRepository:
                  WHERE ativo
                    AND (aplica_tipo_pedido IS NULL OR aplica_tipo_pedido = %s)
                    AND (aplica_polo_id IS NULL OR aplica_polo_id::text = %s)
-                 ORDER BY (aplica_polo_id IS NULL), (aplica_tipo_pedido IS NULL), prioridade
+                   AND (%s::numeric IS NULL OR valor_minimo <= %s::numeric)
+                 ORDER BY (aplica_polo_id IS NULL), (aplica_tipo_pedido IS NULL), prioridade, valor_minimo DESC
                  LIMIT 1
                 """,
-                (tipo, str(polo_id or "")),
+                (tipo, str(polo_id or ""), valor, valor),
             )
             return _limpar(cur.fetchone())
+
+    # ---------------- regras de pagamento ----------------
+
+    _SELECT_REGRA = """
+        SELECT r.*, po.nome AS polo_nome
+          FROM regras_pagamento r LEFT JOIN polos po ON po.id = r.aplica_polo_id
+    """
+
+    def list_regras(self) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(self._SELECT_REGRA + " ORDER BY r.ativo DESC, r.prioridade, r.nome")
+            return [_limpar(r) for r in cur.fetchall()]
+
+    def get_regra(self, regra_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            uuid.UUID(str(regra_id))
+        except ValueError:
+            return None
+        with get_db_cursor() as cur:
+            cur.execute(self._SELECT_REGRA + " WHERE r.id = %s", (str(regra_id),))
+            return _limpar(cur.fetchone())
+
+    def create_regra(self, dados: Dict[str, Any]) -> Dict[str, Any]:
+        campos = _filtrar_colunas(dados, COLUNAS_REGRA)
+        cols = ", ".join(campos)
+        marks = ", ".join(["%s"] * len(campos))
+        with get_db_cursor() as cur:
+            cur.execute(f"INSERT INTO regras_pagamento ({cols}) VALUES ({marks}) RETURNING id", tuple(campos.values()))
+            regra_id = str(cur.fetchone()["id"])
+        return self.get_regra(regra_id)
+
+    def update_regra(self, regra_id: str, campos: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        campos = _filtrar_colunas(campos, COLUNAS_REGRA)
+        if campos:
+            sets = ", ".join(f"{k} = %s" for k in campos)
+            with get_db_cursor() as cur:
+                cur.execute(
+                    f"UPDATE regras_pagamento SET {sets}, atualizado_em = now() WHERE id = %s",
+                    (*campos.values(), str(regra_id)),
+                )
+        return self.get_regra(regra_id)
+
+    # ---------------- logística ----------------
+
+    def registrar_envio(self, pedido_id: str, dados: Dict[str, Any], usuario_id: Optional[str]) -> str:
+        campos = _filtrar_colunas(dados, COLUNAS_ENVIO)
+        cols = "".join(f", {k}" for k in campos)
+        marks = "".join(", %s" for _ in campos)
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"INSERT INTO envios (pedido_id, enviado_por, enviado_em{cols}) "
+                f"VALUES (%s, %s, now(){marks}) RETURNING id",
+                (str(pedido_id), usuario_id, *campos.values()),
+            )
+            return str(cur.fetchone()["id"])
+
+    def update_pedido(self, pedido_id: str, campos: Dict[str, Any], itens: Optional[List[Dict[str, Any]]],
+                      usuario_id: Optional[str], observacao: str) -> None:
+        campos = _filtrar_colunas(campos, CAMPOS_PEDIDO_EDITAVEIS)
+        with get_db_cursor() as cur:
+            if campos:
+                sets = ", ".join(f"{k} = %s" for k in campos)
+                cur.execute(
+                    f"UPDATE pedidos SET {sets}, atualizado_em = now() WHERE id = %s",
+                    (*campos.values(), str(pedido_id)),
+                )
+            if itens is not None:
+                cur.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (str(pedido_id),))
+                for item in itens:
+                    cur.execute(
+                        """
+                        INSERT INTO pedidos_itens (pedido_id, produto_id, disciplina_id, descricao,
+                                                   quantidade, valor_unitario, valor_total)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (str(pedido_id), item.get("produto_id"), item.get("disciplina_id"), item.get("descricao"),
+                         item["quantidade"], item["valor_unitario"], item["valor_total"]),
+                    )
+            cur.execute(
+                """
+                INSERT INTO pedidos_status_historico (pedido_id, status_de, status_para, usuario_id, origem, observacao)
+                SELECT id, status, status, %s, 'usuario', %s FROM pedidos WHERE id = %s
+                """,
+                (usuario_id, observacao, str(pedido_id)),
+            )
+
+    # ---------------- exportação e etiqueta ----------------
+
+    def ultimos_envios(self, pedido_ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+        if not pedido_ids:
+            return {}
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (pedido_id) * FROM envios
+                 WHERE pedido_id::text = ANY(%s)
+                 ORDER BY pedido_id, criado_em DESC
+                """,
+                (list({str(i) for i in pedido_ids}),),
+            )
+            return {r["pedido_id"]: r for r in (_limpar(x) for x in cur.fetchall())}
+
+    def get_configuracao(self, chave: str) -> Any:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT valor FROM configuracoes WHERE chave = %s", (chave,))
+            row = cur.fetchone()
+            return row["valor"] if row else None
+
+    def marcar_etiqueta_gerada(self, envio_id: str) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "UPDATE envios SET etiqueta_gerada_em = now(), atualizado_em = now() WHERE id = %s",
+                (str(envio_id),),
+            )
+
+    # ---------------- vendas ----------------
+
+    def _where_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> Tuple[str, List[Any]]:
+        conds, params = where_periodo(filtros, escopo, alias="p", coluna_data="p.criado_em", coluna_tipo="p.tipo")
+        return _where(conds), params
+
+    def kpis_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> Dict[str, Any]:
+        where, params = self._where_vendas(filtros, escopo)
+        pago = "p.pago_em IS NOT NULL AND p.status <> 'cancelado'"
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT COUNT(*) FILTER (WHERE p.status <> 'cancelado') AS pedidos,
+                       COUNT(*) FILTER (WHERE {pago}) AS pedidos_pagos,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago}), 0) AS receita_paga,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE p.status = 'aguardando_pagamento'), 0) AS a_receber,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'licenca'), 0) AS receita_licencas,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'livro'), 0) AS receita_livros
+                  FROM pedidos p {where}
+                """,
+                tuple(params),
+            )
+            kpis = _limpar(cur.fetchone()) or {}
+            cur.execute(
+                f"""
+                SELECT p.tipo, COALESCE(SUM(pi.quantidade), 0) AS quantidade
+                  FROM pedidos p JOIN pedidos_itens pi ON pi.pedido_id = p.id
+                  {where}{' AND ' if where else ' WHERE '}{pago}
+                 GROUP BY p.tipo
+                """,
+                tuple(params),
+            )
+            quantidades = {r["tipo"]: int(r["quantidade"]) for r in cur.fetchall()}
+            cur.execute(
+                f"""
+                SELECT COALESCE(SUM(pg.valor), 0) AS vencido
+                  FROM pagamentos pg JOIN pedidos p ON p.id = pg.pedido_id
+                  {where}{' AND ' if where else ' WHERE '}pg.status = 'vencido' AND p.status = 'aguardando_pagamento'
+                """,
+                tuple(params),
+            )
+            vencido = float(cur.fetchone()["vencido"] or 0)
+            cur.execute(
+                f"SELECT p.status, COUNT(*) AS pedidos, COALESCE(SUM(p.valor_total), 0) AS valor "
+                f"FROM pedidos p {where} GROUP BY p.status ORDER BY p.status",
+                tuple(params),
+            )
+            por_status = [_limpar(r) for r in cur.fetchall()]
+            cur.execute(
+                f"""
+                SELECT p.polo_id, po.nome AS polo_nome,
+                       COUNT(*) FILTER (WHERE {pago}) AS pedidos_pagos,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago}), 0) AS receita
+                  FROM pedidos p LEFT JOIN polos po ON po.id = p.polo_id
+                  {where}
+                 GROUP BY p.polo_id, po.nome
+                HAVING COUNT(*) FILTER (WHERE {pago}) > 0
+                 ORDER BY receita DESC LIMIT 10
+                """,
+                tuple(params),
+            )
+            top = [_limpar(r) for r in cur.fetchall()]
+        return {**kpis, "vencido": vencido, "licencas_vendidas": quantidades.get("licenca", 0),
+                "livros_vendidos": quantidades.get("livro", 0), "por_status": por_status, "top_polos": top}
+
+    def serie_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> List[Dict[str, Any]]:
+        where, params = self._where_vendas(filtros, escopo)
+        pago = "p.pago_em IS NOT NULL AND p.status <> 'cancelado'"
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT to_char(date_trunc('month', p.criado_em), 'YYYY-MM') AS mes,
+                       COUNT(*) FILTER (WHERE p.status <> 'cancelado') AS pedidos,
+                       COUNT(*) FILTER (WHERE {pago}) AS pedidos_pagos,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago}), 0) AS receita
+                  FROM pedidos p {where}
+                 GROUP BY 1 ORDER BY 1
+                """,
+                tuple(params),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
 
     # ---------------- gateways ----------------
 
@@ -554,7 +796,7 @@ class PostgresFinanceiroRepository:
                  ORDER BY pg.atualizado_em NULLS FIRST, pg.criado_em
                  LIMIT %s
                 """,
-                (list(GATEWAYS_REAIS), limite),
+                ([*GATEWAYS_REAIS, "fake"], limite),
             )
             return [_limpar(r) for r in cur.fetchall()]
 
@@ -592,11 +834,15 @@ class PostgresFinanceiroRepository:
             cur.execute("SELECT * FROM webhook_eventos WHERE id = %s", (str(webhook_id),))
             return _limpar(cur.fetchone())
 
-    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]:
+    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int,
+                      payment_id: Optional[str] = None) -> Tuple[int, List[Dict[str, Any]]]:
         conds, params = [], []
         if gateway:
             conds.append("gateway = %s")
             params.append(gateway)
+        if payment_id:
+            conds.append("gateway_payment_id = %s")
+            params.append(payment_id)
         if status:
             conds.append("status = %s")
             params.append(status)
@@ -644,6 +890,7 @@ def _casa_periodo(
     campo_data: str,
     campo_status: Optional[str] = "status",
     tipo: Optional[str] = None,
+    pagamento: bool = False,
 ) -> bool:
     """Equivalente em Python de `where_periodo`."""
     d = _data_de(registro.get(campo_data))
@@ -673,6 +920,11 @@ def _casa_periodo(
         return False
     if filtros.pedido_id and registro.get("pedido_id") != filtros.pedido_id:
         return False
+    if pagamento:
+        if filtros.gateway and registro.get("gateway") != filtros.gateway:
+            return False
+        if filtros.meio and registro.get("billing_type") != filtros.meio:
+            return False
     return True
 
 
@@ -828,7 +1080,7 @@ class InMemoryFinanceiroRepository:
 
         filtrados = [
             pg for pg in self.pagamentos.values()
-            if _casa_periodo(pg, filtros, escopo, campo_data="criado_em", tipo=tipo_do(pg))
+            if _casa_periodo(pg, filtros, escopo, campo_data="criado_em", tipo=tipo_do(pg), pagamento=True)
         ]
         filtrados.sort(key=lambda pg: pg["criado_em"], reverse=True)
         pagina = filtrados[filtros.offset: filtros.offset + filtros.limit]
@@ -849,16 +1101,152 @@ class InMemoryFinanceiroRepository:
         p = self.polos.get(str(polo_id))
         return {"id": str(polo_id), **p} if p else None
 
-    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    def get_regra_pagamento(self, tipo: str, polo_id: Optional[str], valor: Optional[float] = None) -> Optional[Dict[str, Any]]:
         candidatas = [
             r for r in self.regras
             if r.get("ativo", True)
             and r.get("aplica_tipo_pedido") in (None, tipo)
             and r.get("aplica_polo_id") in (None, polo_id)
+            and (valor is None or float(r.get("valor_minimo") or 0) <= valor)
         ]
         candidatas.sort(key=lambda r: (r.get("aplica_polo_id") is None, r.get("aplica_tipo_pedido") is None,
-                                       r.get("prioridade", 100)))
+                                       r.get("prioridade", 100), -float(r.get("valor_minimo") or 0)))
         return dict(candidatas[0]) if candidatas else None
+
+    # regras de pagamento
+    def _regra_completa(self, r: Dict[str, Any]) -> Dict[str, Any]:
+        out = {"multa_pct": 0, "juros_mes_pct": 0, "desconto_antecipado_pct": 0, "valor_minimo": 0,
+               "prioridade": 100, "dias_vencimento": 3, "meios_permitidos": ["BOLETO", "PIX"], "ativo": True,
+               "aplica_tipo_pedido": None, "aplica_polo_id": None, "gateway_preferido": None, **r}
+        out.setdefault("id", str(uuid.uuid4()))
+        out["polo_nome"] = (self.polos.get(out.get("aplica_polo_id") or "") or {}).get("nome")
+        return out
+
+    def list_regras(self) -> List[Dict[str, Any]]:
+        regras = [self._regra_completa(r) for r in self.regras]
+        return sorted(regras, key=lambda r: (not r["ativo"], r["prioridade"], r["nome"]))
+
+    def get_regra(self, regra_id: str) -> Optional[Dict[str, Any]]:
+        for r in self.regras:
+            if r.get("id") == str(regra_id):
+                return self._regra_completa(r)
+        return None
+
+    def create_regra(self, dados: Dict[str, Any]) -> Dict[str, Any]:
+        regra = {"id": str(uuid.uuid4()), **_filtrar_colunas(dados, COLUNAS_REGRA),
+                 "criado_em": _agora(), "atualizado_em": _agora()}
+        self.regras.append(regra)
+        return self._regra_completa(regra)
+
+    def update_regra(self, regra_id: str, campos: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        for r in self.regras:
+            if r.get("id") == str(regra_id):
+                r.update(_filtrar_colunas(campos, COLUNAS_REGRA))
+                r["atualizado_em"] = _agora()
+                return self._regra_completa(r)
+        return None
+
+    # logística
+    def registrar_envio(self, pedido_id: str, dados: Dict[str, Any], usuario_id: Optional[str]) -> str:
+        eid = str(uuid.uuid4())
+        self.envios.append({"id": eid, "pedido_id": str(pedido_id), "volumes": 1,
+                            **_filtrar_colunas(dados, COLUNAS_ENVIO),
+                            "enviado_por": usuario_id, "enviado_em": _agora(), "criado_em": _agora()})
+        return eid
+
+    def update_pedido(self, pedido_id: str, campos: Dict[str, Any], itens: Optional[List[Dict[str, Any]]],
+                      usuario_id: Optional[str], observacao: str) -> None:
+        p = self.pedidos[str(pedido_id)]
+        p.update(_filtrar_colunas(campos, CAMPOS_PEDIDO_EDITAVEIS))
+        p["atualizado_em"] = _agora()
+        if itens is not None:
+            self.itens = [i for i in self.itens if i["pedido_id"] != str(pedido_id)]
+            for item in itens:
+                self.itens.append({"id": str(uuid.uuid4()), "pedido_id": str(pedido_id), **item})
+        self.historico.append({
+            "id": str(uuid.uuid4()), "pedido_id": str(pedido_id), "status_de": p["status"],
+            "status_para": p["status"], "usuario_id": usuario_id, "origem": "usuario",
+            "observacao": observacao, "criado_em": _agora(),
+        })
+
+    # exportação e etiqueta
+    def ultimos_envios(self, pedido_ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+        ids = {str(i) for i in pedido_ids}
+        out: Dict[str, Dict[str, Any]] = {}
+        for e in sorted(self.envios, key=lambda x: x["criado_em"]):
+            if e["pedido_id"] in ids:
+                out[e["pedido_id"]] = dict(e)
+        return out
+
+    def get_configuracao(self, chave: str) -> Any:
+        return getattr(self, "configuracoes", {}).get(chave)
+
+    def marcar_etiqueta_gerada(self, envio_id: str) -> None:
+        for e in self.envios:
+            if e["id"] == str(envio_id):
+                e["etiqueta_gerada_em"] = _agora()
+
+    # vendas
+    def _pedidos_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> List[Dict[str, Any]]:
+        sem_status = filtros.model_copy(update={"status": None})
+        return [p for p in self.pedidos.values()
+                if _casa_periodo(p, sem_status, escopo, campo_data="criado_em", tipo=p["tipo"])]
+
+    @staticmethod
+    def _pago(p: Dict[str, Any]) -> bool:
+        return bool(p.get("pago_em")) and p["status"] != "cancelado"
+
+    def kpis_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> Dict[str, Any]:
+        pedidos = self._pedidos_vendas(filtros, escopo)
+        pagos = [p for p in pedidos if self._pago(p)]
+        ids_pagos = {p["id"] for p in pagos}
+        tipo_por_id = {p["id"]: p["tipo"] for p in pedidos}
+        quantidades: Dict[str, int] = {}
+        for i in self.itens:
+            if i["pedido_id"] in ids_pagos:
+                tipo = tipo_por_id[i["pedido_id"]]
+                quantidades[tipo] = quantidades.get(tipo, 0) + int(i["quantidade"])
+        aguardando = {p["id"] for p in pedidos if p["status"] == "aguardando_pagamento"}
+        por_status: Dict[str, Dict[str, Any]] = {}
+        for p in pedidos:
+            s = por_status.setdefault(p["status"], {"status": p["status"], "pedidos": 0, "valor": 0.0})
+            s["pedidos"] += 1
+            s["valor"] += float(p["valor_total"] or 0)
+        polos: Dict[Optional[str], Dict[str, Any]] = {}
+        for p in pagos:
+            item = polos.setdefault(p.get("polo_id"), {
+                "polo_id": p.get("polo_id"),
+                "polo_nome": (self.polos.get(p.get("polo_id") or "") or {}).get("nome"),
+                "pedidos_pagos": 0, "receita": 0.0,
+            })
+            item["pedidos_pagos"] += 1
+            item["receita"] += float(p["valor_total"] or 0)
+        return {
+            "pedidos": sum(1 for p in pedidos if p["status"] != "cancelado"),
+            "pedidos_pagos": len(pagos),
+            "receita_paga": sum(float(p["valor_total"] or 0) for p in pagos),
+            "a_receber": sum(float(p["valor_total"] or 0) for p in pedidos if p["id"] in aguardando),
+            "receita_licencas": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "licenca"),
+            "receita_livros": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "livro"),
+            "vencido": sum(float(pg["valor"] or 0) for pg in self.pagamentos.values()
+                           if pg.get("status") == "vencido" and pg.get("pedido_id") in aguardando),
+            "licencas_vendidas": quantidades.get("licenca", 0),
+            "livros_vendidos": quantidades.get("livro", 0),
+            "por_status": sorted(por_status.values(), key=lambda s: s["status"]),
+            "top_polos": sorted(polos.values(), key=lambda x: x["receita"], reverse=True)[:10],
+        }
+
+    def serie_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> List[Dict[str, Any]]:
+        meses: Dict[str, Dict[str, Any]] = {}
+        for p in self._pedidos_vendas(filtros, escopo):
+            mes = p["criado_em"].strftime("%Y-%m")
+            m = meses.setdefault(mes, {"mes": mes, "pedidos": 0, "pedidos_pagos": 0, "receita": 0.0})
+            if p["status"] != "cancelado":
+                m["pedidos"] += 1
+            if self._pago(p):
+                m["pedidos_pagos"] += 1
+                m["receita"] += float(p["valor_total"] or 0)
+        return [meses[k] for k in sorted(meses)]
 
     # gateways
     def get_gateway_config(self, gateway: str, ambiente: str) -> Optional[Dict[str, Any]]:
@@ -935,9 +1323,11 @@ class InMemoryFinanceiroRepository:
         w = self.webhooks.get(str(webhook_id))
         return dict(w) if w else None
 
-    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int) -> Tuple[int, List[Dict[str, Any]]]:
+    def list_webhooks(self, gateway: Optional[str], status: Optional[str], limit: int, offset: int,
+                      payment_id: Optional[str] = None) -> Tuple[int, List[Dict[str, Any]]]:
         itens = [dict(w) for w in self.webhooks.values()
-                 if (not gateway or w["gateway"] == gateway) and (not status or w["status"] == status)]
+                 if (not gateway or w["gateway"] == gateway) and (not status or w["status"] == status)
+                 and (not payment_id or w.get("gateway_payment_id") == payment_id)]
         itens.sort(key=lambda w: w["recebido_em"], reverse=True)
         return len(itens), itens[offset: offset + limit]
 

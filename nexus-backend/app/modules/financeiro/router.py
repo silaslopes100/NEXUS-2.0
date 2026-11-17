@@ -12,8 +12,21 @@ from app.core.config import settings
 from app.modules.auth.dependencies import get_current_user, require_area, require_role
 from app.modules.auth.schemas import UserResponse
 from app.modules.financeiro.repository import FinanceiroRepositoryInterface, get_financeiro_repository
+from app.modules.financeiro.operacao_service import OperacaoService
+from app.modules.financeiro.relatorios import RelatoriosService
 from app.modules.financeiro.schemas import (
     Ambiente,
+    CheckoutOpcoesResponse,
+    CheckoutRequest,
+    CheckoutResponse,
+    EntregaConfirmar,
+    EnvioCreate,
+    PedidoUpdate,
+    RegraPagamentoCreate,
+    RegraPagamentoResponse,
+    RegraPagamentoUpdate,
+    VendasKpisResponse,
+    VendasSerieItem,
     CobrancaRequest,
     FiltrosPeriodo,
     GatewayConfigUpdate,
@@ -28,10 +41,11 @@ from app.modules.financeiro.schemas import (
     ProdutoListResponse,
     ProdutoResponse,
     ProdutoUpdate,
+    SimularPagamentoRequest,
     TipoPedido,
 )
 from app.modules.financeiro.cobranca_service import CobrancaService
-from app.modules.financeiro.service import FinanceiroService
+from app.modules.financeiro.service import FinanceiroService, escopo_do_usuario
 
 router = APIRouter(prefix="/financeiro", tags=["Financeiro & Logística"])
 
@@ -51,6 +65,12 @@ def get_cobranca_service(
     return CobrancaService(repo=repo)
 
 
+def get_operacao_service(
+    repo: FinanceiroRepositoryInterface = Depends(get_financeiro_repository),
+) -> OperacaoService:
+    return OperacaoService(repo=repo)
+
+
 def filtros_periodo(
     data_inicio: Optional[date] = None,
     data_fim: Optional[date] = None,
@@ -63,6 +83,8 @@ def filtros_periodo(
     status_filtro: Optional[str] = Query(None, alias="status"),
     tipo: Optional[TipoPedido] = None,
     pedido_id: Optional[str] = None,
+    gateway: Optional[str] = None,
+    meio: Optional[str] = Query(None, pattern="^(BOLETO|PIX|CREDIT_CARD)$"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> FiltrosPeriodo:
@@ -74,13 +96,69 @@ def filtros_periodo(
         return FiltrosPeriodo(
             data_inicio=data_inicio, data_fim=data_fim, mes=mes, semestre=semestre, ano=ano,
             polo_id=polo_id, escola_id=escola_id, modalidade=modalidade, status=status_filtro,
-            tipo=tipo, pedido_id=pedido_id, limit=limit, offset=offset,
+            tipo=tipo, pedido_id=pedido_id, gateway=gateway, meio=meio, limit=limit, offset=offset,
         )
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=[{"loc": e["loc"], "msg": e["msg"]} for e in exc.errors()],
         ) from exc
+
+
+def get_relatorios_service(
+    repo: FinanceiroRepositoryInterface = Depends(get_financeiro_repository),
+) -> RelatoriosService:
+    return RelatoriosService(repo=repo)
+
+
+# ---------------------------------------------------------------------------
+# Exportações e etiqueta (Fase 4) — declaradas antes das rotas /{id}
+# ---------------------------------------------------------------------------
+
+_FORMATO = Query("pdf", pattern="^(pdf|xlsx)$", description="pdf ou xlsx")
+
+
+@router.get("/vendas/exportar", dependencies=[Depends(require_area("financeiro"))])
+async def exportar_vendas(
+    formato: str = _FORMATO,
+    filtros: FiltrosPeriodo = Depends(filtros_periodo),
+    current_user: UserResponse = Depends(get_current_user),
+    service: RelatoriosService = Depends(get_relatorios_service),
+):
+    """Relatório de vendas (KPIs, mensal, top Polos, status e pedidos pagos) com os filtros da tela."""
+    return service.vendas(filtros, formato, current_user)
+
+
+@router.get("/pagamentos/exportar", dependencies=[Depends(require_area("financeiro"))])
+async def exportar_pagamentos(
+    formato: str = _FORMATO,
+    filtros: FiltrosPeriodo = Depends(filtros_periodo),
+    current_user: UserResponse = Depends(get_current_user),
+    service: RelatoriosService = Depends(get_relatorios_service),
+):
+    """Histórico de boletos/PIX com resumo por status."""
+    return service.pagamentos(filtros, formato, current_user)
+
+
+@router.get("/pedidos/exportar", dependencies=[Depends(require_area("financeiro", "logistica"))])
+async def exportar_pedidos(
+    formato: str = _FORMATO,
+    filtros: FiltrosPeriodo = Depends(filtros_periodo),
+    current_user: UserResponse = Depends(get_current_user),
+    service: RelatoriosService = Depends(get_relatorios_service),
+):
+    """Histórico de pedidos (inclui envio/rastreio). No XLSX, aba extra com os itens."""
+    return service.pedidos(filtros, formato, current_user)
+
+
+@router.get("/pedidos/{pedido_id}/etiqueta", dependencies=[Depends(require_area("logistica"))])
+async def etiqueta_pedido(
+    pedido_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    service: RelatoriosService = Depends(get_relatorios_service),
+):
+    """Etiqueta 10×15 (uma página por volume + declaração de conteúdo)."""
+    return service.etiqueta(pedido_id, current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -167,14 +245,15 @@ async def alterar_status_pedido(
     pedido_id: str,
     payload: PedidoStatusUpdate,
     current_user: UserResponse = Depends(get_current_user),
-    service: FinanceiroService = Depends(get_financeiro_service),
+    operacao: OperacaoService = Depends(get_operacao_service),
 ):
-    """Baixa manual de pagamento, conclusão ou cancelamento (com motivo)."""
-    campos = {"motivo_cancelamento": payload.motivo_cancelamento} if payload.status == "cancelado" else None
-    return service.alterar_status(
-        pedido_id, payload.status, current_user.id, origem="usuario",
-        observacao=payload.observacao or payload.motivo_cancelamento, campos=campos,
-    )
+    """Baixa manual de pagamento, conclusão ou cancelamento (com motivo).
+
+    Cancelar também cancela a cobrança pendente; a baixa manual de licença credita o estoque.
+    """
+    if payload.status == "cancelado":
+        return operacao.cancelar_pedido(pedido_id, payload.motivo_cancelamento or "", current_user)
+    return operacao.baixa_manual(pedido_id, payload.status, payload.observacao, current_user)
 
 
 @router.get(
@@ -188,6 +267,148 @@ async def get_pedido(
     service: FinanceiroService = Depends(get_financeiro_service),
 ):
     return service.get_pedido(pedido_id, current_user)
+
+
+@router.put(
+    "/pedidos/{pedido_id}",
+    response_model=PedidoResponse,
+    dependencies=[Depends(require_area("financeiro", "logistica"))],
+)
+async def editar_pedido(
+    pedido_id: str,
+    payload: PedidoUpdate,
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Edita endereço/observação; itens só enquanto aguarda pagamento e sem cobrança pendente."""
+    return operacao.editar_pedido(pedido_id, payload, current_user)
+
+
+# ---------------------------------------------------------------------------
+# Logística (Fase 3C)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/pedidos/{pedido_id}/envio",
+    response_model=PedidoResponse,
+    dependencies=[Depends(require_area("logistica"))],
+)
+async def marcar_enviado(
+    pedido_id: str,
+    payload: EnvioCreate,
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Registra o envio (transportadora, rastreio, volumes, peso) e marca o pedido como enviado."""
+    return operacao.marcar_enviado(pedido_id, payload, current_user)
+
+
+@router.post(
+    "/pedidos/{pedido_id}/entregue",
+    response_model=PedidoResponse,
+    dependencies=[Depends(require_area("logistica"))],
+)
+async def marcar_entregue(
+    pedido_id: str,
+    payload: Optional[EntregaConfirmar] = None,
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    return operacao.marcar_entregue(pedido_id, payload.observacao if payload else None, current_user)
+
+
+# ---------------------------------------------------------------------------
+# Checkout e regras de pagamento (Fase 3B)
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/checkout/opcoes",
+    response_model=CheckoutOpcoesResponse,
+    dependencies=[Depends(require_role(["admin", "financeiro", "polo", "escola"]))],
+)
+async def opcoes_checkout(
+    tipo: TipoPedido,
+    valor: Optional[float] = Query(None, ge=0),
+    polo_id: Optional[str] = None,
+    current_user: UserResponse = Depends(get_current_user),
+    service: CobrancaService = Depends(get_cobranca_service),
+):
+    """Meios de pagamento e vencimento oferecidos pela regra aplicável."""
+    escopo = escopo_do_usuario(current_user)
+    if escopo.polo_id:
+        polo_id = escopo.polo_id
+    elif escopo.escola_id:
+        polo_id = current_user.polo_id
+    return service.opcoes_checkout(tipo, polo_id, valor)
+
+
+@router.post(
+    "/checkout",
+    response_model=CheckoutResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+)
+async def checkout(
+    payload: CheckoutRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Cria o pedido e gera o boleto/PIX. Se o gateway falhar, o pedido fica aguardando pagamento."""
+    return operacao.checkout(payload, current_user)
+
+
+@router.get("/regras", response_model=list[RegraPagamentoResponse], dependencies=[Depends(require_area("financeiro"))])
+async def list_regras(operacao: OperacaoService = Depends(get_operacao_service)):
+    return operacao.listar_regras()
+
+
+@router.post(
+    "/regras",
+    response_model=RegraPagamentoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_area("financeiro"))],
+)
+async def create_regra(payload: RegraPagamentoCreate, operacao: OperacaoService = Depends(get_operacao_service)):
+    return operacao.criar_regra(payload)
+
+
+@router.put("/regras/{regra_id}", response_model=RegraPagamentoResponse, dependencies=[Depends(require_area("financeiro"))])
+async def update_regra(
+    regra_id: str, payload: RegraPagamentoUpdate, operacao: OperacaoService = Depends(get_operacao_service),
+):
+    return operacao.atualizar_regra(regra_id, payload)
+
+
+@router.post(
+    "/regras/{regra_id}/desativar",
+    response_model=RegraPagamentoResponse,
+    dependencies=[Depends(require_area("financeiro"))],
+)
+async def desativar_regra(regra_id: str, operacao: OperacaoService = Depends(get_operacao_service)):
+    return operacao.desativar_regra(regra_id)
+
+
+# ---------------------------------------------------------------------------
+# Vendas (Fase 3D)
+# ---------------------------------------------------------------------------
+
+@router.get("/vendas/kpis", response_model=VendasKpisResponse, dependencies=[Depends(require_area("financeiro"))])
+async def vendas_kpis(
+    filtros: FiltrosPeriodo = Depends(filtros_periodo),
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    return operacao.kpis_vendas(filtros, current_user)
+
+
+@router.get("/vendas/serie", response_model=list[VendasSerieItem], dependencies=[Depends(require_area("financeiro"))])
+async def vendas_serie(
+    filtros: FiltrosPeriodo = Depends(filtros_periodo),
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Série mensal (pedidos, pagos e receita) pelo mês de criação do pedido."""
+    return operacao.serie_vendas(filtros, current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +453,35 @@ async def cancelar_pagamento(
 ):
     """Cancela a cobrança no gateway e no NEXUS (o pedido continua aguardando pagamento)."""
     return service.cancelar_pagamento(pagamento_id, current_user)
+
+
+@router.post(
+    "/pagamentos/{pagamento_id}/segunda-via",
+    response_model=PagamentoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_area("financeiro"))],
+)
+async def segunda_via(
+    pagamento_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Cobrança vencida: cancela e gera outra com novo vencimento (mesmo meio)."""
+    return operacao.segunda_via(pagamento_id, current_user)
+
+
+@router.post(
+    "/pagamentos/{pagamento_id}/simular",
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def simular_pagamento(
+    pagamento_id: str,
+    payload: SimularPagamentoRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    service: CobrancaService = Depends(get_cobranca_service),
+):
+    """Simulador (sandbox): confirma, vence ou cancela a cobrança como se fosse um webhook do gateway."""
+    return service.simular(pagamento_id, payload.status, current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -303,11 +553,12 @@ async def receber_webhook(
 async def list_webhook_eventos(
     gateway: Optional[str] = None,
     status_filtro: Optional[str] = Query(None, alias="status"),
+    payment_id: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     service: CobrancaService = Depends(get_cobranca_service),
 ):
-    return service.listar_webhooks(gateway, status_filtro, limit, offset)
+    return service.listar_webhooks(gateway, status_filtro, limit, offset, payment_id)
 
 
 # ---------------------------------------------------------------------------

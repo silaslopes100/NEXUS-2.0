@@ -21,6 +21,7 @@ import httpx
 
 from app.modules.financeiro.gateways.base import (
     CobrancaCriada,
+    Encargos,
     EventoPagamento,
     GatewayError,
     HttpGatewayBase,
@@ -91,6 +92,7 @@ class MercadoPagoGateway(HttpGatewayBase):
         referencia: str,
         notification_url: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        encargos: Optional[Encargos] = None,  # VERIFICAR NA DOC: multa/juros/desconto ainda não enviados
     ) -> CobrancaCriada:
         metodo = METODOS.get(meio)
         if not metodo:

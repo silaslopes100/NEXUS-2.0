@@ -17,7 +17,7 @@ from app.modules.auth.repository import InMemoryAuthRepository, set_auth_reposit
 from app.modules.auth.schemas import PerfilResponse, UserResponse
 from app.modules.financeiro import pedidos as regras
 from app.modules.financeiro.repository import InMemoryFinanceiroRepository, set_financeiro_repository
-from app.modules.financeiro.schemas import EnderecoEntrega, PedidoCreate, PedidoItemIn, ProdutoCreate
+from app.modules.financeiro.schemas import EnderecoEntrega, PedidoCreate, PedidoItemIn, ProdutoCreate, ProdutoUpdate
 from app.modules.financeiro.service import FinanceiroService
 
 POLO_A, POLO_B = "polo-a", "polo-b"
@@ -48,7 +48,20 @@ def service(repo):
 
 
 def _produto(service, tipo="livro", sku="LIV-1", preco=10.0, ativo=True):
-    return service.create_produto(ProdutoCreate(tipo=tipo, sku=sku, nome=f"Produto {sku}", preco=preco, ativo=ativo))
+    disciplina = "disc-1" if tipo == "licenca" else None  # licença exige disciplina (Fase 3A)
+    return service.create_produto(ProdutoCreate(tipo=tipo, sku=sku, nome=f"Produto {sku}", preco=preco,
+                                                ativo=ativo, disciplina_id=disciplina))
+
+
+def test_produto_licenca_exige_disciplina():
+    service = FinanceiroService(InMemoryFinanceiroRepository())
+    with pytest.raises(HTTPException) as exc:
+        service.create_produto(ProdutoCreate(tipo="licenca", sku="LIC-X", nome="Licença X", preco=10))
+    assert exc.value.status_code == 422
+    prod = _produto(service, tipo="licenca", sku="LIC-Y")
+    with pytest.raises(HTTPException) as exc:
+        service.update_produto(prod.id, ProdutoUpdate(disciplina_id=None))
+    assert exc.value.status_code == 422
 
 
 # ---------------------------------------------------------------------------

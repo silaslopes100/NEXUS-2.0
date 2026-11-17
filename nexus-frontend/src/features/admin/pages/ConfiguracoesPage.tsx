@@ -10,6 +10,7 @@ import {
   Sliders,
 } from 'lucide-react';
 import { adminApi } from '@/features/admin/api';
+import { CHAVE_REMETENTE, RemetenteEtiquetaCard } from '@/features/admin/components/RemetenteEtiquetaCard';
 import { Configuracao } from '@/types/admin';
 
 export const ConfiguracoesPage: React.FC = () => {
@@ -150,6 +151,14 @@ export const ConfiguracoesPage: React.FC = () => {
           </button>
         </div>
       )}
+
+      <RemetenteEtiquetaCard
+        valorAtual={configuracoes.find((c) => c.chave === CHAVE_REMETENTE)?.valor}
+        onSalvo={(message, erro) => {
+          setFeedback({ type: erro ? 'error' : 'success', message });
+          if (!erro) loadConfiguracoes();
+        }}
+      />
 
       {/* Search & Actions */}
       <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 shadow-md">

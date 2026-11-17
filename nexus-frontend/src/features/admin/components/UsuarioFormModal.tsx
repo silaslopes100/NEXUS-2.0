@@ -25,6 +25,8 @@ const PERFIS_FALLBACK = [
   { value: 'escola', label: 'Unidade Escolar' },
   { value: 'professor', label: 'Professor / Docente' },
   { value: 'aluno', label: 'Aluno / Estudante' },
+  { value: 'financeiro', label: 'Financeiro (vendas, boletos e regras)' },
+  { value: 'logistica', label: 'Logística (envio de livros)' },
 ];
 
 const PERMISSOES_LABELS: Record<string, { label: string; desc: string }> = {
@@ -33,6 +35,7 @@ const PERMISSOES_LABELS: Record<string, { label: string; desc: string }> = {
   p_vendas: { label: 'Vendas & Licenças', desc: 'Acesso a checkout, pedidos e compra de licenças' },
   p_matriculas: { label: 'Matrículas', desc: 'Efetuar e regularizar matrículas de discentes' },
   p_financeiro: { label: 'Financeiro & Asaas', desc: 'Consulta a faturamentos, boletos e transações' },
+  p_logistica: { label: 'Logística', desc: 'Envio, entrega e histórico dos pedidos de livros' },
   p_academico: { label: 'Gestão Acadêmica', desc: 'Controle de turmas, matrizes, notas e frequência' },
   p_chat: { label: 'Chat & Mensagens', desc: 'Comunicação interna e mensagens diretas' },
   p_ranking: { label: 'Ranking & Metas', desc: 'Visualização de métricas e ranking comercial' },

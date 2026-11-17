@@ -48,6 +48,19 @@ class Pagador:
 
 
 @dataclass
+class Encargos:
+    """Encargos da regra de pagamento (percentuais). Aplicados no boleto pelos gateways que suportam."""
+
+    multa_pct: float = 0.0
+    juros_mes_pct: float = 0.0
+    desconto_antecipado_pct: float = 0.0
+
+    @property
+    def vazio(self) -> bool:
+        return not (self.multa_pct or self.juros_mes_pct or self.desconto_antecipado_pct)
+
+
+@dataclass
 class CobrancaCriada:
     payment_id: str
     status: str
@@ -91,6 +104,7 @@ class PaymentGateway(Protocol):
         referencia: str,
         notification_url: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        encargos: Optional[Encargos] = None,
     ) -> CobrancaCriada: ...
 
     def consultar(self, payment_id: str) -> Tuple[str, Dict[str, Any]]: ...

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Ban, CheckCircle2, Loader2, MapPin, Wallet, X } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
 import { CobrancaPedido } from '@/features/financeiro/components/CobrancaPedido';
+import { LogisticaPedido } from '@/features/financeiro/components/LogisticaPedido';
 import { StatusPedidoBadge } from '@/features/financeiro/components/StatusPedidoBadge';
 import {
   ACOES_MANUAIS,
@@ -24,11 +25,13 @@ const ROTULO_ACAO: Record<StatusManual, { label: string; icon: React.ReactNode; 
 interface Props {
   pedidoId: string;
   podeAlterarStatus: boolean;
+  /** Ações de logística (enviar, entregar, editar entrega). */
+  podeLogistica?: boolean;
   onClose: () => void;
   onAlterado: () => void;
 }
 
-export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStatus, onClose, onAlterado }) => {
+export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStatus, podeLogistica = false, onClose, onAlterado }) => {
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -50,6 +53,7 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
     setSalvando(true);
     setErro('');
     try {
+      // Cancelar também cancela a cobrança pendente; baixa de licença credita o estoque (backend).
       const atualizado = await financeiroApi.alterarStatus(pedido.id, {
         status: acao,
         ...(acao === 'cancelado' ? { motivo_cancelamento: texto } : { observacao: texto || undefined }),
@@ -123,7 +127,21 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
               </div>
             </div>
 
-            <CobrancaPedido pedido={pedido} podeCancelar={podeAlterarStatus} onAlterado={() => { load(); onAlterado(); }} />
+            <CobrancaPedido
+              pedido={pedido}
+              podeCancelar={podeAlterarStatus}
+              podeGerarCobranca={podeAlterarStatus || !podeLogistica}
+              onAlterado={() => { load(); onAlterado(); }}
+            />
+
+            {(podeLogistica || podeAlterarStatus) && (
+              <LogisticaPedido
+                key={`${pedido.id}-${pedido.status}`}
+                pedido={pedido}
+                podeEnvio={podeLogistica}
+                onAtualizado={(p) => { setPedido(p); onAlterado(); }}
+              />
+            )}
 
             {end && (end.logradouro || end.cidade) && (
               <div>

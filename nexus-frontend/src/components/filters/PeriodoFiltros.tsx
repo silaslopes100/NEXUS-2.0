@@ -10,7 +10,7 @@ import { polosEscolasApi } from '@/features/polos_escolas/api';
  */
 
 export const CHAVES_FILTRO = [
-  'data_inicio', 'data_fim', 'mes', 'semestre', 'ano', 'polo_id', 'escola_id', 'status', 'tipo',
+  'data_inicio', 'data_fim', 'mes', 'semestre', 'ano', 'polo_id', 'escola_id', 'status', 'tipo', 'gateway', 'meio',
 ] as const;
 export type ChaveFiltro = (typeof CHAVES_FILTRO)[number];
 
@@ -42,9 +42,11 @@ interface Props {
   mostrarUnidade?: boolean;
   statusOpcoes?: Opcao[];
   tipoOpcoes?: Opcao[];
+  /** Filtros adicionais (ex.: gateway e meio na tela de Boletos). */
+  extras?: { chave: ChaveFiltro; label: string; opcoes: Opcao[] }[];
 }
 
-export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusOpcoes, tipoOpcoes }) => {
+export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusOpcoes, tipoOpcoes, extras = [] }) => {
   const [params, setParams] = useSearchParams();
   const [polos, setPolos] = useState<Opcao[]>([]);
   const [escolas, setEscolas] = useState<Opcao[]>([]);
@@ -118,6 +120,7 @@ export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusO
         {mostrarUnidade && select('escola_id', 'Escola', escolas, 'Todas')}
         {statusOpcoes && select('status', 'Status', statusOpcoes)}
         {tipoOpcoes && select('tipo', 'Tipo', tipoOpcoes)}
+        {extras.map((e) => <React.Fragment key={e.chave}>{select(e.chave, e.label, e.opcoes)}</React.Fragment>)}
       </div>
     </section>
   );

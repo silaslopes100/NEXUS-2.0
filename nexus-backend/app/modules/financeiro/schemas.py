@@ -36,6 +36,9 @@ class FiltrosPeriodo(BaseModel):
     status: Optional[str] = None
     tipo: Optional[TipoPedido] = None
     pedido_id: Optional[str] = None
+    # Só para pagamentos/boletos (Fase 3D)
+    gateway: Optional[str] = None
+    meio: Optional[MeioPagamento] = None
     limit: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
 
@@ -247,8 +250,12 @@ class PagamentoListResponse(BaseModel):
 # Gateways e cobrança (Fase 2)
 # ---------------------------------------------------------------------------
 
-GatewayNome = Literal["asaas", "pagbank", "mercadopago"]
+GatewayNome = Literal["asaas", "pagbank", "mercadopago", "fake"]  # fake = Simulador (só sandbox)
 Ambiente = Literal["sandbox", "producao"]
+
+
+class SimularPagamentoRequest(BaseModel):
+    status: Literal["pago", "vencido", "cancelado"]
 
 
 class CobrancaRequest(BaseModel):
@@ -263,3 +270,156 @@ class GatewayConfigUpdate(BaseModel):
     webhook_token: Optional[str] = Field(default=None, max_length=500)
     ativo: Optional[bool] = None
     padrao: Optional[bool] = None
+
+
+# ---------------------------------------------------------------------------
+# Fase 3B: regras de pagamento e checkout
+# ---------------------------------------------------------------------------
+
+MeioCobranca = Literal["BOLETO", "PIX"]
+
+
+class RegraPagamentoBase(BaseModel):
+    nome: str = Field(min_length=2, max_length=128)
+    aplica_tipo_pedido: Optional[TipoPedido] = None  # None = todos
+    aplica_polo_id: Optional[str] = None  # None = todos os Polos
+    meios_permitidos: List[MeioCobranca] = Field(default_factory=lambda: ["BOLETO", "PIX"], min_length=1)
+    gateway_preferido: Optional[GatewayNome] = None  # None = gateway padrão do ambiente
+    dias_vencimento: int = Field(default=3, ge=1, le=60)
+    multa_pct: float = Field(default=0, ge=0, le=100)
+    juros_mes_pct: float = Field(default=0, ge=0, le=100)
+    desconto_antecipado_pct: float = Field(default=0, ge=0, le=100)
+    valor_minimo: float = Field(default=0, ge=0)
+    prioridade: int = Field(default=100, ge=0, le=10000)  # menor = avaliada primeiro
+    ativo: bool = True
+
+    @model_validator(mode="after")
+    def _meios_unicos(self) -> "RegraPagamentoBase":
+        self.meios_permitidos = list(dict.fromkeys(self.meios_permitidos))
+        return self
+
+
+class RegraPagamentoCreate(RegraPagamentoBase):
+    pass
+
+
+class RegraPagamentoUpdate(BaseModel):
+    nome: Optional[str] = Field(default=None, min_length=2, max_length=128)
+    aplica_tipo_pedido: Optional[TipoPedido] = None
+    aplica_polo_id: Optional[str] = None
+    meios_permitidos: Optional[List[MeioCobranca]] = Field(default=None, min_length=1)
+    gateway_preferido: Optional[GatewayNome] = None
+    dias_vencimento: Optional[int] = Field(default=None, ge=1, le=60)
+    multa_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    juros_mes_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    desconto_antecipado_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    valor_minimo: Optional[float] = Field(default=None, ge=0)
+    prioridade: Optional[int] = Field(default=None, ge=0, le=10000)
+    ativo: Optional[bool] = None
+
+
+class RegraPagamentoResponse(BaseModel):
+    id: str
+    nome: str
+    aplica_tipo_pedido: Optional[str] = None
+    aplica_polo_id: Optional[str] = None
+    polo_nome: Optional[str] = None
+    meios_permitidos: List[str]
+    gateway_preferido: Optional[str] = None
+    dias_vencimento: int
+    multa_pct: float = 0
+    juros_mes_pct: float = 0
+    desconto_antecipado_pct: float = 0
+    valor_minimo: float = 0
+    prioridade: int
+    ativo: bool
+    generica: bool = False  # sem filtros: fallback que garante o checkout
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
+
+
+class CheckoutOpcoesResponse(BaseModel):
+    regra_id: Optional[str] = None
+    regra_nome: str
+    meios: List[str]
+    dias_vencimento: int
+    vencimento: date
+    multa_pct: float = 0
+    juros_mes_pct: float = 0
+    desconto_antecipado_pct: float = 0
+
+
+class CheckoutRequest(PedidoCreate):
+    """Cria o pedido e já gera a cobrança (boleto/PIX)."""
+
+    meio: MeioCobranca
+
+
+class CheckoutResponse(BaseModel):
+    pedido: PedidoResponse
+    pagamento: Optional[PagamentoResponse] = None
+    # Preenchido quando o pedido foi criado mas a cobrança falhou (pode tentar de novo no detalhe).
+    erro_cobranca: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Fase 3C: logística
+# ---------------------------------------------------------------------------
+
+class EnvioCreate(BaseModel):
+    transportadora: str = Field(min_length=2, max_length=64)
+    codigo_rastreio: Optional[str] = Field(default=None, max_length=64)
+    volumes: int = Field(default=1, ge=1, le=999)
+    peso_total_g: Optional[int] = Field(default=None, ge=0)
+    observacao: Optional[str] = Field(default=None, max_length=2000)
+
+
+class EntregaConfirmar(BaseModel):
+    observacao: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PedidoUpdate(BaseModel):
+    """Edição do pedido. Itens só enquanto aguarda pagamento e sem cobrança pendente."""
+
+    endereco: Optional[EnderecoEntrega] = None
+    observacao: Optional[str] = Field(default=None, max_length=2000)
+    itens: Optional[List[PedidoItemIn]] = Field(default=None, min_length=1)
+
+
+# ---------------------------------------------------------------------------
+# Fase 3D: vendas
+# ---------------------------------------------------------------------------
+
+class VendasStatusItem(BaseModel):
+    status: str
+    pedidos: int
+    valor: float
+
+
+class VendasPoloItem(BaseModel):
+    polo_id: Optional[str] = None
+    polo_nome: Optional[str] = None
+    pedidos_pagos: int
+    receita: float
+
+
+class VendasKpisResponse(BaseModel):
+    pedidos: int  # exceto cancelados
+    pedidos_pagos: int
+    receita_paga: float
+    a_receber: float  # pedidos aguardando pagamento
+    vencido: float  # cobranças vencidas de pedidos ainda não pagos
+    ticket_medio: float
+    receita_licencas: float
+    receita_livros: float
+    licencas_vendidas: int
+    livros_vendidos: int
+    por_status: List[VendasStatusItem]
+    top_polos: List[VendasPoloItem]
+
+
+class VendasSerieItem(BaseModel):
+    mes: str  # YYYY-MM
+    pedidos: int
+    pedidos_pagos: int
+    receita: float

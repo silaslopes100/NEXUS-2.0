@@ -63,7 +63,11 @@ from app.modules.polos_escolas.schemas import (
     LicencaDevolverAlunoRequest,
     LicencaDevolverEscolaRequest,
     LicencaDistribuirRequest,
+    LicencaReclassificarRequest,
     LicencaVenderRequest,
+    EstoqueDisciplinaItem,
+    EstoqueDisciplinaResponse,
+    LicencaAlunoAtivaResponse,
     MessageResponse,
     MigracaoModalidadeRequest,
     MovimentacaoLicencaResponse,
@@ -653,10 +657,63 @@ class PolosEscolasService:
     # 5. Fluxo de Licenças (RN-02)
     # ------------------------------------------------------------------
 
+    def _validar_disciplina(self, disciplina_id: Optional[str]) -> None:
+        """Disciplina informada precisa existir (None = saldo "Sem disciplina")."""
+        if disciplina_id and not self.repo.get_disciplina_nome(disciplina_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
+
+    def estoque_por_disciplina(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> EstoqueDisciplinaResponse:
+        if escola_id:
+            self.get_escola(escola_id)
+        else:
+            self.get_polo(polo_id)
+        itens = [EstoqueDisciplinaItem(**{**i, "materia_id": str(i["materia_id"]) if i.get("materia_id") else None})
+                 for i in self.repo.list_estoque_por_disciplina(polo_id=polo_id, escola_id=escola_id)]
+        return EstoqueDisciplinaResponse(
+            polo_id=None if escola_id else polo_id,
+            escola_id=escola_id,
+            total_disponivel=sum(i.quantidade_disponivel for i in itens),
+            total_vendida=sum(i.quantidade_vendida for i in itens),
+            items=itens,
+        )
+
+    def licencas_ativas_aluno(self, aluno_id: str) -> List[LicencaAlunoAtivaResponse]:
+        def _txt(valor: Any) -> Optional[str]:
+            return str(valor) if valor else None
+
+        return [
+            LicencaAlunoAtivaResponse(
+                id=str(lic["id"]), aluno_id=str(lic["aluno_id"]), escola_id=_txt(lic.get("escola_id")),
+                polo_id=_txt(lic.get("polo_id")), materia_id=_txt(lic.get("materia_id")),
+                disciplina_nome=lic.get("disciplina_nome"), ativada_em=lic.get("ativada_em"),
+            )
+            for lic in self.repo.list_licencas_aluno_ativas(aluno_id)
+        ]
+
+    def reclassificar_licencas(
+        self, polo_id: str, dados: LicencaReclassificarRequest, actor_id: Optional[str], ip: Optional[str]
+    ) -> MessageResponse:
+        self.get_polo(polo_id)
+        self._validar_disciplina(dados.de_disciplina_id)
+        self._validar_disciplina(dados.para_disciplina_id)
+        mov_id = lic.reclassificar_saldo_polo(self.repo, polo_id, dados, actor_id)
+        self.repo.record_audit_log(
+            usuario_id=actor_id,
+            acao="licencas_reclassificadas",
+            entidade="licencas_movimentacoes",
+            entidade_id=mov_id,
+            dados_depois=dados.model_dump(),
+            ip=ip,
+        )
+        return MessageResponse(message=f"{dados.quantidade} licenças reclassificadas")
+
     def comprar_licencas(
         self, polo_id: str, dados: LicencaCompraRequest, actor_id: Optional[str], ip: Optional[str]
     ) -> MessageResponse:
         self.get_polo(polo_id)
+        self._validar_disciplina(dados.disciplina_id)
         resultado = lic.comprar_licencas(self.repo, polo_id, dados, actor_id)
         self.repo.record_audit_log(
             usuario_id=actor_id,
@@ -674,13 +731,15 @@ class PolosEscolasService:
         self.get_polo(polo_id)
         if not self.repo.get_escola(dados.escola_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada")
+        self._validar_disciplina(dados.disciplina_id)
         mov_id = lic.distribuir_para_escola(self.repo, polo_id, dados, actor_id)
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="licencas_distribuidas",
             entidade="licencas_movimentacoes",
             entidade_id=mov_id,
-            dados_depois={"escola_id": dados.escola_id, "quantidade": dados.quantidade},
+            dados_depois={"escola_id": dados.escola_id, "quantidade": dados.quantidade,
+                          "disciplina_id": dados.disciplina_id},
             ip=ip,
         )
         return MessageResponse(message=f"{dados.quantidade} licenças distribuídas para a escola")
@@ -691,6 +750,7 @@ class PolosEscolasService:
         escola = self.repo.get_escola(escola_id)
         if not escola:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada")
+        self._validar_disciplina(dados.disciplina_id)
         mov_id = lic.vender_para_aluno(self.repo, escola_id, escola.get("polo_id"), dados, actor_id)
         self.repo.record_audit_log(
             usuario_id=actor_id,
@@ -708,6 +768,7 @@ class PolosEscolasService:
         escola = self.repo.get_escola(escola_id)
         if not escola:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada")
+        self._validar_disciplina(dados.disciplina_id)
         mov_id = lic.devolver_de_escola_para_polo(self.repo, escola_id, escola["polo_id"], dados, actor_id)
         self.repo.record_audit_log(
             usuario_id=actor_id,
@@ -719,8 +780,10 @@ class PolosEscolasService:
         )
         return MessageResponse(message=f"{dados.quantidade} licenças devolvidas ao Polo")
 
-    def devolver_aluno(self, aluno_id: str, actor_id: Optional[str], ip: Optional[str]) -> MessageResponse:
-        mov_id = lic.devolver_de_aluno_para_escola(self.repo, aluno_id, actor_id)
+    def devolver_aluno(
+        self, aluno_id: str, actor_id: Optional[str], ip: Optional[str], licenca_id: Optional[str] = None
+    ) -> MessageResponse:
+        mov_id = lic.devolver_de_aluno_para_escola(self.repo, aluno_id, actor_id, licenca_id)
         self.repo.record_audit_log(
             usuario_id=actor_id,
             acao="licenca_devolvida_escola",

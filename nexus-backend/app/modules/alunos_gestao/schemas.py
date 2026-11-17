@@ -68,6 +68,8 @@ class ReingressoRequest(BaseModel):
     modalidade: Literal["polo", "ead"]
     polo_destino_id: Optional[uuid.UUID] = None
     escola_destino_id: Optional[uuid.UUID] = None
+    # Disciplina de onde saem as licenças do reingresso; vazio = saldo "Sem disciplina".
+    disciplina_id: Optional[uuid.UUID] = None
     taxa_confirmada: bool = False
 
 

@@ -73,13 +73,23 @@ class FinanceiroService:
         items = self.repo.list_produtos(tipo=tipo, ativo=ativo)
         return ProdutoListResponse(total=len(items), items=[ProdutoResponse(**p) for p in items])
 
+    _MSG_LICENCA_SEM_DISCIPLINA = "Produto de licença exige uma disciplina (o estoque de licenças é por disciplina)"
+
     def create_produto(self, payload: ProdutoCreate) -> ProdutoResponse:
         dados = payload.model_dump()
         dados["sku"] = dados["sku"].strip().upper()
+        if dados["tipo"] == "licenca" and not dados.get("disciplina_id"):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=self._MSG_LICENCA_SEM_DISCIPLINA)
         return ProdutoResponse(**self.repo.create_produto(dados))
 
     def update_produto(self, produto_id: str, payload: ProdutoUpdate) -> ProdutoResponse:
-        atualizado = self.repo.update_produto(produto_id, payload.model_dump(exclude_unset=True))
+        campos = payload.model_dump(exclude_unset=True)
+        if "disciplina_id" in campos and not campos["disciplina_id"]:
+            atual = self.repo.get_produtos_por_ids([produto_id]).get(str(produto_id))
+            if atual and atual.get("tipo") == "licenca":
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                    detail=self._MSG_LICENCA_SEM_DISCIPLINA)
+        atualizado = self.repo.update_produto(produto_id, campos)
         if not atualizado:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Produto não encontrado")
         return ProdutoResponse(**atualizado)

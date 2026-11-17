@@ -2,9 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BookMarked, CheckCircle2, Loader2, MapPin, Minus, Plus, ShoppingCart, X } from 'lucide-react';
 import { PeriodoFiltros } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
+import { MeioPagamentoCheckout, ResultadoCheckout, useOpcoesCheckout } from '@/features/financeiro/components/Checkout';
 import { PedidosTabela } from '@/features/financeiro/components/PedidosTabela';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
-import { EnderecoEntrega, Produto, STATUS_PEDIDO, erroApi, formatBRL } from '@/features/financeiro/types';
+import {
+  CheckoutResposta, EnderecoEntrega, MeioCobranca, Produto, STATUS_PEDIDO, erroApi, formatBRL,
+} from '@/features/financeiro/types';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500';
@@ -39,6 +42,8 @@ export const PedidosLivrosUnidadePage: React.FC = () => {
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
   const [recarregar, setRecarregar] = useState(0);
+  const [meio, setMeio] = useState<MeioCobranca | ''>('');
+  const [resultado, setResultado] = useState<CheckoutResposta | null>(null);
 
   useEffect(() => {
     financeiroApi.listProdutos({ tipo: 'livro' })
@@ -67,6 +72,7 @@ export const PedidosLivrosUnidadePage: React.FC = () => {
     [catalogo, quantidades],
   );
   const total = itens.reduce((s, i) => s + i.produto.preco * i.quantidade, 0);
+  const opcoes = useOpcoesCheckout('livro', total, poloId);
 
   const setQtd = (id: string, valor: number) =>
     setQuantidades((q) => ({ ...q, [id]: Math.max(0, Math.min(100000, Math.floor(valor) || 0)) }));
@@ -76,16 +82,18 @@ export const PedidosLivrosUnidadePage: React.FC = () => {
     setSucesso('');
     if (!itens.length) { setErro('Adicione ao menos um livro.'); return; }
     if (isAdmin && !poloId) { setErro('Selecione o Polo do pedido.'); return; }
+    if (!meio) { setErro('Escolha a forma de pagamento.'); return; }
     setEnviando(true);
     try {
-      const pedido = await financeiroApi.createPedido({
+      const res = await financeiroApi.checkout({
         tipo: 'livro',
         polo_id: isAdmin ? poloId : undefined,
         itens: itens.map((i) => ({ produto_id: i.produto.id, quantidade: i.quantidade })),
         endereco: outroEndereco ? endereco : undefined,
         observacao: observacao.trim() || undefined,
+        meio,
       });
-      setSucesso(`Pedido ${pedido.numero} criado (${formatBRL(pedido.valor_total)}). Status: aguardando pagamento.`);
+      setResultado(res);
       setQuantidades({});
       setObservacao('');
       setRecarregar((n) => n + 1);
@@ -118,7 +126,9 @@ export const PedidosLivrosUnidadePage: React.FC = () => {
         </div>
       )}
 
-      {aba === 'meus' ? (
+      {aba === 'novo' && resultado ? (
+        <ResultadoCheckout resultado={resultado} onFechar={() => setResultado(null)} />
+      ) : aba === 'meus' ? (
         <>
           <PeriodoFiltros mostrarUnidade={isAdmin} statusOpcoes={STATUS_OPCOES} />
           <PedidosTabela mostrarPolo={isAdmin} recarregarChave={recarregar} />
@@ -216,15 +226,16 @@ export const PedidosLivrosUnidadePage: React.FC = () => {
             </div>
 
             <textarea className={inputClass} rows={2} placeholder="Observação (opcional)" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
+            <MeioPagamentoCheckout opcoes={opcoes} meio={meio} onChange={setMeio} />
             {erro && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{erro}</p>}
             <button
               onClick={enviar}
-              disabled={enviando || !itens.length}
+              disabled={enviando || !itens.length || !meio}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 font-semibold text-white disabled:opacity-50"
             >
-              {enviando && <Loader2 className="animate-spin" size={16} />} Enviar pedido
+              {enviando && <Loader2 className="animate-spin" size={16} />} Finalizar e gerar pagamento
             </button>
-            <p className="text-[11px] text-slate-500">O pagamento (boleto/PIX) será gerado automaticamente a partir da Fase 3. Até lá, a baixa é feita manualmente pelo financeiro.</p>
+            <p className="text-[11px] text-slate-500">Após o pagamento confirmado, o pedido segue para a logística.</p>
           </aside>
         </div>
       )}

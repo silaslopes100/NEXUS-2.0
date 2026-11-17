@@ -1,6 +1,9 @@
-"""Gateway simulado em memória (testes automatizados e uso sem credenciais).
+"""Gateway simulado ("Simulador") — testes automatizados e uso no sandbox sem credenciais.
 
-Webhook: header `x-fake-token` = webhook_token; corpo {id, payment_id, status}.
+Só existe no ambiente sandbox. O pagamento é confirmado pelo botão "Simular" do admin
+(POST /financeiro/pagamentos/{id}/simular), que percorre o mesmo caminho de um webhook.
+Webhook HTTP: header `x-fake-token` = webhook_token configurado (sem token, recusa);
+corpo {id, payment_id, status}.
 """
 from __future__ import annotations
 
@@ -10,7 +13,7 @@ import uuid
 from datetime import date
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from app.modules.financeiro.gateways.base import CobrancaCriada, EventoPagamento, GatewayError, Pagador, header
+from app.modules.financeiro.gateways.base import CobrancaCriada, Encargos, EventoPagamento, GatewayError, Pagador, header
 
 # Estado compartilhado entre instâncias (a factory cria uma por requisição).
 COBRANCAS: Dict[str, Dict[str, Any]] = {}
@@ -30,7 +33,9 @@ class FakeGateway:
     def __init__(self, ambiente: str = "sandbox", credenciais: Optional[Dict[str, str]] = None,
                  webhook_token: Optional[str] = None, transport: Any = None) -> None:
         self.ambiente = ambiente
-        self.webhook_token = webhook_token or "fake-token"
+        if ambiente != "sandbox":
+            raise GatewayError("O Simulador só pode ser usado no ambiente sandbox", status_http=409)
+        self.webhook_token = webhook_token
         self.falhar_em: Optional[str] = (credenciais or {}).get("falhar_em")
 
     def _talvez_falhar(self, operacao: str) -> None:
@@ -49,10 +54,11 @@ class FakeGateway:
 
     def criar_cobranca(self, customer_id: str, pagador: Pagador, valor: float, vencimento: date, meio: str,
                        descricao: str, referencia: str, notification_url: Optional[str] = None,
-                       idempotency_key: Optional[str] = None) -> CobrancaCriada:
+                       idempotency_key: Optional[str] = None, encargos: Optional[Encargos] = None) -> CobrancaCriada:
         self._talvez_falhar("cobranca")
         pid = f"pay_fake_{uuid.uuid4().hex[:10]}"
-        COBRANCAS[pid] = {"status": "pendente", "valor": valor, "meio": meio, "referencia": referencia}
+        COBRANCAS[pid] = {"status": "pendente", "valor": valor, "meio": meio, "referencia": referencia,
+                          "encargos": encargos}
         CHAMADAS.append(("cobranca", pid))
         return CobrancaCriada(
             payment_id=pid,
@@ -66,10 +72,11 @@ class FakeGateway:
             pix_qrcode_base64="iVBORw0KGgo=" if meio == "PIX" else None,
         )
 
-    def consultar(self, payment_id: str) -> Tuple[str, Dict[str, Any]]:
+    def consultar(self, payment_id: str) -> Tuple[Optional[str], Dict[str, Any]]:
         cobranca = COBRANCAS.get(payment_id)
         if not cobranca:
-            raise GatewayError("fake: cobrança inexistente", status_http=404)
+            # Estado em memória se perde ao reiniciar a API: sem informação (None), nada muda.
+            return None, {}
         return cobranca["status"], dict(cobranca)
 
     def cancelar(self, payment_id: str) -> None:
@@ -78,12 +85,14 @@ class FakeGateway:
 
     @staticmethod
     def simular_status(payment_id: str, status: str) -> None:
-        COBRANCAS[payment_id]["status"] = status
+        COBRANCAS.setdefault(payment_id, {})["status"] = status
 
     def validar_webhook(self, headers: Mapping[str, str], corpo: bytes,
                         query: Optional[Mapping[str, str]] = None) -> bool:
         recebido = header(headers, "x-fake-token") or ""
-        return bool(recebido) and hmac.compare_digest(recebido, self.webhook_token)
+        if not self.webhook_token or not recebido:
+            return False
+        return hmac.compare_digest(recebido.encode(), self.webhook_token.encode())
 
     def interpretar_webhook(self, headers: Mapping[str, str], corpo: bytes,
                             query: Mapping[str, str]) -> EventoPagamento:

@@ -18,7 +18,7 @@ from app.core.crypto import encrypt_secret, decrypt_secret, mask_secret
 from app.modules.auth.schemas import UserResponse
 from app.modules.financeiro import pedidos as regras
 from app.modules.financeiro.gateways import factory
-from app.modules.financeiro.gateways.base import EnderecoPagador, GatewayError, Pagador, PaymentGateway
+from app.modules.financeiro.gateways.base import Encargos, EnderecoPagador, GatewayError, Pagador, PaymentGateway
 from app.modules.financeiro.repository import FinanceiroRepositoryInterface
 from app.modules.financeiro.schemas import PagamentoResponse
 from app.modules.financeiro.service import FinanceiroService, escopo_do_usuario
@@ -34,6 +34,15 @@ _CAMPOS_FISCAIS_OBRIGATORIOS = {
     "razao_social": "razão social",
     "email_financeiro": "e-mail financeiro",
 }
+
+
+# Horário de Brasília (UTC-3, sem horário de verão desde 2019). O servidor (Vercel) roda em UTC:
+# sem isso, cobranças geradas após 21h teriam o vencimento contado a partir do "dia seguinte".
+FUSO_BRASIL = timezone(timedelta(hours=-3))
+
+
+def hoje_brasil() -> date:
+    return datetime.now(FUSO_BRASIL).date()
 
 
 def webhook_url(gateway: str, ambiente: str) -> Optional[str]:
@@ -57,21 +66,35 @@ def creditar_licencas_padrao(pedido: Dict[str, Any], usuario_id: Optional[str]) 
     """Credita o estoque do Polo e o extrato (RN-02.1) quando um pedido de licença é pago."""
     from app.modules.polos_escolas.repository import get_polos_escolas_repository
 
-    quantidade = sum(int(i.get("quantidade") or 0) for i in pedido.get("itens") or [])
-    if quantidade <= 0 or not pedido.get("polo_id"):
+    if not pedido.get("polo_id"):
+        return
+    # Estoque por disciplina (Fase 3A): um crédito por disciplina dos itens.
+    por_disciplina: Dict[Optional[str], Dict[str, float]] = {}
+    for item in pedido.get("itens") or []:
+        qtd = int(item.get("quantidade") or 0)
+        if qtd <= 0:
+            continue
+        chave = str(item["disciplina_id"]) if item.get("disciplina_id") else None
+        acum = por_disciplina.setdefault(chave, {"quantidade": 0, "valor": 0.0})
+        acum["quantidade"] += qtd
+        acum["valor"] += float(item.get("valor_total") or 0)
+    if not por_disciplina:
         return
     repo = get_polos_escolas_repository()
-    repo.ajustar_estoque(polo_id=pedido["polo_id"], escola_id=None, delta_disponivel=quantidade)
-    unitario = round(float(pedido.get("valor_total") or 0) / quantidade, 2)
-    repo.registrar_movimentacao({
-        "tipo": "compra_fornecedor",
-        "polo_id": pedido["polo_id"],
-        "quantidade": quantidade,
-        "valor_unitario": unitario,
-        "status": "disponivel_polo",
-        "actor_id": usuario_id,
-        "observacao": f"Pedido {pedido.get('numero')} pago via gateway",
-    })
+    for disciplina_id, acum in por_disciplina.items():
+        quantidade = int(acum["quantidade"])
+        repo.ajustar_estoque(polo_id=pedido["polo_id"], escola_id=None, delta_disponivel=quantidade,
+                             materia_id=disciplina_id)
+        repo.registrar_movimentacao({
+            "tipo": "compra_fornecedor",
+            "polo_id": pedido["polo_id"],
+            "materia_id": disciplina_id,
+            "quantidade": quantidade,
+            "valor_unitario": round(acum["valor"] / quantidade, 2),
+            "status": "disponivel_polo",
+            "actor_id": usuario_id,
+            "observacao": f"Pedido {pedido.get('numero')} pago via gateway",
+        })
 
 
 class CobrancaService:
@@ -100,6 +123,29 @@ class CobrancaService:
             detail=f"Nenhum gateway ativo e padrão no ambiente '{ambiente}'. Configure em Gateways de Pagamento.",
         )
 
+    def _gateway_da_regra(self, regra: Dict[str, Any], ambiente: str) -> Optional[str]:
+        """Gateway preferido da regra, se estiver ativo no ambiente (senão cai no padrão)."""
+        preferido = regra.get("gateway_preferido")
+        if not preferido:
+            return None
+        config = self.repo.get_gateway_config(preferido, ambiente) or {}
+        return preferido if config.get("ativo") else None
+
+    def opcoes_checkout(self, tipo: str, polo_id: Optional[str], valor: Optional[float]) -> Dict[str, Any]:
+        """Meios e vencimento que a regra aplicável oferece (tela de checkout)."""
+        regra = self.repo.get_regra_pagamento(tipo, polo_id, valor) or {}
+        dias = int(regra.get("dias_vencimento") or DIAS_VENCIMENTO_PADRAO)
+        return {
+            "regra_id": regra.get("id"),
+            "regra_nome": regra.get("nome") or "Padrão",
+            "meios": [m for m in (regra.get("meios_permitidos") or ["BOLETO", "PIX"]) if m in ("BOLETO", "PIX")],
+            "dias_vencimento": dias,
+            "vencimento": hoje_brasil() + timedelta(days=dias),
+            "multa_pct": float(regra.get("multa_pct") or 0),
+            "juros_mes_pct": float(regra.get("juros_mes_pct") or 0),
+            "desconto_antecipado_pct": float(regra.get("desconto_antecipado_pct") or 0),
+        }
+
     @staticmethod
     def _credenciais_mascaradas(config: Dict[str, Any]) -> Dict[str, str]:
         if not config.get("credenciais_cripto"):
@@ -114,7 +160,7 @@ class CobrancaService:
         configs = {(c["gateway"], c["ambiente"]): c for c in self.repo.list_gateway_configs()}
         itens = []
         for gateway in factory.GATEWAYS_DISPONIVEIS:
-            for ambiente in ("sandbox", "producao"):
+            for ambiente in factory.AMBIENTES_POR_GATEWAY[gateway]:
                 c = configs.get((gateway, ambiente)) or {}
                 token_mascarado = ""
                 if c.get("webhook_token_cripto"):
@@ -143,7 +189,7 @@ class CobrancaService:
         }
 
     def salvar_gateway(self, gateway: str, ambiente: str, dados: Dict[str, Any], usuario_id: str) -> Dict[str, Any]:
-        if gateway not in factory.GATEWAYS_DISPONIVEIS or ambiente not in ("sandbox", "producao"):
+        if gateway not in factory.GATEWAYS_DISPONIVEIS or ambiente not in factory.AMBIENTES_POR_GATEWAY[gateway]:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway/ambiente inválido")
         atual = self.repo.get_gateway_config(gateway, ambiente) or {}
         credenciais: Dict[str, str] = {}
@@ -232,18 +278,22 @@ class CobrancaService:
         if float(pedido.valor_total) <= 0:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Pedido sem valor a cobrar")
         ambiente = settings.PAYMENT_ENV
-        nome_gateway = gateway or self.gateway_padrao(ambiente)
-        adapter = self._adapter(nome_gateway, ambiente)
-        pagador = self._pagador(str(pedido.polo_id))
-
-        regra = self.repo.get_regra_pagamento(pedido.tipo, pedido.polo_id) or {}
+        regra = self.repo.get_regra_pagamento(pedido.tipo, pedido.polo_id, float(pedido.valor_total)) or {}
         meios = regra.get("meios_permitidos") or ["BOLETO", "PIX"]
         if meio not in meios:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Meio '{meio}' não permitido pela regra '{regra.get('nome', 'padrão')}' ({', '.join(meios)})",
             )
-        vencimento = date.today() + timedelta(days=int(regra.get("dias_vencimento") or DIAS_VENCIMENTO_PADRAO))
+        nome_gateway = gateway or self._gateway_da_regra(regra, ambiente) or self.gateway_padrao(ambiente)
+        adapter = self._adapter(nome_gateway, ambiente)
+        pagador = self._pagador(str(pedido.polo_id))
+        vencimento = hoje_brasil() + timedelta(days=int(regra.get("dias_vencimento") or DIAS_VENCIMENTO_PADRAO))
+        encargos = Encargos(
+            multa_pct=float(regra.get("multa_pct") or 0),
+            juros_mes_pct=float(regra.get("juros_mes_pct") or 0),
+            desconto_antecipado_pct=float(regra.get("desconto_antecipado_pct") or 0),
+        )
 
         try:
             cache = self.repo.get_cliente_gateway(nome_gateway, ambiente, str(pedido.polo_id))
@@ -261,6 +311,7 @@ class CobrancaService:
                 referencia=pedido.numero,
                 notification_url=webhook_url(nome_gateway, ambiente),
                 idempotency_key=f"{pedido.id}-{meio}-{int(datetime.now(timezone.utc).timestamp())}",
+                encargos=encargos,
             )
         except GatewayError as exc:
             logger.warning("Falha ao gerar cobrança do pedido %s: %s", pedido.numero, exc.mensagem)
@@ -393,6 +444,29 @@ class CobrancaService:
             self.repo.finalizar_webhook(webhook_id, "erro", f"{exc.__class__.__name__}: {exc}")
             return {"status": "erro"}
 
+    def simular(self, pagamento_id: str, novo: str, user: UserResponse) -> Dict[str, Any]:
+        """Simulador (sandbox): confirma/vence/cancela uma cobrança pelo mesmo caminho do webhook."""
+        pg = self.repo.get_pagamento(pagamento_id)
+        if not pg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pagamento não encontrado")
+        if pg.get("gateway") != "fake" or pg.get("ambiente") != "sandbox" or not pg.get("gateway_payment_id"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Só cobranças do Simulador (sandbox) podem ser simuladas",
+            )
+        from app.modules.financeiro.gateways import fake as fake_gateway
+
+        payment_id = pg["gateway_payment_id"]
+        fake_gateway.FakeGateway.simular_status(payment_id, novo)
+        evento_id = f"sim:{payment_id}:{novo}:{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+        payload = {"id": evento_id, "payment_id": payment_id, "status": novo, "tipo": "SIMULADO",
+                   "simulado_por": user.id}
+        webhook_id = self.repo.registrar_webhook("fake", "sandbox", evento_id, "SIMULADO", payment_id, payload)
+        if webhook_id is None:
+            return {"status": "duplicado", "evento_id": evento_id}
+        resultado = self._processar_evento(webhook_id, "fake", payment_id, novo, None, None, origem="webhook")
+        return {**resultado, "pagamento": PagamentoResponse(**self.repo.get_pagamento(pagamento_id))}
+
     def reconciliar(self, limite: int = 50) -> Dict[str, int]:
         resumo = {"webhooks_reprocessados": 0, "pagamentos_consultados": 0, "pagamentos_alterados": 0, "falhas": 0}
         for w in self.repo.list_webhooks_com_erro(MAX_TENTATIVAS_WEBHOOK, limite):
@@ -419,6 +493,7 @@ class CobrancaService:
                 resumo["falhas"] += 1
         return resumo
 
-    def listar_webhooks(self, gateway: Optional[str], status_filtro: Optional[str], limit: int, offset: int) -> Dict[str, Any]:
-        total, items = self.repo.list_webhooks(gateway, status_filtro, limit, offset)
+    def listar_webhooks(self, gateway: Optional[str], status_filtro: Optional[str], limit: int, offset: int,
+                        payment_id: Optional[str] = None) -> Dict[str, Any]:
+        total, items = self.repo.list_webhooks(gateway, status_filtro, limit, offset, payment_id)
         return {"total": total, "items": items, "limit": limit, "offset": offset}

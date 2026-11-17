@@ -42,10 +42,18 @@ export const normalizeUserRole = (role?: string | null): UserRole | null => {
     || normalized === 'escola'
     || normalized === 'professor'
     || normalized === 'aluno'
+    || normalized === 'financeiro'
+    || normalized === 'logistica'
   ) {
     return normalized;
   }
   return null;
+};
+
+/** Dashboard inicial de cada perfil (login, raiz e "voltar" do acesso negado). */
+export const dashboardDoPerfil = (role?: string | null): string => {
+  const r = normalizeUserRole(role);
+  return r ? `/${r}/dashboard` : '/auth/login';
 };
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -141,22 +149,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   getDashboardPath: () => {
-    const { perfil } = get();
-    const role = normalizeUserRole(perfil?.nome) || '';
-
-    switch (role) {
-      case 'admin':
-        return '/admin/dashboard';
-      case 'polo':
-        return '/polo/dashboard';
-      case 'escola':
-        return '/escola/dashboard';
-      case 'professor':
-        return '/professor/dashboard';
-      case 'aluno':
-        return '/aluno/dashboard';
-      default:
-        return '/auth/login';
-    }
+    return dashboardDoPerfil(get().perfil?.nome);
   },
 }));

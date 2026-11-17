@@ -328,6 +328,34 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
     assert disciplina_sem_vinculo.status_code == 201
     assert disciplina_sem_vinculo.json()["curso_id"] is None
     assert disciplina_sem_vinculo.json()["semestre"] is None
+    assert disciplina_sem_vinculo.json()["preco"] is None
+
+    # Preço informativo: criar, editar, limpar e rejeitar negativo
+    com_preco = await client.post(
+        "/cursos-disciplinas/disciplinas",
+        json={"nome": "Disciplina com preço", "preco": 49.899},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert com_preco.status_code == 201 and com_preco.json()["preco"] == 49.9
+    preco_id = com_preco.json()["id"]
+    editada = await client.put(
+        f"/cursos-disciplinas/disciplinas/{preco_id}",
+        json={"nome": "Disciplina com preço", "preco": 59.9},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert editada.status_code == 200 and editada.json()["preco"] == 59.9
+    limpa = await client.put(
+        f"/cursos-disciplinas/disciplinas/{preco_id}",
+        json={"nome": "Disciplina com preço", "preco": None},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert limpa.status_code == 200 and limpa.json()["preco"] is None
+    negativo = await client.post(
+        "/cursos-disciplinas/disciplinas",
+        json={"nome": "Preço negativo", "preco": -1},
+        headers={"Authorization": f"Bearer {t_admin}"},
+    )
+    assert negativo.status_code == 422
 
     disciplina_semestre_zero = await client.post(
         "/cursos-disciplinas/disciplinas",

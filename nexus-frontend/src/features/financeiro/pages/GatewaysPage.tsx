@@ -14,6 +14,7 @@ const INSTRUCOES: Record<GatewayNome, string> = {
   asaas: 'Painel Asaas → Integrações → Webhooks: cole a URL abaixo, informe o mesmo token de autenticação e marque os eventos de cobrança (PAYMENT_*).',
   pagbank: 'O PagBank recebe a URL automaticamente em cada pedido (notification_urls) e assina as notificações com ECDSA; não há token a configurar.',
   mercadopago: 'Painel Mercado Pago → Suas integrações → Webhooks: cole a URL abaixo, selecione o evento "Pagamentos" e copie a assinatura secreta para o campo de token. (Integração a validar na documentação antes de produção.)',
+  fake: 'Gateway de teste, sem credenciais e só no sandbox. Ative e marque como padrão para gerar boletos/PIX fictícios; depois use "Simular pagamento" no pedido ou em Pagamentos (somente admin). Não precisa de webhook nem de PUBLIC_API_URL.',
 };
 
 const COR_EVENTO: Record<string, string> = {
@@ -31,8 +32,10 @@ const GatewayCard: React.FC<{
   podeEditar: boolean;
   onSalvo: () => void;
 }> = ({ gateway, configs, ambienteAtivo, podeEditar, onSalvo }) => {
-  const [ambiente, setAmbiente] = useState<Ambiente>(ambienteAtivo);
-  const config = configs.find((c) => c.ambiente === ambiente)!;
+  const ambientes = configs.map((c) => c.ambiente);
+  const [ambiente, setAmbiente] = useState<Ambiente>(ambientes.includes(ambienteAtivo) ? ambienteAtivo : ambientes[0]);
+  const config = configs.find((c) => c.ambiente === ambiente) || configs[0];
+  const simulador = gateway === 'fake';
   const [credenciais, setCredenciais] = useState<Record<string, string>>({});
   const [token, setToken] = useState('');
   const [ativo, setAtivo] = useState(config.ativo);
@@ -106,7 +109,7 @@ const GatewayCard: React.FC<{
           {config.ultimo_teste_ok === false && <XCircle size={15} className="text-red-400" aria-label="Último teste falhou" />}
         </div>
         <div className="inline-flex rounded-xl border border-slate-700 p-1">
-          {(['sandbox', 'producao'] as Ambiente[]).map((a) => (
+          {ambientes.map((a) => (
             <button
               key={a}
               onClick={() => setAmbiente(a)}
@@ -148,6 +151,10 @@ const GatewayCard: React.FC<{
           </div>
         )}
       </div>
+      {simulador ? (
+        <p className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">{INSTRUCOES.fake}</p>
+      ) : (
+      <>
       <p className="text-[11px] text-slate-500">Os valores atuais aparecem mascarados. Deixe em branco para manter; preencha só o que quiser trocar.</p>
 
       <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
@@ -164,6 +171,8 @@ const GatewayCard: React.FC<{
         )}
         <p className="mt-2 text-[11px] text-slate-500">{INSTRUCOES[gateway]}</p>
       </div>
+      </>
+      )}
 
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-300">
         <label className="flex items-center gap-2">
@@ -294,7 +303,7 @@ export const GatewaysPage: React.FC = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const gateways: GatewayNome[] = ['asaas', 'pagbank', 'mercadopago'];
+  const gateways: GatewayNome[] = ['fake', 'asaas', 'pagbank', 'mercadopago'];
 
   return (
     <div className="max-w-7xl space-y-6">

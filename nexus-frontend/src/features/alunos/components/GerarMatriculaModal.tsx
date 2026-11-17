@@ -6,6 +6,8 @@ import {
   apiErrorMessage,
   ReingressoResultado,
 } from '@/features/alunos/api';
+import { EstoqueDisciplinaItem, licencasApi } from '@/features/licencas/api';
+import { DisciplinaSelect, paraDisciplinaId } from '@/features/licencas/components/EstoqueDisciplina';
 import { Opcao, transferenciasApi } from '@/features/transferencias/api';
 
 interface Props {
@@ -25,6 +27,8 @@ export const GerarMatriculaModal: React.FC<Props> = ({ aluno, onClose, onSuccess
   const [escolas, setEscolas] = useState<Opcao[]>([]);
   const [poloId, setPoloId] = useState(aluno.reingresso_polo_destino_id ?? '');
   const [escolaId, setEscolaId] = useState(aluno.reingresso_escola_destino_id ?? '');
+  const [saldos, setSaldos] = useState<EstoqueDisciplinaItem[]>([]);
+  const [disciplina, setDisciplina] = useState('');
   const [taxaConfirmada, setTaxaConfirmada] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -42,6 +46,16 @@ export const GerarMatriculaModal: React.FC<Props> = ({ aluno, onClose, onSuccess
       return;
     }
     let ativo = true;
+    setDisciplina('');
+    // Saldo do Polo por disciplina: o reingresso debita 2 licenças da disciplina escolhida.
+    licencasApi
+      .estoquePolo(poloId)
+      .then((estoque) => {
+        if (ativo) setSaldos(estoque.items);
+      })
+      .catch(() => {
+        if (ativo) setSaldos([]);
+      });
     transferenciasApi
       .escolas(poloId)
       .then((itens) => {
@@ -64,6 +78,7 @@ export const GerarMatriculaModal: React.FC<Props> = ({ aluno, onClose, onSuccess
         modalidade,
         polo_destino_id: modalidade === 'polo' ? poloId : undefined,
         escola_destino_id: modalidade === 'polo' ? escolaId : undefined,
+        disciplina_id: modalidade === 'polo' ? paraDisciplinaId(disciplina) : undefined,
         taxa_confirmada: taxaConfirmada,
       });
       onSuccess(resultado);
@@ -161,8 +176,16 @@ export const GerarMatriculaModal: React.FC<Props> = ({ aluno, onClose, onSuccess
                 ))}
               </select>
             </label>
+            {poloId && (
+              <DisciplinaSelect
+                label="Disciplina das licenças *"
+                value={disciplina}
+                onChange={setDisciplina}
+                saldos={saldos.filter((s) => s.quantidade_disponivel >= 2)}
+              />
+            )}
             <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-              Serão debitadas 2 licenças do estoque do Polo de destino.
+              Serão debitadas 2 licenças da disciplina escolhida, no estoque do Polo de destino.
             </p>
           </>
         )}

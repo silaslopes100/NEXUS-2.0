@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Ban, Barcode, CheckCircle2, Copy, ExternalLink, Loader2, QrCode, RefreshCw } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
-import { COR_STATUS_PAGAMENTO, MeioCobranca, Pagamento, Pedido, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
+import { SeloSimulado, SimuladorPagamento } from '@/features/financeiro/components/SimuladorPagamento';
+import {
+  COR_STATUS_PAGAMENTO, MeioCobranca, NOME_GATEWAY, Pagamento, Pedido, erroApi, formatBRL, formatData, linkCobranca,
+} from '@/features/financeiro/types';
 
 const CopiarTexto: React.FC<{ texto: string; rotulo: string }> = ({ texto, rotulo }) => {
   const [ok, setOk] = useState(false);
@@ -33,10 +36,12 @@ interface Props {
   podeCancelar: boolean;
   /** Recarrega o pedido (status pode ter mudado). */
   onAlterado: () => void;
+  /** Pode gerar boleto/PIX (falso para o perfil só de logística). */
+  podeGerarCobranca?: boolean;
 }
 
 /** Cobrança do pedido: gerar boleto/PIX, exibir linha digitável/QR Code e cancelar. */
-export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAlterado }) => {
+export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAlterado, podeGerarCobranca = true }) => {
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [acao, setAcao] = useState<string | null>(null);
@@ -56,7 +61,7 @@ export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAltera
   useEffect(() => { load(); }, [load, pedido.status]);
 
   const pendente = pagamentos.find((p) => p.status === 'pendente');
-  const podeGerar = pedido.status === 'aguardando_pagamento' && !pendente && Number(pedido.valor_total) > 0;
+  const podeGerar = podeGerarCobranca && pedido.status === 'aguardando_pagamento' && !pendente && Number(pedido.valor_total) > 0;
 
   const gerar = async (meio: MeioCobranca) => {
     setAcao(meio);
@@ -110,11 +115,15 @@ export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAltera
       )}
 
       <div className="space-y-3">
-        {pagamentos.map((pg) => (
+        {pagamentos.map((pg) => {
+          const link = linkCobranca(pg);
+          return (
           <div key={pg.id} className="space-y-3 rounded-lg border border-slate-800 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="text-slate-300">
-                {pg.billing_type || '-'} · {pg.gateway}{pg.ambiente ? ` (${pg.ambiente})` : ''} · vence {formatData(pg.vencimento_em)}
+              <span className="flex flex-wrap items-center gap-1.5 text-slate-300">
+                {pg.billing_type || '-'} · {NOME_GATEWAY[pg.gateway as keyof typeof NOME_GATEWAY] || pg.gateway}
+                {pg.ambiente ? ` (${pg.ambiente})` : ''} · vence {formatData(pg.vencimento_em)}
+                {pg.gateway === 'fake' && <SeloSimulado />}
               </span>
               <span className={`font-semibold ${COR_STATUS_PAGAMENTO[pg.status || ''] || 'text-slate-300'}`}>
                 {pg.status} · {formatBRL(pg.valor)}
@@ -123,7 +132,7 @@ export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAltera
             {pg.status === 'pendente' && (
               <>
                 {pg.linha_digitavel && <CopiarTexto texto={pg.linha_digitavel} rotulo="Linha digitável" />}
-                {pg.pix_qrcode_base64 && (
+                {pg.pix_qrcode_base64 && pg.gateway !== 'fake' && (
                   <img
                     src={`data:image/png;base64,${pg.pix_qrcode_base64}`}
                     alt="QR Code PIX"
@@ -134,8 +143,8 @@ export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAltera
               </>
             )}
             <div className="flex flex-wrap gap-2">
-              {(pg.boleto_url || pg.invoice_url) && (
-                <a href={pg.boleto_url || pg.invoice_url || '#'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:text-white">
+              {link && (
+                <a href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:text-white">
                   <ExternalLink size={13} /> {pg.boleto_url ? 'Abrir boleto' : 'Abrir fatura'}
                 </a>
               )}
@@ -145,8 +154,10 @@ export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAltera
                 </button>
               )}
             </div>
+            <SimuladorPagamento pagamento={pg} onAlterado={() => { load(); onAlterado(); }} />
           </div>
-        ))}
+          );
+        })}
         {!pagamentos.length && !carregando && !podeGerar && <p className="text-xs text-slate-500">Nenhuma cobrança registrada.</p>}
       </div>
     </div>

@@ -6,7 +6,7 @@ import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, LogIn, ShieldAlert } fro
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { loginSchema, LoginFormData } from '@/features/auth/schemas';
 import { authApi } from '@/features/auth/api';
-import { useAuthStore } from '@/stores/authStore';
+import { dashboardDoPerfil, useAuthStore } from '@/stores/authStore';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -68,26 +68,10 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      switch (userRole) {
-        case 'admin':
-          navigate('/admin/dashboard', { replace: true });
-          break;
-        case 'polo':
-          navigate('/polo/dashboard', { replace: true });
-          break;
-        case 'escola':
-          navigate('/escola/dashboard', { replace: true });
-          break;
-        case 'professor':
-          navigate('/professor/dashboard', { replace: true });
-          break;
-        case 'aluno':
-          navigate('/aluno/dashboard', { replace: true });
-          break;
-        default:
-          navigate('/admin/dashboard', { replace: true });
-          break;
-      }
+      // Mesma regra do authStore (inclui financeiro e logística).
+      // Perfil não mapeado mantém o comportamento anterior (/admin/dashboard, que mostra o acesso negado).
+      const destino = dashboardDoPerfil(userRole);
+      navigate(destino === '/auth/login' ? '/admin/dashboard' : destino, { replace: true });
     } catch (err: any) {
       if (err.response?.status === 429) {
         setIsBlocked(true);

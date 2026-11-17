@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import settings
 from app.core.database import get_db_cursor
@@ -82,6 +82,7 @@ class DisciplinaSchema(BaseModel):
     qtd_aulas_prevista: Optional[int] = Field(default=10, ge=0)
     tipo: str = Field(default="presencial", min_length=1, max_length=16)
     eh_extra_grade: bool = False
+    preco: Optional[float] = Field(default=None, ge=0)  # informativo (R$)
 
 
 class DisciplinaWriteSchema(BaseModel):
@@ -93,6 +94,13 @@ class DisciplinaWriteSchema(BaseModel):
     qtd_aulas_prevista: Optional[int] = Field(default=10, ge=0)
     tipo: str = Field(default="presencial", min_length=1, max_length=16)
     eh_extra_grade: bool = False
+    # Preço informativo (R$). Não é usado em pedidos/cobranças (o preço de venda fica em Produtos).
+    preco: Optional[float] = Field(default=None, ge=0, le=9_999_999_999.99)
+
+    @field_validator("preco")
+    @classmethod
+    def _arredondar_preco(cls, valor: Optional[float]) -> Optional[float]:
+        return None if valor is None else round(valor, 2)
 
 
 class DisciplinaConteudoSchema(BaseModel):
@@ -386,7 +394,8 @@ async def delete_curso(curso_id: uuid.UUID) -> Response:
 @router.get(
     "/disciplinas",
     response_model=List[DisciplinaSchema],
-    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+    # financeiro: leitura para o catálogo de produtos de licença (por disciplina).
+    dependencies=[Depends(require_role(["admin", "polo", "escola", "financeiro"]))],
 )
 async def list_disciplinas(
     curso_id: Optional[str] = None,
@@ -400,7 +409,7 @@ async def list_disciplinas(
             discs = [d for d in discs if d.get("semestre") == semestre]
         return discs
 
-    sql = "SELECT id, curso_id, semestre, nome, ordem, carga_horaria, qtd_aulas_prevista, tipo, eh_extra_grade FROM disciplinas"
+    sql = "SELECT id, curso_id, semestre, nome, ordem, carga_horaria, qtd_aulas_prevista, tipo, eh_extra_grade, preco FROM disciplinas"
     conds = []
     params = []
     if curso_id:
@@ -490,11 +499,11 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
     sql = """
         INSERT INTO disciplinas (
             id, curso_id, semestre, nome, ordem, carga_horaria,
-            qtd_aulas_prevista, tipo, eh_extra_grade, criado_em, atualizado_em
+            qtd_aulas_prevista, tipo, eh_extra_grade, preco, criado_em, atualizado_em
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco
     """
     params = (
         new_id,
@@ -506,6 +515,7 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
         dados.qtd_aulas_prevista,
         dados.tipo,
         dados.eh_extra_grade,
+        dados.preco,
     )
     with get_db_cursor() as cur:
         cur.execute(sql, params)
@@ -534,10 +544,10 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         UPDATE disciplinas
         SET curso_id = %s, semestre = %s, nome = %s, ordem = %s,
             carga_horaria = %s, qtd_aulas_prevista = %s, tipo = %s,
-            eh_extra_grade = %s, atualizado_em = now()
+            eh_extra_grade = %s, preco = %s, atualizado_em = now()
         WHERE id = %s
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco
     """
     params = (
         dados.curso_id,
@@ -548,6 +558,7 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         dados.qtd_aulas_prevista,
         dados.tipo,
         dados.eh_extra_grade,
+        dados.preco,
         uid,
     )
     with get_db_cursor() as cur:

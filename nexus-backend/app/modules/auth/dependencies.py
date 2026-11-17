@@ -158,18 +158,18 @@ def require_permissao(chave: str) -> Callable:
     return permissao_checker
 
 
-def require_area(area: Literal["financeiro", "logistica"]) -> Callable:
-    """Acesso às áreas do módulo 2.4: admin, o perfil da própria área ou a permissão `p_<area>`."""
+def require_area(*areas: Literal["financeiro", "logistica"]) -> Callable:
+    """Acesso às áreas do módulo 2.4: admin, o perfil da área ou a permissão `p_<area>` (qualquer das áreas)."""
 
     async def area_checker(
         current_user: UserResponse = Depends(get_current_user),
     ) -> UserResponse:
         perfil = perfil_do_usuario(current_user)
-        if perfil in ("admin", area) or _tem_permissao(current_user, area):
+        if perfil == "admin" or any(perfil == a or _tem_permissao(current_user, a) for a in areas):
             return current_user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Acesso negado: requer acesso à área '{area}'",
+            detail=f"Acesso negado: requer acesso à área '{' ou '.join(areas)}'",
         )
 
     return area_checker

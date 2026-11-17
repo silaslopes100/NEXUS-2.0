@@ -26,6 +26,9 @@ import {
   Sliders,
   Database,
   ClipboardList,
+  History,
+  Scale,
+  TrendingUp,
   LucideIcon,
 } from 'lucide-react';
 import { UserRole } from '@/types/auth';
@@ -144,16 +147,28 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Estoque de Licenças',
           path: '/admin/licencas',
           icon: Key,
-          badge: 'Vendas',
-          badgeColor: 'yellow',
-          isPlaceholder: true,
         },
         {
-          title: 'Financeiro & Pagamentos',
+          title: 'Vendas',
+          path: '/admin/vendas',
+          icon: TrendingUp,
+        },
+        {
+          title: 'Boletos & Pagamentos',
           path: '/admin/financeiro',
           icon: CreditCard,
           badge: 'Gateway',
           badgeColor: 'blue',
+        },
+        {
+          title: 'Pedidos',
+          path: '/admin/pedidos',
+          icon: ClipboardList,
+        },
+        {
+          title: 'Regras de Pagamento',
+          path: '/admin/regras-pagamento',
+          icon: Scale,
         },
         {
           title: 'Produtos & Preços',
@@ -172,14 +187,24 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'Logística & Livros',
-          path: '/admin/pedidos-livros',
-          icon: Truck,
-        },
-        {
           title: 'Transferências',
           path: '/admin/transferencias',
           icon: ArrowLeftRight,
+        },
+      ],
+    },
+    {
+      groupTitle: 'Logística & Livros',
+      items: [
+        {
+          title: 'Pendentes de envio',
+          path: '/admin/logistica/pendentes',
+          icon: Truck,
+        },
+        {
+          title: 'Histórico de pedidos',
+          path: '/admin/logistica/historico',
+          icon: History,
         },
       ],
     },
@@ -217,6 +242,34 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: BellRing,
           isPlaceholder: true,
         },
+      ],
+    },
+  ],
+
+  // Perfis do módulo 2.4: usam as mesmas telas do admin (caminhos /admin/...),
+  // liberadas por RequireRole e restritas no backend por require_area.
+  financeiro: [
+    {
+      groupTitle: 'Financeiro',
+      items: [
+        { title: 'Dashboard Financeiro', path: '/financeiro/dashboard', icon: LayoutDashboard },
+        { title: 'Vendas', path: '/admin/vendas', icon: TrendingUp },
+        { title: 'Boletos & Pagamentos', path: '/admin/financeiro', icon: CreditCard },
+        { title: 'Pedidos', path: '/admin/pedidos', icon: ClipboardList },
+        { title: 'Regras de Pagamento', path: '/admin/regras-pagamento', icon: Scale },
+        { title: 'Produtos & Preços', path: '/admin/produtos', icon: Package },
+        { title: 'Gateways de Pagamento', path: '/admin/gateways', icon: ShieldCheck },
+      ],
+    },
+  ],
+
+  logistica: [
+    {
+      groupTitle: 'Logística & Livros',
+      items: [
+        { title: 'Dashboard Logística', path: '/logistica/dashboard', icon: LayoutDashboard },
+        { title: 'Pendentes de envio', path: '/admin/logistica/pendentes', icon: Truck },
+        { title: 'Histórico de pedidos', path: '/admin/logistica/historico', icon: History },
       ],
     },
   ],
@@ -283,13 +336,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Minhas Licenças',
           path: '/polo/licencas',
           icon: Key,
-          isPlaceholder: true,
         },
         {
           title: 'Comprar Licenças',
           path: '/polo/comprar-licencas',
           icon: CreditCard,
-          isPlaceholder: true,
         },
         {
           title: 'Pedidos de Livros Didáticos',

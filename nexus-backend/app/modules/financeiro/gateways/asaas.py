@@ -15,6 +15,7 @@ import httpx
 
 from app.modules.financeiro.gateways.base import (
     CobrancaCriada,
+    Encargos,
     EventoPagamento,
     GatewayError,
     HttpGatewayBase,
@@ -108,15 +109,27 @@ class AsaasGateway(HttpGatewayBase):
         referencia: str,
         notification_url: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        encargos: Optional[Encargos] = None,
     ) -> CobrancaCriada:
-        pagamento = self._request("POST", "/payments", json={
+        corpo: Dict[str, Any] = {
             "customer": customer_id,
             "billingType": meio,
             "value": round(float(valor), 2),
             "dueDate": vencimento.isoformat(),
             "description": (descricao or "")[:500],
             "externalReference": referencia,
-        })
+        }
+        if encargos and not encargos.vazio and meio == "BOLETO":
+            # Asaas: fine/interest em % (juros ao mês); discount em % até o vencimento.
+            # Campos conforme a doc de cobranças do Asaas; conferir no sandbox antes da produção.
+            if encargos.multa_pct:
+                corpo["fine"] = {"value": round(encargos.multa_pct, 2)}
+            if encargos.juros_mes_pct:
+                corpo["interest"] = {"value": round(encargos.juros_mes_pct, 2)}
+            if encargos.desconto_antecipado_pct:
+                corpo["discount"] = {"value": round(encargos.desconto_antecipado_pct, 2),
+                                     "dueDateLimitDays": 0, "type": "PERCENTAGE"}
+        pagamento = self._request("POST", "/payments", json=corpo)
         cobranca = CobrancaCriada(
             payment_id=pagamento["id"],
             status=normalizar_status(pagamento.get("status")),

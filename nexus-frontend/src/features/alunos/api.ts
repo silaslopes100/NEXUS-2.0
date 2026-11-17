@@ -166,6 +166,8 @@ export interface ReingressoPayload {
   modalidade: 'polo' | 'ead';
   polo_destino_id?: string;
   escola_destino_id?: string;
+  /** Disciplina de onde saem as 2 licenças; nulo = saldo "Sem disciplina". */
+  disciplina_id?: string | null;
   taxa_confirmada: boolean;
 }
 

@@ -85,6 +85,13 @@ cria `gateway_clientes` e um índice de webhooks; se qualquer etapa falhar, sua
 transação é revertida. Aplique-a pelo procedimento de migração do ambiente e
 confirme as quatro colunas fiscais em `polos` antes de tentar novamente.
 
+A listagem e o cadastro de Disciplinas leem a coluna `disciplinas.preco`: aplique
+[`019_disciplinas_preco.sql`](./nexus-backend/scripts/migrations/019_disciplinas_preco.sql)
+antes de publicar essa versão da API, ou a tela de Disciplinas falhará.
+
+O gateway **Simulador** (`fake`) existe só no sandbox, para testes sem chaves reais.
+Ele é recusado em `producao`, e só o admin pode simular pagamentos.
+
 Arquivos em `nexus-backend/uploads/profile_photos/` não são publicados com o
 repositório. Se houver fotos existentes, migre-as para o Blob privado mantendo
 os nomes registrados em `usuarios.foto_url` antes de apontar o frontend para a

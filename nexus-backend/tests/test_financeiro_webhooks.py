@@ -16,7 +16,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
 from app.modules.auth.schemas import PerfilResponse, UserResponse
-from app.modules.financeiro.cobranca_service import CobrancaService, proximo_status
+from app.modules.financeiro.cobranca_service import CobrancaService, hoje_brasil, proximo_status
 from app.modules.financeiro.gateways import fake
 from app.modules.financeiro.repository import InMemoryFinanceiroRepository, set_financeiro_repository
 from app.modules.financeiro.schemas import PedidoCreate, PedidoItemIn, ProdutoCreate
@@ -68,7 +68,8 @@ def cobranca(repo, creditos):
 
 def _pedido(repo, tipo="livro", qtd=2, preco=50.0):
     svc = FinanceiroService(repo)
-    prod = svc.create_produto(ProdutoCreate(tipo=tipo, sku=f"SKU-{tipo}-{len(repo.produtos)}", nome=f"P {tipo}", preco=preco))
+    prod = svc.create_produto(ProdutoCreate(tipo=tipo, sku=f"SKU-{tipo}-{len(repo.produtos)}", nome=f"P {tipo}",
+                                            preco=preco, disciplina_id="disc-1" if tipo == "licenca" else None))
     return svc.criar_pedido(PedidoCreate(tipo=tipo, itens=[PedidoItemIn(produto_id=prod.id, quantidade=qtd)]), _user())
 
 
@@ -133,7 +134,7 @@ def test_gerar_cobranca_respeita_regra_e_gateway_padrao(repo, cobranca):
         cobranca.gerar_cobranca(pedido.id, "BOLETO", _user())
     assert exc.value.status_code == 422
     pg = cobranca.gerar_cobranca(pedido.id, "PIX", _user())
-    assert (pg.vencimento_em - pg.criado_em.date()).days == 5
+    assert (pg.vencimento_em - hoje_brasil()).days == 5  # vencimento conta do dia em Brasília
 
     repo.salvar_gateway_config("fake", "sandbox", {"padrao": False})
     with pytest.raises(HTTPException) as exc:
@@ -324,6 +325,80 @@ async def test_api_cobranca_e_webhook_http(client, repo):
 
     filtrado = await client.get(f"/financeiro/pagamentos?pedido_id={pedido.id}", headers=_hdr("polo-1"))
     assert filtrado.json()["total"] == 1 and filtrado.json()["items"][0]["status"] == "pago"
+
+
+# ---------------------------------------------------------------------------
+# Simulador (sandbox, sem credenciais)
+# ---------------------------------------------------------------------------
+
+def test_simular_pagamento_livro_passa_pelo_caminho_do_webhook(repo, cobranca, creditos):
+    pedido = _pedido(repo)
+    pg = cobranca.gerar_cobranca(pedido.id, "BOLETO", _user())
+    resultado = cobranca.simular(pg.id, "pago", _user("admin", "adm", None))
+    assert resultado["status"] == "processado" and resultado["pagamento"].status == "pago"
+    p = repo.get_pedido(pedido.id)
+    assert p["status"] == "pago_aguardando_envio" and p["historico"][-1]["origem"] == "webhook"
+    evento = list(repo.webhooks.values())[0]
+    assert evento["tipo_evento"] == "SIMULADO" and evento["status"] == "processado"
+    assert creditos == []
+
+
+def test_simular_pagamento_licenca_credita(repo, cobranca, creditos):
+    pedido = _pedido(repo, tipo="licenca", qtd=5)
+    pg = cobranca.gerar_cobranca(pedido.id, "PIX", _user())
+    cobranca.simular(pg.id, "pago", _user("admin", "adm", None))
+    assert repo.get_pedido(pedido.id)["status"] == "concluido" and creditos == [pedido.numero]
+
+
+def test_simular_vencido_e_reconciliar_sem_memoria(repo, cobranca):
+    pg = cobranca.gerar_cobranca(_pedido(repo).id, "BOLETO", _user())
+    cobranca.simular(pg.id, "vencido", _user("admin", "adm", None))
+    assert repo.get_pagamento(pg.id)["status"] == "vencido"
+    fake.resetar()  # API reiniciada: o Simulador perdeu o estado em memória
+    repo.pagamentos[pg.id]["criado_em"] -= timedelta(hours=1)
+    resumo = cobranca.reconciliar()
+    assert resumo["falhas"] == 0 and repo.get_pagamento(pg.id)["status"] == "vencido"
+
+
+def test_simular_so_vale_para_simulador(repo, cobranca):
+    pg = cobranca.gerar_cobranca(_pedido(repo).id, "BOLETO", _user())
+    repo.pagamentos[pg.id]["gateway"] = "asaas"
+    with pytest.raises(HTTPException) as exc:
+        cobranca.simular(pg.id, "pago", _user("admin", "adm", None))
+    assert exc.value.status_code == 409
+
+
+def test_simulador_nao_roda_em_producao(repo, cobranca):
+    repo.salvar_gateway_config("fake", "producao", {"ativo": True})
+    from app.modules.financeiro.gateways import factory
+    with pytest.raises(HTTPException) as exc:
+        factory.construir("fake", "producao", repo.get_gateway_config("fake", "producao"))
+    assert exc.value.status_code == 409
+    with pytest.raises(HTTPException) as exc:
+        cobranca.salvar_gateway("fake", "producao", {"ativo": True}, "adm")
+    assert exc.value.status_code == 404
+    assert all(i["ambiente"] == "sandbox" for i in cobranca.listar_gateways()["items"] if i["gateway"] == "fake")
+
+
+def test_simulador_sem_token_recusa_webhook_http():
+    assert fake.FakeGateway("sandbox").validar_webhook({"x-fake-token": "qualquer"}, b"{}") is False
+
+
+@pytest.mark.asyncio
+async def test_api_simular_permissoes(client, repo):
+    pedido = _pedido(repo)
+    criado = await client.post(f"/financeiro/pedidos/{pedido.id}/cobranca", json={"meio": "BOLETO"}, headers=_hdr("polo-1"))
+    pg_id = criado.json()["id"]
+    url = f"/financeiro/pagamentos/{pg_id}/simular"
+    assert (await client.post(url, json={"status": "pago"}, headers=_hdr("polo-1"))).status_code == 403
+    assert (await client.post(url, json={"status": "pago"}, headers=_hdr("fin-1"))).status_code == 403
+    assert (await client.post(url, json={"status": "outro"}, headers=_hdr("admin-1"))).status_code == 422
+    ok = await client.post(url, json={"status": "pago"}, headers=_hdr("admin-1"))
+    assert ok.status_code == 200 and ok.json()["pagamento"]["status"] == "pago"
+
+    # Simulador configurável pela tela, sem credenciais
+    salvo = await client.put("/financeiro/gateways/fake/sandbox", json={"ativo": True, "padrao": True}, headers=_hdr("admin-1"))
+    assert salvo.status_code == 200 and salvo.json()["ativo"]
 
 
 @pytest.mark.asyncio

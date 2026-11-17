@@ -54,6 +54,8 @@ export interface Disciplina {
   qtd_aulas_prevista?: number | null;
   tipo?: string;
   eh_extra_grade?: boolean;
+  /** Preço informativo em R$ (não usado em pedidos/cobranças). */
+  preco?: number | null;
 }
 
 export interface DisciplinaInput {
@@ -65,6 +67,7 @@ export interface DisciplinaInput {
   qtd_aulas_prevista: number | null;
   tipo: string;
   eh_extra_grade: boolean;
+  preco?: number | null;
 }
 
 export interface ProfessorVinculadoDisciplina {

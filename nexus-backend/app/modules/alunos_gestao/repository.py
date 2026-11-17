@@ -32,6 +32,8 @@ class DadosReingresso:
     polo_id: Optional[str]
     escola_id: Optional[str]
     licencas: int
+    # Estoque por disciplina (Fase 3A): de qual disciplina debitar; None = "Sem disciplina".
+    disciplina_id: Optional[str] = None
 
 
 class AlunosGestaoRepositoryInterface(Protocol):
@@ -323,20 +325,24 @@ class PostgresAlunosGestaoRepository:
         return True
 
     def _debitar_licencas(
-        self, cur: Any, aluno_id: str, polo_id: str, quantidade: int, ator_id: str
+        self, cur: Any, aluno_id: str, polo_id: str, quantidade: int, ator_id: str,
+        disciplina_id: Optional[str] = None,
     ) -> None:
+        # Mesma transação do reingresso: SQL próprio no cursor corrente (atômico).
         cur.execute(
             """
             SELECT id, quantidade_disponivel FROM licencas_estoque
             WHERE polo_id = %s AND escola_id IS NULL
+              AND materia_id IS NOT DISTINCT FROM %s::uuid
             LIMIT 1 FOR UPDATE
             """,
-            (polo_id,),
+            (polo_id, disciplina_id),
         )
         estoque = cur.fetchone()
         if estoque is None or estoque["quantidade_disponivel"] < quantidade:
+            onde = "nesta disciplina" if disciplina_id else "sem disciplina"
             raise ConflitoNegocio(
-                f"O Polo de destino não tem {quantidade} licenças disponíveis para o reingresso"
+                f"O Polo de destino não tem {quantidade} licenças disponíveis ({onde}) para o reingresso"
             )
         cur.execute(
             """
@@ -349,13 +355,14 @@ class PostgresAlunosGestaoRepository:
         cur.execute(
             """
             INSERT INTO licencas_movimentacoes (
-                id, tipo, polo_id, aluno_id, quantidade, status, actor_id, observacao, criado_em
-            ) VALUES (%s, 'reingresso_churn', %s, %s, %s, 'consumida', %s, %s, now())
+                id, tipo, polo_id, aluno_id, materia_id, quantidade, status, actor_id, observacao, criado_em
+            ) VALUES (%s, 'reingresso_churn', %s, %s, %s, %s, 'consumida', %s, %s, now())
             """,
             (
                 str(uuid.uuid4()),
                 polo_id,
                 aluno_id,
+                disciplina_id,
                 quantidade,
                 ator_id,
                 "Cobrança de reingresso de aluno em Churn",
@@ -373,7 +380,7 @@ class PostgresAlunosGestaoRepository:
                 raise ConflitoNegocio("Somente alunos em Churn podem receber nova matrícula")
 
             if dados.licencas and dados.polo_id:
-                self._debitar_licencas(cur, aluno_id, dados.polo_id, dados.licencas, ator_id)
+                self._debitar_licencas(cur, aluno_id, dados.polo_id, dados.licencas, ator_id, dados.disciplina_id)
 
             cur.execute(
                 """
@@ -607,12 +614,15 @@ class InMemoryAlunosGestaoRepository:
         if aluno["status"] != "desistente":
             raise ConflitoNegocio("Somente alunos em Churn podem receber nova matrícula")
         if dados.licencas and dados.polo_id:
-            if self.estoque_polo.get(dados.polo_id, 0) < dados.licencas:
+            # Chave: polo (sem disciplina) ou (polo, disciplina).
+            chave = (dados.polo_id, dados.disciplina_id) if dados.disciplina_id else dados.polo_id
+            if self.estoque_polo.get(chave, 0) < dados.licencas:
                 raise ConflitoNegocio(
                     f"O Polo de destino não tem {dados.licencas} licenças disponíveis para o reingresso"
                 )
-            self.estoque_polo[dados.polo_id] -= dados.licencas
-            self.movimentacoes.append({"tipo": "reingresso_churn", "polo_id": dados.polo_id})
+            self.estoque_polo[chave] -= dados.licencas
+            self.movimentacoes.append({"tipo": "reingresso_churn", "polo_id": dados.polo_id,
+                                       "materia_id": dados.disciplina_id})
         self._seq_matricula += 1
         anterior = aluno.get("numero_matricula")
         nova = f"NX-2026-{self._seq_matricula:07d}"

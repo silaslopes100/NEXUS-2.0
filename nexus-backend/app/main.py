@@ -52,6 +52,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Nome dos arquivos exportados (PDF/XLSX/etiqueta) quando frontend e API estão em domínios diferentes.
+    expose_headers=["Content-Disposition"],
 )
 
 # Inclusão dos Módulos do Sistema

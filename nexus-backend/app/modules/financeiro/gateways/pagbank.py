@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from app.modules.financeiro.gateways.base import (
     CobrancaCriada,
+    Encargos,
     EventoPagamento,
     GatewayError,
     HttpGatewayBase,
@@ -93,6 +94,7 @@ class PagBankGateway(HttpGatewayBase):
         referencia: str,
         notification_url: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        encargos: Optional[Encargos] = None,  # VERIFICAR NA DOC: multa/juros/desconto ainda não enviados
     ) -> CobrancaCriada:
         end = pagador.endereco
         centavos = _centavos(valor)

@@ -15,6 +15,8 @@ import {
   GraduationCap,
   School,
   BookOpen,
+  Truck,
+  Wallet,
 } from 'lucide-react';
 import { authApi } from '@/features/auth/api';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
@@ -87,6 +89,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'Área do Aluno',
           icon: BookOpen,
           bg: 'bg-sky-500/15 border-sky-500/30 text-sky-400',
+        };
+      case 'financeiro':
+        return {
+          label: 'Financeiro',
+          icon: Wallet,
+          bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
+        };
+      case 'logistica':
+        return {
+          label: 'Logística',
+          icon: Truck,
+          bg: 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300',
         };
       default:
         return {

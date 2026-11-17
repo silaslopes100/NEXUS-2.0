@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
 import { StatusPedidoBadge } from '@/features/financeiro/components/StatusPedidoBadge';
 import { PedidoDetalheDrawer } from '@/features/financeiro/components/PedidoDetalheDrawer';
-import { Pedido, TIPO_PEDIDO, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
+import { FiltrosPeriodo, Pedido, TIPO_PEDIDO, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
 
 const PAGE_SIZE = 20;
 
@@ -15,11 +15,21 @@ interface Props {
   podeAlterarStatus?: boolean;
   /** Muda para forçar recarga (ex.: após criar um pedido). */
   recarregarChave?: number;
+  /** Ações de logística no detalhe (enviar, entregar, editar). */
+  podeLogistica?: boolean;
+  /** Filtros sempre aplicados (sobrepõem os da URL), ex.: só livros pagos. */
+  filtrosFixos?: FiltrosPeriodo;
+  titulo?: string;
 }
 
 /** Lista paginada de pedidos usando os filtros da URL + drawer de detalhe. */
-export const PedidosTabela: React.FC<Props> = ({ mostrarPolo = true, podeAlterarStatus = false, recarregarChave = 0 }) => {
-  const { filtros, page, setPage } = useFiltrosUrl();
+export const PedidosTabela: React.FC<Props> = ({
+  mostrarPolo = true, podeAlterarStatus = false, recarregarChave = 0, podeLogistica = false, filtrosFixos, titulo = 'Pedidos',
+}) => {
+  const { filtros: filtrosUrl, page, setPage } = useFiltrosUrl();
+  const chaveFixos = JSON.stringify(filtrosFixos || {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filtros = useMemo(() => ({ ...filtrosUrl, ...(filtrosFixos || {}) }), [filtrosUrl, chaveFixos]);
   const [items, setItems] = useState<Pedido[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -49,7 +59,7 @@ export const PedidosTabela: React.FC<Props> = ({ mostrarPolo = true, podeAlterar
     <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
       <div className="flex items-center justify-between border-b border-slate-800 p-4">
         <div>
-          <h2 className="font-bold text-white">Pedidos</h2>
+          <h2 className="font-bold text-white">{titulo}</h2>
           <p className="text-xs text-slate-500">{total} pedido(s) encontrado(s)</p>
         </div>
         <button onClick={load} title="Recarregar" className="rounded-xl border border-slate-700 p-2 text-slate-400 hover:text-white">
@@ -105,6 +115,7 @@ export const PedidosTabela: React.FC<Props> = ({ mostrarPolo = true, podeAlterar
         <PedidoDetalheDrawer
           pedidoId={selecionado}
           podeAlterarStatus={podeAlterarStatus}
+          podeLogistica={podeLogistica}
           onClose={() => setSelecionado(null)}
           onAlterado={load}
         />

@@ -31,6 +31,8 @@ export interface ProdutoPayload {
   sku?: string;
   nome?: string;
   descricao?: string | null;
+  /** Obrigatória para licença (estoque por disciplina). */
+  disciplina_id?: string | null;
   preco?: number;
   peso_g?: number | null;
   ativo?: boolean;
@@ -51,6 +53,7 @@ export interface EnderecoEntrega {
 export interface PedidoItem {
   id: string;
   produto_id?: string | null;
+  disciplina_id?: string | null;
   descricao?: string | null;
   quantidade: number;
   valor_unitario: number;
@@ -90,7 +93,90 @@ export interface Pedido {
   criado_em?: string | null;
   itens: PedidoItem[];
   historico: PedidoHistorico[];
+  envios?: Envio[];
 }
+
+export interface Envio {
+  id: string;
+  transportadora?: string | null;
+  codigo_rastreio?: string | null;
+  volumes: number;
+  peso_total_g?: number | null;
+  enviado_em?: string | null;
+  observacao?: string | null;
+}
+
+export interface EnvioPayload {
+  transportadora: string;
+  codigo_rastreio?: string;
+  volumes: number;
+  peso_total_g?: number | null;
+  observacao?: string;
+}
+
+export interface PedidoUpdatePayload {
+  endereco?: EnderecoEntrega;
+  observacao?: string;
+  itens?: { produto_id: string; quantidade: number }[];
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3: regras de pagamento, checkout e vendas
+// ---------------------------------------------------------------------------
+
+export interface RegraPagamento {
+  id: string;
+  nome: string;
+  aplica_tipo_pedido?: TipoPedido | null;
+  aplica_polo_id?: string | null;
+  polo_nome?: string | null;
+  meios_permitidos: string[];
+  gateway_preferido?: string | null;
+  dias_vencimento: number;
+  multa_pct: number;
+  juros_mes_pct: number;
+  desconto_antecipado_pct: number;
+  valor_minimo: number;
+  prioridade: number;
+  ativo: boolean;
+  generica: boolean;
+}
+
+export type RegraPagamentoPayload = Partial<Omit<RegraPagamento, 'id' | 'polo_nome' | 'generica'>>;
+
+export interface CheckoutOpcoes {
+  regra_id?: string | null;
+  regra_nome: string;
+  meios: string[];
+  dias_vencimento: number;
+  vencimento: string;
+  multa_pct: number;
+  juros_mes_pct: number;
+  desconto_antecipado_pct: number;
+}
+
+export interface CheckoutResposta {
+  pedido: Pedido;
+  pagamento?: Pagamento | null;
+  erro_cobranca?: string | null;
+}
+
+export interface VendasKpis {
+  pedidos: number;
+  pedidos_pagos: number;
+  receita_paga: number;
+  a_receber: number;
+  vencido: number;
+  ticket_medio: number;
+  receita_licencas: number;
+  receita_livros: number;
+  licencas_vendidas: number;
+  livros_vendidos: number;
+  por_status: { status: string; pedidos: number; valor: number }[];
+  top_polos: { polo_id?: string | null; polo_nome?: string | null; pedidos_pagos: number; receita: number }[];
+}
+
+export interface VendasSerieItem { mes: string; pedidos: number; pedidos_pagos: number; receita: number; }
 
 export interface PedidoCreatePayload {
   tipo: TipoPedido;
@@ -146,6 +232,8 @@ export interface FiltrosPeriodo {
   status?: string;
   tipo?: string;
   pedido_id?: string;
+  gateway?: string;
+  meio?: string;
   limit?: number;
   offset?: number;
 }
@@ -187,7 +275,9 @@ export const erroApi = (error: any, padrao: string): string => {
 // Fase 2: gateways, cobrança e webhooks
 // ---------------------------------------------------------------------------
 
-export type GatewayNome = 'asaas' | 'pagbank' | 'mercadopago';
+/** 'fake' = Simulador (somente sandbox, sem credenciais). */
+export type GatewayNome = 'asaas' | 'pagbank' | 'mercadopago' | 'fake';
+export type StatusSimulado = 'pago' | 'vencido' | 'cancelado';
 export type Ambiente = 'sandbox' | 'producao';
 export type MeioCobranca = 'BOLETO' | 'PIX';
 
@@ -240,7 +330,12 @@ export const NOME_GATEWAY: Record<GatewayNome, string> = {
   asaas: 'Asaas',
   pagbank: 'PagBank',
   mercadopago: 'Mercado Pago',
+  fake: 'Simulador (sandbox)',
 };
+
+/** Links do Simulador (fake.local) não abrem: são ocultados na interface. */
+export const linkCobranca = (pg: Pagamento): string | null =>
+  pg.gateway === 'fake' ? null : (pg.boleto_url || pg.invoice_url || null);
 
 export const COR_STATUS_PAGAMENTO: Record<string, string> = {
   pago: 'text-emerald-400',

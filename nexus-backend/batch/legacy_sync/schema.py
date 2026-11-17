@@ -135,7 +135,8 @@ DDL: List[str] = [
     carga_horaria INT,
     qtd_aulas_prevista INT,
     tipo VARCHAR(16) DEFAULT 'presencial',
-    eh_extra_grade BOOLEAN DEFAULT false""",
+    eh_extra_grade BOOLEAN DEFAULT false,
+    preco NUMERIC(12,2) CHECK (preco IS NULL OR preco >= 0)""",
     ),
     _tbl(
         "calendarios_oficiais",

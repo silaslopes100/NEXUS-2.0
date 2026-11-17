@@ -223,6 +223,16 @@ CREATE INDEX IF NOT EXISTS idx_licencas_mov_criado_em ON licencas_movimentacoes(
 CREATE INDEX IF NOT EXISTS idx_licencas_alunos_aluno ON licencas_alunos(aluno_id);
 CREATE INDEX IF NOT EXISTS idx_licencas_alunos_escola ON licencas_alunos(escola_id);
 CREATE INDEX IF NOT EXISTS idx_licencas_alunos_status ON licencas_alunos(status);
+-- Estoque por disciplina (migração 020): materia_id NULL = "Sem disciplina".
+CREATE UNIQUE INDEX IF NOT EXISTS uq_licencas_estoque_polo_disciplina
+    ON licencas_estoque (polo_id, COALESCE(materia_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    WHERE escola_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_licencas_estoque_escola_disciplina
+    ON licencas_estoque (escola_id, COALESCE(materia_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    WHERE polo_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_licencas_alunos_ativa_disciplina
+    ON licencas_alunos (aluno_id, COALESCE(materia_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    WHERE status = 'ativa';
 CREATE INDEX IF NOT EXISTS idx_compras_licencas_polo ON compras_licencas(polo_id);
 CREATE INDEX IF NOT EXISTS idx_boletos_polo ON boletos(polo_id);
 CREATE INDEX IF NOT EXISTS idx_professores_polo ON professores(polo_id);

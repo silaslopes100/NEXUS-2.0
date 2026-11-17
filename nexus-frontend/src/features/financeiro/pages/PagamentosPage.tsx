@@ -1,36 +1,32 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Ban, ChevronLeft, ChevronRight, CreditCard, ExternalLink, Loader2, Package, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CreditCard, ExternalLink, Loader2, Package, RefreshCw, ShieldCheck } from 'lucide-react';
 import { PeriodoFiltros, useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
-import { COR_STATUS_PAGAMENTO, Pagamento, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
+import { BotoesExportar } from '@/features/financeiro/components/BotoesExportar';
+import { PagamentoDetalheDrawer } from '@/features/financeiro/components/PagamentoDetalheDrawer';
+import { SeloSimulado } from '@/features/financeiro/components/SimuladorPagamento';
+import {
+  COR_STATUS_PAGAMENTO, NOME_GATEWAY, Pagamento, erroApi, formatBRL, formatData, linkCobranca,
+} from '@/features/financeiro/types';
 
 const PAGE_SIZE = 20;
 const STATUS_OPCOES = ['pendente', 'pago', 'vencido', 'cancelado', 'estornado', 'falhou'].map((s) => ({
   value: s, label: s.charAt(0).toUpperCase() + s.slice(1),
 }));
+const EXTRAS = [
+  { chave: 'gateway' as const, label: 'Gateway', opcoes: Object.entries(NOME_GATEWAY).map(([value, label]) => ({ value, label })) },
+  { chave: 'meio' as const, label: 'Meio', opcoes: [{ value: 'BOLETO', label: 'Boleto' }, { value: 'PIX', label: 'PIX' }] },
+];
 
-/** Consulta de pagamentos/boletos (inclui os boletos migrados). Vira a tela completa de Boletos na Fase 3. */
+/** Boletos & Pagamentos (Fase 3D): filtros, detalhe com eventos do gateway, cancelamento e segunda via. */
 export const PagamentosPage: React.FC = () => {
   const { filtros, page, setPage } = useFiltrosUrl();
   const [items, setItems] = useState<Pagamento[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
-  const [cancelando, setCancelando] = useState<string | null>(null);
-
-  const cancelar = async (pg: Pagamento) => {
-    if (!window.confirm(`Cancelar a cobrança de ${formatBRL(pg.valor)}${pg.pedido_numero ? ` do pedido ${pg.pedido_numero}` : ''}?`)) return;
-    setCancelando(pg.id);
-    try {
-      await financeiroApi.cancelarPagamento(pg.id);
-      await load();
-    } catch (error) {
-      setErro(erroApi(error, 'Não foi possível cancelar a cobrança.'));
-    } finally {
-      setCancelando(null);
-    }
-  };
+  const [selecionado, setSelecionado] = useState<Pagamento | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,10 +50,11 @@ export const PagamentosPage: React.FC = () => {
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-emerald-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
           <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-300"><CreditCard size={15} /> Financeiro</p>
-          <h1 className="text-3xl font-extrabold text-white">Pagamentos & Boletos</h1>
-          <p className="mt-1 text-sm text-slate-400">Cobranças registradas (boletos, PIX e cartão). Status atualizados automaticamente pelos webhooks dos gateways.</p>
+          <h1 className="text-3xl font-extrabold text-white">Boletos & Pagamentos</h1>
+          <p className="mt-1 text-sm text-slate-400">Histórico de cobranças (boleto e PIX). Clique em uma cobrança para ver linha digitável, eventos do gateway e gerar segunda via.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-start gap-2">
+          <BotoesExportar recurso="pagamentos" />
           <Link to="/admin/gateways" className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:text-white">
             <ShieldCheck size={16} /> Gateways
           </Link>
@@ -67,11 +64,11 @@ export const PagamentosPage: React.FC = () => {
         </div>
       </header>
 
-      <PeriodoFiltros statusOpcoes={STATUS_OPCOES} />
+      <PeriodoFiltros statusOpcoes={STATUS_OPCOES} extras={EXTRAS} />
 
       <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="flex items-center justify-between border-b border-slate-800 p-4">
-          <p className="text-xs text-slate-500">{total} pagamento(s)</p>
+          <p className="text-xs text-slate-500">{total} cobrança(s)</p>
           <button onClick={load} title="Recarregar" className="rounded-xl border border-slate-700 p-2 text-slate-400 hover:text-white">
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -91,23 +88,22 @@ export const PagamentosPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {items.map((pg) => {
-                  const link = pg.boleto_url || pg.invoice_url;
+                  const link = linkCobranca(pg);
                   return (
-                    <tr key={pg.id} className="text-slate-300 hover:bg-slate-800/40">
+                    <tr key={pg.id} onClick={() => setSelecionado(pg)} className="cursor-pointer text-slate-300 hover:bg-slate-800/40">
                       <td className="p-4 text-xs">{formatData(pg.criado_em)}</td>
                       <td className="p-4 text-xs">{pg.polo_nome || '-'}</td>
                       <td className="p-4 font-mono text-xs">{pg.pedido_numero || '-'}</td>
                       <td className="p-4 text-xs">{pg.billing_type || '-'}</td>
-                      <td className="p-4 text-xs">{pg.gateway || '-'}{pg.ambiente ? ` (${pg.ambiente})` : ''}</td>
+                      <td className="p-4 text-xs">
+                        {pg.gateway === 'fake' ? <SeloSimulado /> : (
+                          <>{NOME_GATEWAY[pg.gateway as keyof typeof NOME_GATEWAY] || pg.gateway || '-'}{pg.ambiente ? ` (${pg.ambiente})` : ''}</>
+                        )}
+                      </td>
                       <td className="p-4 text-xs">{formatData(pg.vencimento_em)}</td>
                       <td className={`p-4 text-xs font-semibold ${COR_STATUS_PAGAMENTO[pg.status || ''] || 'text-slate-300'}`}>{pg.status || '-'}</td>
                       <td className="p-4 text-right font-semibold text-white">{formatBRL(pg.valor)}</td>
-                      <td className="flex justify-end gap-1 p-4">
-                        {(pg.status === 'pendente' || pg.status === 'vencido') && pg.gateway && (
-                          <button onClick={() => cancelar(pg)} disabled={cancelando === pg.id} title="Cancelar cobrança" className="inline-flex rounded-lg border border-red-500/40 p-1.5 text-red-300 disabled:opacity-50">
-                            {cancelando === pg.id ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
-                          </button>
-                        )}
+                      <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                         {link && (
                           <a href={link} target="_blank" rel="noreferrer" title="Abrir boleto/fatura" className="inline-flex rounded-lg border border-slate-700 p-1.5 text-slate-400 hover:text-white">
                             <ExternalLink size={14} />
@@ -117,7 +113,7 @@ export const PagamentosPage: React.FC = () => {
                     </tr>
                   );
                 })}
-                {!items.length && <tr><td colSpan={9} className="p-12 text-center text-slate-500">Nenhum pagamento encontrado.</td></tr>}
+                {!items.length && <tr><td colSpan={9} className="p-12 text-center text-slate-500">Nenhuma cobrança encontrada.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -132,6 +128,10 @@ export const PagamentosPage: React.FC = () => {
           </div>
         )}
       </section>
+
+      {selecionado && (
+        <PagamentoDetalheDrawer pagamento={selecionado} podeOperar onClose={() => setSelecionado(null)} onAlterado={load} />
+      )}
     </div>
   );
 };
