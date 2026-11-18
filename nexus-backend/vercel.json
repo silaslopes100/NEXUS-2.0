@@ -3,6 +3,10 @@
     {
       "path": "/financeiro/cron/reconciliar",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/chat/cron/rotacionar",
+      "schedule": "0 6 * * *"
     }
   ]
 }

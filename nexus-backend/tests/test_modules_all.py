@@ -1482,23 +1482,10 @@ async def test_modulo_transferencias(client: AsyncClient, monkeypatch):
     assert r_res.json()["status"] == "aprovada"
 
 
-# 18. Comunicação (Chat e Feed)
+# 18. Comunicação (Feed) — o chat fica no módulo /chat
 @pytest.mark.asyncio
 async def test_modulo_comunicacao(client: AsyncClient):
     t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
-
-    c_res = await client.post(
-        "/comunicacao/conversas",
-        json={"tipo": "individual"},
-    )
-    assert c_res.status_code == 201
-    conversa_id = c_res.json()["id"]
-
-    m_res = await client.post(
-        f"/comunicacao/conversas/{conversa_id}/mensagens?texto=Ola+mundo",
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert m_res.status_code == 201
 
     f_res = await client.post(
         "/comunicacao/feed",

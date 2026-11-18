@@ -58,7 +58,12 @@ configure-o também nos ambientes e gere um novo deploy após alterá-lo.
 | `PAYMENT_ENV` | Sim | `sandbox` ou `producao`: ambiente dos gateways usado nas novas cobranças. |
 | `PAYMENT_SECRETS_KEY` | Sim | Chave Fernet que criptografa as credenciais dos gateways no banco. Gere com `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Trocar a chave obriga a recadastrar as credenciais. |
 | `PUBLIC_API_URL` | Sim | URL pública da API, sem barra final. Base das URLs de webhook (`{PUBLIC_API_URL}/financeiro/webhooks/{gateway}/{ambiente}`). |
-| `CRON_SECRET` | Sim | Segredo aleatório. A Vercel envia `Authorization: Bearer <CRON_SECRET>` ao chamar o cron. |
+| `CRON_SECRET` | Sim | Segredo aleatório. A Vercel envia `Authorization: Bearer <CRON_SECRET>` ao chamar o cron (`/financeiro/cron/reconciliar` e `/chat/cron/rotacionar`). |
+| `CHAT_BLOB_READ_WRITE_TOKEN` | Sim (chat) | Token read-write de um Blob store **público** criado só para os anexos do chat (separado do store privado dos materiais). O navegador envia os arquivos direto a esse store; as URLs têm caminho aleatório e só são entregues aos membros da conversa. Sem ele, os anexos ficam em disco (apenas desenvolvimento). |
+
+**Chat:** aplique `scripts/migrations/024_chat.sql`. O cron diário
+`/chat/cron/rotacionar` move as mensagens com mais de 48h para
+`chat_mensagens_historico` e apaga do histórico (e do Blob) o que passou de 90 dias.
 
 As credenciais de cada gateway (API Key do Asaas, token do PagBank, access
 token do Mercado Pago e tokens de webhook) **não** vão em variáveis de

@@ -74,4 +74,10 @@ class Settings:
     # Segredo exigido pelos endpoints de cron (Vercel Cron).
     CRON_SECRET: str = os.getenv("CRON_SECRET", "")
 
+    # --- Chat ---
+    # Token read-write de um Blob store PÚBLICO separado, só para anexos do chat
+    # (URLs com caminho aleatório, entregues apenas aos membros da conversa).
+    # Sem token, os anexos ficam em disco local (desenvolvimento).
+    CHAT_BLOB_READ_WRITE_TOKEN: str = os.getenv("CHAT_BLOB_READ_WRITE_TOKEN", "")
+
 settings = Settings()

@@ -51,6 +51,8 @@ import { RegrasPagamentoPage } from '@/features/financeiro/pages/RegrasPagamento
 import { VendasPage } from '@/features/financeiro/pages/VendasPage';
 import { FinanceiroDashboardPage } from '@/pages/dashboard/FinanceiroDashboardPage';
 import { LogisticaDashboardPage } from '@/pages/dashboard/LogisticaDashboardPage';
+import { ChatPage } from '@/features/chat/pages/ChatPage';
+import { ChatAdminPage } from '@/features/chat/pages/ChatAdminPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -101,6 +103,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/auditoria" element={<LogsAuditoriaPage />} />
           <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="/admin/execucoes-batch" element={<ExecucoesBatchPage />} />
+          <Route path="/admin/chat" element={<ChatAdminPage />} />
           <Route path="/admin/etl" element={<ExecucoesBatchPage />} />
         </Route>
 
@@ -183,11 +186,17 @@ export const AppRoutes: React.FC = () => {
           <Route path="/aluno/compras" element={<ComprasEadPage />} />
         </Route>
 
-        {/* Módulos Compartilhados (Chat e Feed) */}
+        {/* Chat Interno (todos os perfis) */}
+        <Route
+          element={<RequireRole roles={['admin', 'polo', 'escola', 'professor', 'aluno', 'financeiro', 'logistica']} />}
+        >
+          <Route path="/chat" element={<ChatPage />} />
+        </Route>
+
+        {/* Feed */}
         <Route
           element={<RequireRole roles={['admin', 'polo', 'escola', 'professor', 'aluno']} />}
         >
-          <Route path="/chat" element={<ModulePlaceholderPage />} />
           <Route path="/feed" element={<ModulePlaceholderPage />} />
         </Route>
 

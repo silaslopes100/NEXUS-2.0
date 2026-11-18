@@ -227,9 +227,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Chat & Mensagens',
           path: '/chat',
           icon: MessageSquare,
-          badge: 'Online',
-          badgeColor: 'emerald',
-          isPlaceholder: true,
+        },
+        {
+          title: 'Gestão do Chat',
+          path: '/admin/chat',
+          icon: ShieldCheck,
         },
         {
           title: 'Feed & Notificações',
@@ -255,6 +257,10 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
         { title: 'Gateways de Pagamento', path: '/admin/gateways', icon: ShieldCheck },
       ],
     },
+    {
+      groupTitle: 'Comunicação',
+      items: [{ title: 'Chat', path: '/chat', icon: MessageSquare }],
+    },
   ],
 
   logistica: [
@@ -265,6 +271,10 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
         { title: 'Pendentes de envio', path: '/admin/logistica/pendentes', icon: Truck },
         { title: 'Histórico de pedidos', path: '/admin/logistica/historico', icon: History },
       ],
+    },
+    {
+      groupTitle: 'Comunicação',
+      items: [{ title: 'Chat', path: '/chat', icon: MessageSquare }],
     },
   ],
 
@@ -352,10 +362,9 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
       groupTitle: 'Comunicação',
       items: [
         {
-          title: 'Chat com Central',
+          title: 'Chat',
           path: '/chat',
           icon: MessageSquare,
-          isPlaceholder: true,
         },
         {
           title: 'Mural de Avisos',
@@ -424,7 +433,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Chat Interno',
           path: '/chat',
           icon: MessageSquare,
-          isPlaceholder: true,
         },
         {
           title: 'Mural de Notificações',
@@ -469,10 +477,9 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Award,
         },
         {
-          title: 'Chat com Alunos',
+          title: 'Chat',
           path: '/chat',
           icon: MessageSquare,
-          isPlaceholder: true,
         },
         {
           title: 'Avisos & Feed',
@@ -546,10 +553,9 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: ArrowLeftRight,
         },
         {
-          title: 'Chat com Professores',
+          title: 'Chat',
           path: '/chat',
           icon: MessageSquare,
-          isPlaceholder: true,
         },
         {
           title: 'Notificações & Mural',

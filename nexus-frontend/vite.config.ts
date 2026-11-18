@@ -99,6 +99,17 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      '/chat': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        // /chat também é rota do SPA: navegação (text/html) fica no Vite.
+        bypass: (req) => {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html';
+          }
+          return undefined;
+        },
+      },
       '/comunicacao': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,

@@ -14,6 +14,7 @@ from app.modules.alunos.perfil import router as aluno_perfil_router
 from app.modules.alunos_gestao import router as alunos_gestao_router
 from app.modules.alunos_gestao import router_aprendizado as aluno_aprendizado_router
 from app.modules.certificados import router as certificados_router
+from app.modules.chat import router as chat_router
 from app.modules.comunicacao import router as comunicacao_router
 from app.modules.cupons import router as cupons_router
 from app.modules.cursos_disciplinas import router as cursos_disciplinas_router
@@ -84,6 +85,7 @@ app.include_router(notificacoes_router)
 app.include_router(solicitacoes_router)
 app.include_router(transferencias_router)
 app.include_router(comunicacao_router)
+app.include_router(chat_router)
 
 
 @app.get("/health", tags=["Health"])

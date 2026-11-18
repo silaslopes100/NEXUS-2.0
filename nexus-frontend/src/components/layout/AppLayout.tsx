@@ -5,6 +5,7 @@ import { Menu, Search } from 'lucide-react';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 import { PendenciasSino } from '@/features/transferencias/components/PendenciasSino';
 import { NotificacoesSino } from '@/features/solicitacoes/components/NotificacoesSino';
+import { ChatBadge } from '@/features/chat/components/ChatBadge';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
 
 export const AppLayout: React.FC = () => {
@@ -54,6 +55,7 @@ export const AppLayout: React.FC = () => {
 
             {/* Notifications Pill */}
             {normalizeUserRole(roleName) === 'admin' && <PendenciasSino />}
+            <ChatBadge />
             <NotificacoesSino />
 
             {/* User Profile Tag */}
