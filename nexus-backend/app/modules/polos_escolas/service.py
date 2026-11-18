@@ -65,6 +65,9 @@ from app.modules.polos_escolas.schemas import (
     LicencaDistribuirRequest,
     LicencaReclassificarRequest,
     LicencaVenderRequest,
+    LicencaDistribuirAlunosRequest,
+    LicencaDistribuirAlunosResponse,
+    LicencaLiberarRequest,
     EstoqueDisciplinaItem,
     EstoqueDisciplinaResponse,
     LicencaAlunoAtivaResponse,
@@ -102,6 +105,39 @@ from app.modules.polos_escolas.schemas import (
 
 _PERFIS_FEED_AUTORIZADOS = {"professor", "polo", "escola", "admin", "diretor"}
 _DIAS_CHURN = 365
+
+
+def _criar_pedido_livros_liberados(polo_id: str, itens: List[Dict[str, Any]], actor_id: Optional[str], email: str) -> str:
+    """Liberação do Admin com livros: pedido "kit" de R$ 0,00 já pago, direto para Pendentes de envio.
+
+    As licenças já foram creditadas pela liberação; este pedido só alimenta a logística.
+    """
+    from datetime import datetime, timezone
+
+    from app.modules.financeiro.repository import get_financeiro_repository
+
+    repo = get_financeiro_repository()
+    destino = repo.get_endereco_polo(polo_id) or {}
+    nomes = {}
+    from app.modules.polos_escolas.repository import get_polos_escolas_repository
+
+    polos_repo = get_polos_escolas_repository()
+    for item in itens:
+        nomes[item["disciplina_id"]] = polos_repo.get_disciplina_nome(item["disciplina_id"]) or "Disciplina"
+    agora = datetime.now(timezone.utc)
+    pedido_id = repo.create_pedido(
+        {
+            "tipo": "kit", "polo_id": polo_id, "solicitante_id": actor_id, "status": "pago_aguardando_envio",
+            "valor_bruto": 0, "desconto": 0, "valor_total": 0, "pago_em": agora,
+            "observacao": f"Enviada pelo Admin: {email} (liberação sem cobrança - envio dos livros)",
+            **{f"entrega_{c}": destino.get(c) for c in ("nome", "cep", "logradouro", "numero", "complemento",
+                                                         "bairro", "cidade", "uf")},
+        },
+        [{"disciplina_id": i["disciplina_id"], "descricao": f"Livro - {nomes[i['disciplina_id']]}",
+          "quantidade": int(i["quantidade"]), "valor_unitario": 0, "valor_total": 0} for i in itens],
+        actor_id,
+    )
+    return (repo.get_pedido(pedido_id) or {}).get("numero") or pedido_id
 
 
 class PolosEscolasService:
@@ -687,10 +723,110 @@ class PolosEscolasService:
             LicencaAlunoAtivaResponse(
                 id=str(lic["id"]), aluno_id=str(lic["aluno_id"]), escola_id=_txt(lic.get("escola_id")),
                 polo_id=_txt(lic.get("polo_id")), materia_id=_txt(lic.get("materia_id")),
-                disciplina_nome=lic.get("disciplina_nome"), ativada_em=lic.get("ativada_em"),
+                disciplina_nome=lic.get("disciplina_nome"), numero_licenca=lic.get("numero_licenca"),
+                ativada_em=lic.get("ativada_em"),
             )
             for lic in self.repo.list_licencas_aluno_ativas(aluno_id)
         ]
+
+    def distribuir_licencas_alunos(
+        self, polo_id: str, dados: LicencaDistribuirAlunosRequest, actor_id: Optional[str], ip: Optional[str]
+    ) -> LicencaDistribuirAlunosResponse:
+        self.get_polo(polo_id)
+        self._validar_disciplina(dados.disciplina_id)
+        resultado = lic.distribuir_para_alunos(
+            self.repo, polo_id, dados.disciplina_id, dados.turma_id, dados.aluno_ids, actor_id)
+        self.repo.record_audit_log(
+            usuario_id=actor_id,
+            acao="licencas_distribuidas_alunos",
+            entidade="licencas_alunos",
+            entidade_id=dados.turma_id,
+            dados_depois={"disciplina_id": dados.disciplina_id, "turma_id": dados.turma_id,
+                          "distribuidas": resultado["distribuidas"], "ja_possuiam": resultado["ja_possuiam"]},
+            ip=ip,
+        )
+        return LicencaDistribuirAlunosResponse(**resultado)
+
+    def liberar_licencas_admin(
+        self, polo_id: str, dados: LicencaLiberarRequest, actor_id: Optional[str], ip: Optional[str]
+    ) -> MessageResponse:
+        self.get_polo(polo_id)
+        for item in dados.itens:
+            self._validar_disciplina(item.disciplina_id)
+        admin = self.repo.get_usuario_by_id(actor_id) if actor_id else None
+        email = (admin or {}).get("email") or "admin"
+        itens = [i.model_dump() for i in dados.itens]
+        movimentos = lic.liberar_pelo_admin(self.repo, polo_id, itens, actor_id, email, dados.observacao)
+        pedido_numero = None
+        if dados.enviar_livros:
+            pedido_numero = _criar_pedido_livros_liberados(polo_id, itens, actor_id, email)
+        total = sum(i["quantidade"] for i in itens)
+        self.repo.record_audit_log(
+            usuario_id=actor_id,
+            acao="licencas_liberadas_admin",
+            entidade="licencas_movimentacoes",
+            entidade_id=movimentos[0] if movimentos else None,
+            dados_depois={"polo_id": polo_id, "itens": itens, "enviada_por": f"Enviada pelo Admin: {email}",
+                          "pedido_livros": pedido_numero},
+            ip=ip,
+        )
+        extra = f" Pedido de envio dos livros: {pedido_numero}." if pedido_numero else ""
+        return MessageResponse(message=f"{total} licença(s) liberada(s) ao Polo.{extra}")
+
+    def checar_escopo_licenca(self, licenca_id: str, user: Any) -> Dict[str, Any]:
+        """Admin vê todas; Polo só as do seu Polo; Escola só as da sua Escola."""
+        from app.modules.auth.roles import perfil_do_usuario
+
+        licenca = self.repo.get_licenca_aluno(licenca_id)
+        if not licenca:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Licença não encontrada")
+        perfil = perfil_do_usuario(user)
+        if perfil == "polo" and str(licenca.get("polo_id")) != str(user.polo_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Licença não encontrada")
+        if perfil == "escola" and str(licenca.get("escola_id")) != str(user.escola_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Licença não encontrada")
+        return licenca
+
+    def alunos_turma_para_licenca(self, polo_id: str, turma_id: str, disciplina_id: str) -> Dict[str, Any]:
+        turma = self.repo.get_turma(turma_id)
+        if not turma or str(turma.get("polo_id")) != str(polo_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Turma não encontrada neste Polo")
+        alunos = []
+        for a in self.repo.list_alunos_da_turma(turma_id):
+            ativa = self.repo.get_licenca_aluno_ativa(a["aluno_id"], materia_id=disciplina_id)
+            alunos.append({**{k: (str(v) if k.endswith("_id") and v else v) for k, v in a.items()},
+                           "possui_licenca": bool(ativa),
+                           "numero_licenca": (ativa or {}).get("numero_licenca")})
+        saldo = self.repo.get_estoque(polo_id=polo_id, materia_id=disciplina_id)["quantidade_disponivel"]
+        return {"turma": {k: (str(v) if v is not None else None) for k, v in turma.items()},
+                "saldo_disponivel": int(saldo), "alunos": alunos}
+
+    def cartoes_acesso_pdf(self, licenca_ids: List[str], user: Any) -> bytes:
+        from app.modules.polos_escolas.cartoes import gerar_cartoes_acesso
+
+        cartoes = []
+        for licenca_id in dict.fromkeys(licenca_ids):
+            lic = self.checar_escopo_licenca(licenca_id, user)
+            if lic.get("status") != "ativa" or not lic.get("numero_licenca"):
+                continue
+            usuario = self.repo.get_aluno_usuario(str(lic["aluno_id"])) or {}
+            cartoes.append({
+                "aluno_nome": " ".join(p for p in [usuario.get("nome"), usuario.get("sobrenome")] if p) or "Aluno",
+                "disciplina_nome": self.repo.get_disciplina_nome(str(lic["materia_id"])) if lic.get("materia_id") else "Licença",
+                "numero_licenca": lic["numero_licenca"],
+            })
+        if not cartoes:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Nenhuma licença ativa para gerar cartões")
+        return gerar_cartoes_acesso(cartoes)
+
+    def regerar_numero_licenca(self, licenca_id: str, actor_id: Optional[str], ip: Optional[str]) -> Dict[str, str]:
+        licenca = self.repo.get_licenca_aluno(licenca_id)
+        if not licenca or licenca.get("status") != "ativa":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Licença ativa não encontrada")
+        numero = self.repo.regerar_numero_licenca(licenca_id)
+        self.repo.record_audit_log(usuario_id=actor_id, acao="licenca_numero_regerado", entidade="licencas_alunos",
+                                   entidade_id=licenca_id, dados_depois={"aluno_id": str(licenca["aluno_id"])}, ip=ip)
+        return {"licenca_id": str(licenca_id), "numero_licenca": numero}
 
     def reclassificar_licencas(
         self, polo_id: str, dados: LicencaReclassificarRequest, actor_id: Optional[str], ip: Optional[str]

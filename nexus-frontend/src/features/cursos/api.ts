@@ -54,8 +54,11 @@ export interface Disciplina {
   qtd_aulas_prevista?: number | null;
   tipo?: string;
   eh_extra_grade?: boolean;
-  /** Preço informativo em R$ (não usado em pedidos/cobranças). */
+  /** Preço da disciplina (1 livro + 1 licença) em R$; com preço, fica à venda na compra por Curso. */
   preco?: number | null;
+  peso_livro_g?: number | null;
+  /** Inativa: fora do catálogo de compra e do preço do Curso. */
+  ativo?: boolean;
 }
 
 export interface DisciplinaInput {
@@ -68,6 +71,8 @@ export interface DisciplinaInput {
   tipo: string;
   eh_extra_grade: boolean;
   preco?: number | null;
+  peso_livro_g?: number | null;
+  ativo?: boolean;
 }
 
 export interface ProfessorVinculadoDisciplina {

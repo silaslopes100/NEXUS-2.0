@@ -341,10 +341,11 @@ export const GatewaysPage: React.FC = () => {
       {!podeEditar && <p className="text-xs text-slate-500">Somente administradores alteram credenciais. Você pode testar conexões e ver eventos.</p>}
 
       {aba === 'eventos' ? <EventosWebhook /> : !dados ? (
-        <div className="flex justify-center py-16 text-blue-400"><Loader2 className="animate-spin" /></div>
+        !erro && <div className="flex justify-center py-16 text-blue-400"><Loader2 className="animate-spin" /></div>
       ) : (
         <div className="space-y-4">
-          {gateways.map((g) => (
+          {/* Pula gateways que a API não devolveu (ex.: backend antigo sem o Simulador), em vez de quebrar a página. */}
+          {gateways.filter((g) => dados.items.some((i) => i.gateway === g)).map((g) => (
             <GatewayCard
               key={g}
               gateway={g}

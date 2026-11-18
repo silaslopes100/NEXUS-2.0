@@ -472,7 +472,42 @@ class LicencaAlunoAtivaResponse(BaseModel):
     polo_id: Optional[str] = None
     materia_id: Optional[str] = None
     disciplina_nome: Optional[str] = None
+    numero_licenca: Optional[str] = None  # código de acesso do aluno (login por licença)
     ativada_em: Optional[datetime] = None
+
+
+class LicencaDistribuirAlunosRequest(BaseModel):
+    """Polo → alunos de uma turma (1 licença da disciplina por aluno)."""
+
+    disciplina_id: str
+    turma_id: str
+    aluno_ids: List[str] = Field(min_length=1, max_length=500)
+
+
+class LicencaAlunoNumero(BaseModel):
+    licenca_id: str
+    aluno_id: str
+    aluno_nome: Optional[str] = None
+    numero_licenca: str
+
+
+class LicencaDistribuirAlunosResponse(BaseModel):
+    distribuidas: int
+    ja_possuiam: int
+    licencas: List[LicencaAlunoNumero]
+
+
+class LicencaLiberarItem(BaseModel):
+    disciplina_id: str
+    quantidade: int = Field(gt=0, le=100000)
+
+
+class LicencaLiberarRequest(BaseModel):
+    """Admin libera licenças ao Polo sem cobrança (registro de liberação)."""
+
+    itens: List[LicencaLiberarItem] = Field(min_length=1)
+    enviar_livros: bool = False  # cria pedido kit R$ 0,00 para a logística enviar os livros
+    observacao: Optional[str] = Field(default=None, max_length=500)
 
 
 class MovimentacaoLicencaResponse(BaseModel):

@@ -1,5 +1,6 @@
+import { Link } from 'react-router-dom';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Package, Pencil, Plus, RefreshCw, X } from 'lucide-react';
+import { Loader2, Package, Pencil, RefreshCw, X } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
 import { Produto, TIPO_PEDIDO, TipoPedido, erroApi, formatBRL } from '@/features/financeiro/types';
 import { useDisciplinas } from '@/features/licencas/components/EstoqueDisciplina';
@@ -108,9 +109,11 @@ export const ProdutosPage: React.FC = () => {
         <div>
           <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-300"><Package size={15} /> Catálogo</p>
           <h1 className="text-3xl font-extrabold text-white">Produtos & Preços</h1>
-          <p className="mt-1 text-sm text-slate-400">Livros e licenças disponíveis para os pedidos dos Polos. O preço do pedido vem sempre daqui.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Consulta do catálogo. O preço é definido em Disciplinas (cada disciplina gera o seu Kit: livro + licença).
+          </p>
         </div>
-        <button onClick={() => abrir('novo')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} /> Novo produto</button>
+        <Link to="/admin/disciplinas" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white">Ir para Disciplinas</Link>
       </header>
 
       {feedback && (
@@ -146,7 +149,10 @@ export const ProdutosPage: React.FC = () => {
                     <td className="p-4 text-right font-semibold text-white">{formatBRL(p.preco)}</td>
                     <td className="p-4 text-xs">{p.ativo ? <span className="text-emerald-400">Ativo</span> : <span className="text-slate-500">Inativo</span>}</td>
                     <td className="p-4 text-right">
-                      <button onClick={() => abrir(p)} className="rounded-lg border border-slate-700 p-1.5 text-slate-400 hover:text-white" title="Editar"><Pencil size={14} /></button>
+                      {/* Kit é mantido pela Disciplina; só produtos antigos (livro/licença avulsos) podem ser ajustados aqui. */}
+                      {p.tipo !== 'kit' && (
+                        <button onClick={() => abrir(p)} className="rounded-lg border border-slate-700 p-1.5 text-slate-400 hover:text-white" title="Editar produto antigo"><Pencil size={14} /></button>
+                      )}
                     </td>
                   </tr>
                 ))}

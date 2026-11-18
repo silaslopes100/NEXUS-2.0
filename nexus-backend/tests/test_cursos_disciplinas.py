@@ -156,7 +156,10 @@ async def test_delete_disciplina_checks_database_references(
         response = await cursos_disciplinas.delete_disciplina(disciplina_id)
         assert response.status_code == 204
 
-    assert len(cursor.executions) == (2 if has_references else 3)
+    # Sem referências: SELECT, checagem, remoção do kit da própria disciplina e DELETE da disciplina.
+    assert len(cursor.executions) == (2 if has_references else 4)
+    if not has_references:
+        assert "produtos" in cursor.executions[2][0] and "tipo = 'kit'" in cursor.executions[2][0]
     if has_references:
         reference_sql, params = cursor.executions[1]
         assert "professor_disciplinas" in reference_sql

@@ -11,6 +11,7 @@ from fastapi import HTTPException, Response, status
 from app.modules.auth.schemas import UserResponse
 from app.modules.financeiro import exportacao as exp
 from app.modules.financeiro.etiqueta import gerar_etiqueta
+from app.modules.financeiro.pedidos import tem_envio
 from app.modules.financeiro.operacao_service import OperacaoService
 from app.modules.financeiro.repository import FinanceiroRepositoryInterface
 from app.modules.financeiro.schemas import FiltrosPeriodo
@@ -19,8 +20,20 @@ from app.modules.financeiro.service import escopo_do_usuario
 Formato = Literal["pdf", "xlsx"]
 CHAVE_REMETENTE = "remetente_etiqueta"
 CAMPOS_REMETENTE_OBRIGATORIOS = ("nome", "logradouro", "cidade", "uf", "cep")
+# Remetente padrão de todas as etiquetas (pode ser trocado em Configurações > Remetente das etiquetas).
+# CEP conferido na base dos Correios (ViaCEP), onde o bairro oficial consta como "Vila Caiúba".
+REMETENTE_PADRAO: Dict[str, Any] = {
+    "nome": "ETADEMP",
+    "logradouro": "Rua Crispim do Amaral",
+    "numero": "33",
+    "bairro": "Perus",
+    "cidade": "São Paulo",
+    "uf": "SP",
+    "cep": "05207180",
+}
+CAMPOS_ENDERECO_POLO_OBRIGATORIOS = {"cep": "CEP", "logradouro": "logradouro", "cidade": "cidade", "uf": "UF"}
 STATUS_ETIQUETA = ("pago_aguardando_envio", "enviado", "entregue")
-TIPO_LABEL = {"livro": "Livro", "licenca": "Licença"}
+TIPO_LABEL = {"livro": "Livro", "licenca": "Licença", "kit": "Disciplina (livro + licença)"}
 STATUS_LABEL = {
     "aguardando_pagamento": "Aguardando pagamento",
     "pago_aguardando_envio": "Pago - aguardando envio",
@@ -190,26 +203,44 @@ class RelatoriosService:
     # ------------------------------------------------------------------
 
     def remetente(self) -> Dict[str, Any]:
+        """Remetente configurado (completo) ou, na falta dele, o padrão ETADEMP."""
         valor = self.repo.get_configuracao(CHAVE_REMETENTE)
         if isinstance(valor, dict) and isinstance(valor.get("valor"), dict):
             valor = valor["valor"]
-        faltando = [c for c in CAMPOS_REMETENTE_OBRIGATORIOS if not (valor or {}).get(c)] if isinstance(valor, dict) else list(CAMPOS_REMETENTE_OBRIGATORIOS)
+        if isinstance(valor, dict) and all(valor.get(c) for c in CAMPOS_REMETENTE_OBRIGATORIOS):
+            return valor
+        return dict(REMETENTE_PADRAO)
+
+    def destinatario(self, polo_id: Optional[str]) -> Dict[str, Any]:
+        """Destino da etiqueta: sempre o endereço atual cadastrado no Polo (não o do pedido)."""
+        polo = self.repo.get_dados_cobranca_polo(polo_id) if polo_id else None
+        if not polo:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pedido sem Polo: não há endereço para a etiqueta.")
+        faltando = [rotulo for campo, rotulo in CAMPOS_ENDERECO_POLO_OBRIGATORIOS.items() if not polo.get(campo)]
         if faltando:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Configure o remetente das etiquetas em Configurações (faltando: {', '.join(faltando)}).",
+                detail=f"Endereço do Polo {polo.get('nome') or ''} incompleto ({', '.join(faltando)}). "
+                       "Complete em Polos > Editar antes de imprimir a etiqueta.",
             )
-        return valor
+        return {
+            "nome": polo.get("nome") or polo.get("razao_social"),
+            "logradouro": polo.get("logradouro"), "numero": polo.get("numero"),
+            "complemento": polo.get("complemento"), "bairro": polo.get("bairro"),
+            "cidade": polo.get("cidade"), "uf": polo.get("uf"), "cep": polo.get("cep"),
+            "telefone": polo.get("telefone_financeiro"),
+        }
 
     def etiqueta(self, pedido_id: str, user: UserResponse) -> Response:
         pedido_resp = self.operacao.pedidos.get_pedido(pedido_id, user)  # valida escopo
-        if pedido_resp.tipo != "livro" or pedido_resp.status not in STATUS_ETIQUETA:
+        if not tem_envio(pedido_resp.tipo) or pedido_resp.status not in STATUS_ETIQUETA:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail="Etiqueta só para pedidos de livro pagos (aguardando envio, enviados ou entregues)")
         remetente = self.remetente()
         pedido = self.repo.get_pedido(pedido_resp.id)
+        destino = self.destinatario(pedido.get("polo_id"))
         envio = self.repo.ultimos_envios([pedido["id"]]).get(pedido["id"])  # None = pré-envio (volume 1)
-        conteudo = gerar_etiqueta(pedido, remetente, envio, self.operacao.peso_sugerido(pedido_resp))
+        conteudo = gerar_etiqueta(pedido, remetente, envio, self.operacao.peso_sugerido(pedido_resp), destino)
         if envio and envio.get("id"):
             self.repo.marcar_etiqueta_gerada(envio["id"])
         return Response(

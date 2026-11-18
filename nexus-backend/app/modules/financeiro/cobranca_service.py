@@ -397,7 +397,7 @@ class CobrancaService:
                 observacao=f"Pagamento confirmado ({pagamento.get('gateway')} {pagamento.get('billing_type') or ''})".strip(),
                 campos={"pago_em": campos["pago_em"]},
             )
-            if pedido["tipo"] == "licenca":
+            if regras.credita_licenca(pedido["tipo"]):  # licença avulsa ou kit (livro + licença)
                 self.creditar_licencas(pedido, None)
         elif alvo == "estornado" and pedido["status"] not in ("cancelado",):
             logger.warning("Pagamento estornado no pedido %s (status %s)", pedido.get("numero"), pedido["status"])

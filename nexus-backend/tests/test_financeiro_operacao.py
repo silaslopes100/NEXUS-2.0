@@ -16,6 +16,7 @@ from app.modules.auth.schemas import PerfilResponse, UserResponse
 from app.modules.financeiro.cobranca_service import CobrancaService
 from app.modules.financeiro.gateways import fake
 from app.modules.financeiro.operacao_service import OperacaoService
+from app.modules.financeiro.repository import ESCOPO_GLOBAL as ESCOPO
 from app.modules.financeiro.repository import InMemoryFinanceiroRepository, set_financeiro_repository
 from app.modules.financeiro.schemas import (
     CheckoutRequest,
@@ -145,6 +146,23 @@ def test_baixa_manual_licenca_credita_e_cancela_cobranca(op, repo, creditos):
     assert repo.get_pagamento(res.pagamento.id)["status"] == "cancelado"
     with pytest.raises(HTTPException):  # livro não "conclui"
         op.baixa_manual(_checkout(op, repo).pedido.id, "concluido", None, ADMIN)
+
+
+def test_kit_pago_credita_licencas_e_vai_para_envio(op, repo, creditos):
+    kit = FinanceiroService(repo).create_produto(ProdutoCreate(
+        tipo="kit", sku="KIT-1", nome="Matemática (livro + licença)", preco=60, disciplina_id="disc-1"))
+    res = op.checkout(CheckoutRequest(tipo="kit", itens=[PedidoItemIn(produto_id=kit.id, quantidade=5)],
+                                      meio="BOLETO"), _user())
+    op.cobranca.simular(res.pagamento.id, "pago", ADMIN)
+    pedido = repo.get_pedido(res.pedido.id)
+    assert pedido["status"] == "pago_aguardando_envio" and creditos == [res.pedido.numero]
+    enviado = op.marcar_enviado(res.pedido.id, EnvioCreate(transportadora="Correios"), ADMIN)
+    assert enviado.status == "enviado"
+    k = op.kpis_vendas(FiltrosPeriodo(), ADMIN)
+    assert k.receita_kits == 300 and k.licencas_vendidas == 5 and k.livros_vendidos == 5
+    # filtro da logística: livro + kit
+    total, _ = repo.list_pedidos(FiltrosPeriodo(tipo="com_envio"), ESCOPO)
+    assert total == 1
 
 
 def test_cancelar_pedido_cancela_cobranca_pendente(op, repo):

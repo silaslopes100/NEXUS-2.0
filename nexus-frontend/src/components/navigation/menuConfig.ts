@@ -16,7 +16,6 @@ import {
   CreditCard,
   Ticket,
   Truck,
-  Package,
   ShieldCheck,
   ArrowLeftRight,
   MessageSquare,
@@ -29,6 +28,7 @@ import {
   History,
   Scale,
   TrendingUp,
+  Inbox,
   LucideIcon,
 } from 'lucide-react';
 import { UserRole } from '@/types/auth';
@@ -171,11 +171,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Scale,
         },
         {
-          title: 'Produtos & Preços',
-          path: '/admin/produtos',
-          icon: Package,
-        },
-        {
           title: 'Gateways de Pagamento',
           path: '/admin/gateways',
           icon: ShieldCheck,
@@ -257,7 +252,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
         { title: 'Boletos & Pagamentos', path: '/admin/financeiro', icon: CreditCard },
         { title: 'Pedidos', path: '/admin/pedidos', icon: ClipboardList },
         { title: 'Regras de Pagamento', path: '/admin/regras-pagamento', icon: Scale },
-        { title: 'Produtos & Preços', path: '/admin/produtos', icon: Package },
         { title: 'Gateways de Pagamento', path: '/admin/gateways', icon: ShieldCheck },
       ],
     },
@@ -338,14 +332,19 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Key,
         },
         {
-          title: 'Comprar Licenças',
+          title: 'Comprar Disciplinas',
           path: '/polo/comprar-licencas',
           icon: CreditCard,
         },
         {
-          title: 'Pedidos de Livros Didáticos',
+          title: 'Meus Pedidos',
           path: '/polo/livros',
           icon: BookMarked,
+        },
+        {
+          title: 'Solicitações das Escolas',
+          path: '/polo/solicitacoes',
+          icon: Inbox,
         },
       ],
     },
@@ -412,7 +411,12 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'Pedidos de Livros',
+          title: 'Solicitar ao Polo',
+          path: '/escola/solicitacoes',
+          icon: Inbox,
+        },
+        {
+          title: 'Meus Pedidos',
           path: '/escola/livros',
           icon: BookMarked,
         },

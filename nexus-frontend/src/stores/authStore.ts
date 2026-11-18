@@ -11,6 +11,8 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitialized: boolean;
+  /** Sessão aberta pelo número da licença: só prova/disciplinas, sem editar perfil. */
+  viaLicenca: boolean;
 
   // Ações
   setSession: (
@@ -23,6 +25,7 @@ interface AuthState {
   setTokens: (accessToken: string, refreshToken: string) => void;
   setUser: (user: User, perfil?: Perfil | null, permissoes?: string[]) => void;
   setLoading: (isLoading: boolean) => void;
+  setViaLicenca: (viaLicenca: boolean) => void;
   setInitialized: (isInitialized: boolean) => void;
   logout: () => void;
 
@@ -65,6 +68,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   isInitialized: false,
+  viaLicenca: false,
 
   setSession: (accessToken, refreshToken, user, perfil, permissoes = []) => {
     const activePerfil = perfil || user.perfil || null;
@@ -79,6 +83,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
       isLoading: false,
       isInitialized: true,
+      viaLicenca: false,
     });
   },
 
@@ -104,6 +109,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setLoading: (isLoading) => set({ isLoading }),
 
+  setViaLicenca: (viaLicenca) => set({ viaLicenca }),
+
   setInitialized: (isInitialized) => set({ isInitialized }),
 
   logout: () => {
@@ -116,6 +123,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: false,
       isLoading: false,
       isInitialized: true,
+      viaLicenca: false,
     });
   },
 

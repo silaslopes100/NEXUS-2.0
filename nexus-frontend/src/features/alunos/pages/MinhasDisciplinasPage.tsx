@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Eye, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { BookOpen, CheckCircle2, ClipboardCheck, Eye, Loader2, XCircle } from 'lucide-react';
+import { AvaliacaoAluno, avaliacoesApi, formatarNota } from '@/features/avaliacoes/api';
 import { ContentViewer } from '@/components/content/ContentViewer';
 import {
   alunosGestaoApi,
@@ -8,13 +10,79 @@ import {
   CursoAprendizado,
 } from '@/features/alunos/api';
 
+const CartaoAvaliacao: React.FC<{ item: AvaliacaoAluno; destaque: boolean }> = ({ item, destaque }) => {
+  const navigate = useNavigate();
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (destaque) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [destaque]);
+
+  const status = (() => {
+    switch (item.situacao) {
+      case 'aprovado':
+        return { texto: `Aprovado · nota ${formatarNota(item.melhor_nota)}`, cor: 'text-emerald-300', icone: <CheckCircle2 size={16} /> };
+      case 'reprovado':
+        return {
+          texto: `Nota ${formatarNota(item.melhor_nota)} · ${item.tentativas_restantes} tentativa(s) restante(s)`,
+          cor: 'text-amber-300',
+          icone: <XCircle size={16} />,
+        };
+      case 'sem_tentativas':
+        return { texto: `Tentativas esgotadas · nota ${formatarNota(item.melhor_nota)}`, cor: 'text-red-300', icone: <XCircle size={16} /> };
+      case 'em_andamento':
+        return { texto: 'Avaliação em andamento', cor: 'text-blue-300', icone: <ClipboardCheck size={16} /> };
+      case 'sem_avaliacao':
+        return { texto: 'A avaliação ainda não foi publicada', cor: 'text-slate-400', icone: <ClipboardCheck size={16} /> };
+      case 'ava':
+        return { texto: 'Disponível no AVA', cor: 'text-slate-400', icone: <ClipboardCheck size={16} /> };
+      default:
+        return { texto: 'Disponível', cor: 'text-blue-300', icone: <ClipboardCheck size={16} /> };
+    }
+  })();
+
+  return (
+    <article
+      ref={ref}
+      className={`flex flex-col gap-3 rounded-2xl border bg-slate-900 p-4 sm:flex-row sm:items-center sm:justify-between ${
+        destaque ? 'border-nexus-yellow ring-2 ring-nexus-yellow/30' : 'border-slate-800'
+      }`}
+    >
+      <div className="min-w-0">
+        <h3 className="font-semibold text-white">{item.disciplina_nome || 'Disciplina'}</h3>
+        <p className={`mt-1 flex items-center gap-1.5 text-sm ${status.cor}`}>
+          {status.icone} {status.texto}
+        </p>
+        {item.pode_realizar && item.tempo_limite_min ? (
+          <p className="mt-1 text-xs text-slate-500">Tempo: {item.tempo_limite_min} minutos</p>
+        ) : null}
+      </div>
+      {item.pode_realizar && item.avaliacao_id && (
+        <button
+          type="button"
+          onClick={() => navigate(`/aluno/avaliacoes/${item.avaliacao_id}`)}
+          className="shrink-0 rounded-xl bg-nexus-yellow px-5 py-3 text-sm font-bold text-slate-950 hover:bg-nexus-yellow-hover"
+        >
+          {item.situacao === 'em_andamento' ? 'Continuar Avaliação' : 'Realizar Avaliação'}
+        </button>
+      )}
+    </article>
+  );
+};
+
 export const MinhasDisciplinasPage: React.FC = () => {
+  const [params] = useSearchParams();
+  const disciplinaDestaque = params.get('disciplina');
+  const [avaliacoes, setAvaliacoes] = useState<AvaliacaoAluno[] | null>(null);
   const [cursos, setCursos] = useState<CursoAprendizado[] | null>(null);
   const [erro, setErro] = useState('');
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
   const [conteudoAberto, setConteudoAberto] = useState<ConteudoAprendizado | null>(null);
 
   useEffect(() => {
+    avaliacoesApi
+      .minhas()
+      .then(setAvaliacoes)
+      .catch(() => setAvaliacoes([]));
     alunosGestaoApi
       .aprendizado()
       .then(setCursos)
@@ -52,7 +120,7 @@ export const MinhasDisciplinasPage: React.FC = () => {
     return alunosGestaoApi.baixarConteudoArquivo(conteudoAberto.id);
   }, [conteudoAberto?.id]);
 
-  if (cursos === null) {
+  if (cursos === null || avaliacoes === null) {
     return (
       <div className="flex justify-center py-16 text-blue-400">
         <Loader2 className="animate-spin" />
@@ -73,7 +141,21 @@ export const MinhasDisciplinasPage: React.FC = () => {
         </div>
       )}
 
-      {cursos.length === 0 && !erro && (
+      {avaliacoes.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 font-bold text-white">
+            <ClipboardCheck size={17} className="text-nexus-yellow" />
+            Avaliações
+          </h2>
+          {[...avaliacoes]
+            .sort((a, b) => Number(b.disciplina_id === disciplinaDestaque) - Number(a.disciplina_id === disciplinaDestaque))
+            .map((item) => (
+              <CartaoAvaliacao key={item.disciplina_id} item={item} destaque={item.disciplina_id === disciplinaDestaque} />
+            ))}
+        </section>
+      )}
+
+      {cursos.length === 0 && avaliacoes.length === 0 && !erro && (
         <p className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-sm text-slate-500">
           Você ainda não tem disciplinas vinculadas.
         </p>

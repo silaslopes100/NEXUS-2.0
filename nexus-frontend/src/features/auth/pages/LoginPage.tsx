@@ -2,13 +2,117 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, LogIn, ShieldAlert } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, LogIn, ShieldAlert, KeyRound, ArrowLeft } from 'lucide-react';
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { loginSchema, LoginFormData } from '@/features/auth/schemas';
 import { authApi } from '@/features/auth/api';
 import { dashboardDoPerfil, useAuthStore } from '@/stores/authStore';
 
+/** "nx 2a3b c4d5" -> "NX-2A3B-C4D5" enquanto o aluno digita. */
+const mascararLicenca = (valor: string): string => {
+  let limpo = valor.toUpperCase().replace(/[^0-9A-Z]/g, '');
+  if (limpo.startsWith('NX')) limpo = limpo.slice(2);
+  limpo = limpo.slice(0, 8);
+  const partes = [limpo.slice(0, 4), limpo.slice(4, 8)].filter(Boolean);
+  return ['NX', ...partes].join('-');
+};
+
+const LoginLicenca: React.FC<{ onVoltar: () => void }> = ({ onVoltar }) => {
+  const navigate = useNavigate();
+  const setSession = useAuthStore((state) => state.setSession);
+  const setViaLicenca = useAuthStore((state) => state.setViaLicenca);
+  const [numero, setNumero] = useState('NX-');
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const completo = /^NX-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(numero);
+
+  const entrar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!completo) {
+      setErro('Digite os 8 caracteres do número que está no seu cartão.');
+      return;
+    }
+    setErro(null);
+    setEnviando(true);
+    try {
+      const r = await authApi.loginLicenca(numero);
+      setSession(r.access_token, r.refresh_token, r.usuario, r.perfil || r.usuario.perfil, r.permissoes || []);
+      setViaLicenca(true);
+      const disciplina = r.destino?.disciplina_id;
+      navigate(disciplina ? `/aluno/disciplinas?disciplina=${disciplina}` : '/aluno/disciplinas', { replace: true });
+    } catch (err: any) {
+      const status = err.response?.status;
+      const detalhe = err.response?.data?.detail;
+      setErro(
+        status === 429
+          ? typeof detalhe === 'string' ? detalhe : 'Muitas tentativas. Aguarde 15 minutos e tente de novo.'
+          : status === 401
+            ? 'Número de licença não encontrado ou inativo. Confira o cartão.'
+            : typeof detalhe === 'string' ? detalhe : 'Não foi possível conectar ao servidor.'
+      );
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <form onSubmit={entrar} className="space-y-5" noValidate>
+      {erro && (
+        <div className="p-4 rounded-xl flex items-start gap-3 text-sm bg-amber-500/15 border border-amber-500/30 text-amber-200">
+          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="leading-snug">{erro}</div>
+        </div>
+      )}
+      <div className="space-y-1.5">
+        <label htmlFor="numero-licenca" className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+          Número da licença
+        </label>
+        <p className="text-sm text-slate-400">Digite o número do seu cartão de acesso.</p>
+        <input
+          id="numero-licenca"
+          autoFocus
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          value={numero}
+          disabled={enviando}
+          onChange={(e) => setNumero(mascararLicenca(e.target.value))}
+          placeholder="NX-____-____"
+          className="w-full px-4 py-4 bg-slate-950/70 border border-slate-800 rounded-xl text-center font-mono text-2xl tracking-[0.2em] text-white placeholder-slate-600 focus:outline-none focus:border-nexus-yellow focus:ring-1 focus:ring-nexus-yellow/30"
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={enviando}
+        className="w-full py-3.5 px-4 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 text-slate-950 font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
+      >
+        {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+        {enviando ? 'Entrando...' : 'Entrar'}
+      </button>
+      <button
+        type="button"
+        onClick={onVoltar}
+        className="w-full flex items-center justify-center gap-2 text-sm text-slate-400 hover:text-white"
+      >
+        <ArrowLeft className="w-4 h-4" /> Entrar com e-mail e senha
+      </button>
+    </form>
+  );
+};
+
 export const LoginPage: React.FC = () => {
+  const [modoLicenca, setModoLicenca] = useState(false);
+  if (modoLicenca) {
+    return (
+      <AuthLayout title="Sou aluno" subtitle="Entre com o número da licença para fazer sua avaliação.">
+        <LoginLicenca onVoltar={() => setModoLicenca(false)} />
+      </AuthLayout>
+    );
+  }
+  return <LoginEmailSenha onLicenca={() => setModoLicenca(true)} />;
+};
+
+const LoginEmailSenha: React.FC<{ onLicenca: () => void }> = ({ onLicenca }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const setSession = useAuthStore((state) => state.setSession);
@@ -202,6 +306,18 @@ export const LoginPage: React.FC = () => {
               <span>Entrar na Plataforma</span>
             </>
           )}
+        </button>
+
+        <div className="flex items-center gap-3 text-xs text-slate-500">
+          <span className="h-px flex-1 bg-slate-800" /> ou <span className="h-px flex-1 bg-slate-800" />
+        </div>
+        <button
+          type="button"
+          onClick={onLicenca}
+          className="w-full py-3.5 px-4 border border-nexus-yellow/40 text-nexus-yellow font-bold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-nexus-yellow/10"
+        >
+          <KeyRound className="w-4 h-4" />
+          Entrar com número da licença
         </button>
 
         <div className="pt-2 text-center text-xs text-slate-500">

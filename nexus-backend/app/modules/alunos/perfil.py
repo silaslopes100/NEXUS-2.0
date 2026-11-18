@@ -19,7 +19,7 @@ from vercel import blob
 
 from app.core.config import settings
 from app.core.database import get_db_cursor
-from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
+from app.modules.auth.dependencies import exigir_login_completo, get_client_ip, get_current_user, require_role
 from app.modules.auth.schemas import UserResponse
 
 logger = logging.getLogger(__name__)
@@ -317,7 +317,7 @@ async def get_meu_perfil_foto(
     )
 
 
-@router.post("/meu-perfil/foto", response_model=FotoAlunoResponse)
+@router.post("/meu-perfil/foto", response_model=FotoAlunoResponse, dependencies=[Depends(exigir_login_completo)])
 async def upload_meu_perfil_foto(
     request: Request,
     foto: UploadFile = File(...),
@@ -384,7 +384,7 @@ async def upload_meu_perfil_foto(
     return FotoAlunoResponse(foto_url=f"{PHOTO_URL}?v={new_filename}")
 
 
-@router.put("/meu-perfil", response_model=PerfilAlunoResponse)
+@router.put("/meu-perfil", response_model=PerfilAlunoResponse, dependencies=[Depends(exigir_login_completo)])
 async def update_meu_perfil(
     dados: PerfilAlunoUpdate,
     request: Request,

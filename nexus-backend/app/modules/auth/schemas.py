@@ -58,6 +58,13 @@ class LoginResponse(BaseModel):
     usuario: UserResponse
     perfil: Optional[PerfilResponse] = None
     permissoes: List[str] = Field(default_factory=list)
+    # Login por licença: para onde levar o aluno (disciplina da licença e avaliação ativa).
+    destino: Optional[dict] = None
+    via: Optional[str] = None  # "licenca" quando a sessão foi aberta pelo número da licença
+
+
+class LoginLicencaRequest(BaseModel):
+    numero: str = Field(min_length=6, max_length=32)
 
 
 class RefreshTokenRequest(BaseModel):

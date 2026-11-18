@@ -26,6 +26,12 @@ export const authApi = {
     return response.data;
   },
 
+  /** Aluno entra só com o número da licença (cartão de acesso). Sessão curta, sem refresh. */
+  async loginLicenca(numero: string): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>('/auth/login-licenca', { numero });
+    return response.data;
+  },
+
   async refresh(refreshToken: string): Promise<RefreshTokenResponse> {
     const response = await apiClient.post<RefreshTokenResponse>('/auth/refresh', {
       refresh_token: refreshToken,

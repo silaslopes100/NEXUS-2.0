@@ -72,12 +72,15 @@ def _cep(valor: Optional[str]) -> str:
 
 
 def gerar_etiqueta(pedido: Dict[str, Any], remetente: Dict[str, Any], envio: Optional[Dict[str, Any]],
-                   peso_sugerido: Optional[int] = None) -> bytes:
-    """PDF 100×150 mm: uma página por volume + declaração de conteúdo."""
+                   peso_sugerido: Optional[int] = None, destinatario: Optional[Dict[str, Any]] = None) -> bytes:
+    """PDF 100×150 mm: uma página por volume + declaração de conteúdo.
+
+    `destinatario` é o endereço cadastrado no Polo (regra do negócio); sem ele, usa o snapshot do pedido.
+    """
     envio = envio or {}
     volumes = max(int(envio.get("volumes") or 1), 1)
     peso = envio.get("peso_total_g") or peso_sugerido
-    destino = {k[len("entrega_"):]: v for k, v in pedido.items() if k.startswith("entrega_")}
+    destino = destinatario or {k[len("entrega_"):]: v for k, v in pedido.items() if k.startswith("entrega_")}
     numero = str(pedido.get("numero") or pedido.get("id"))
 
     pdf = FPDF(unit="mm", format=(100, 150))

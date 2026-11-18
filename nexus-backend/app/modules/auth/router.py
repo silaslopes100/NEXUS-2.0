@@ -15,6 +15,7 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.schemas import (
     ForgotPasswordRequest,
+    LoginLicencaRequest,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -46,6 +47,19 @@ async def login(
         senha=dados.senha,
         client_ip=client_ip,
     )
+
+
+@router.post(
+    "/login-licenca",
+    response_model=LoginResponse,
+    summary="Login do aluno pelo número da licença (cartão de acesso)",
+)
+async def login_licenca(
+    dados: LoginLicencaRequest,
+    request: Request,
+    service: AuthService = Depends(get_auth_service),
+) -> LoginResponse:
+    return service.login_licenca(dados.numero, client_ip=get_client_ip(request))
 
 
 @router.post(

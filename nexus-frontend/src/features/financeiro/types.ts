@@ -1,6 +1,9 @@
 // Tipos do módulo 2.4 Financeiro & Logística (espelham app/modules/financeiro/schemas.py).
 
-export type TipoPedido = 'livro' | 'licenca';
+/** 'kit' = Disciplina (1 livro + 1 licença), o produto vendido; 'livro' e 'licenca' ficam para o histórico. */
+export type TipoPedido = 'livro' | 'licenca' | 'kit';
+/** Tipos que passam pela logística (envio de livro). */
+export const tipoComEnvio = (tipo: TipoPedido) => tipo === 'livro' || tipo === 'kit';
 
 export type StatusPedido =
   | 'aguardando_pagamento'
@@ -176,6 +179,39 @@ export interface VendasKpis {
   top_polos: { polo_id?: string | null; polo_nome?: string | null; pedidos_pagos: number; receita: number }[];
 }
 
+export interface CursoCatalogo {
+  id: string;
+  nome: string;
+  modalidade?: string | null;
+  /** Disciplinas ativas do curso. */
+  disciplinas: number;
+  /** Disciplinas ativas com preço (à venda). */
+  disciplinas_a_venda: number;
+  /** Preço do curso completo = soma das disciplinas ativas à venda. */
+  preco_curso: number;
+  preco_min?: number | null;
+  preco_max?: number | null;
+}
+
+export interface DisciplinaCatalogo {
+  disciplina_id: string;
+  nome: string;
+  semestre?: number | null;
+  ordem?: number;
+  /** Nulo quando a disciplina ainda não tem preço (não está à venda). */
+  produto_id: string | null;
+  preco: number | null;
+  a_venda: boolean;
+  saldo_polo: number;
+}
+
+export interface CursoCatalogoDetalhe {
+  id: string;
+  nome: string;
+  modalidade?: string | null;
+  disciplinas: DisciplinaCatalogo[];
+}
+
 export interface VendasSerieItem { mes: string; pedidos: number; pedidos_pagos: number; receita: number; }
 
 export interface PedidoCreatePayload {
@@ -247,13 +283,19 @@ export const STATUS_PEDIDO: Record<StatusPedido, { label: string; className: str
   cancelado: { label: 'Cancelado', className: 'bg-red-500/15 text-red-300 border-red-500/30' },
 };
 
-export const TIPO_PEDIDO: Record<TipoPedido, string> = { livro: 'Livro', licenca: 'Licença' };
+export const TIPO_PEDIDO: Record<TipoPedido, string> = {
+  kit: 'Disciplina (livro + licença)', livro: 'Livro', licenca: 'Licença',
+};
 
 // Transições manuais permitidas pela API (POST /financeiro/pedidos/{id}/status).
 export const ACOES_MANUAIS: Partial<Record<StatusPedido, StatusManual[]>> = {
   aguardando_pagamento: ['pago_aguardando_envio', 'concluido', 'cancelado'],
   pago_aguardando_envio: ['cancelado'],
 };
+
+/** Pedido criado pelo script de demonstração (scripts/demo_financeiro.py). */
+export const ehDemo = (pedido?: { observacao?: string | null } | null) =>
+  !!pedido?.observacao?.startsWith('[DEMO]');
 
 export const formatBRL = (valor?: number | null) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor || 0));

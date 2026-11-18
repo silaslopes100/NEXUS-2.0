@@ -4,9 +4,9 @@ from __future__ import annotations
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
-from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
+from app.modules.auth.dependencies import exigir_login_completo, get_client_ip, get_current_user, require_role
 from app.modules.auth.roles import perfil_do_usuario
 from app.modules.auth.schemas import UserResponse
 from app.modules.polos_escolas import pdf as pdf_gen
@@ -56,6 +56,9 @@ from app.modules.polos_escolas.schemas import (
     LicencaDistribuirRequest,
     LicencaReclassificarRequest,
     LicencaVenderRequest,
+    LicencaDistribuirAlunosRequest,
+    LicencaDistribuirAlunosResponse,
+    LicencaLiberarRequest,
     MessageResponse,
     MigracaoModalidadeRequest,
     MovimentacaoListResponse,
@@ -428,6 +431,69 @@ async def distribuir_licencas(
 ):
     check_polo_scope(current_user, polo_id)
     return service.distribuir_licencas(polo_id, payload, current_user.id, client_ip)
+
+
+@router.post("/polos/{polo_id}/licencas/liberar", response_model=MessageResponse, dependencies=[Depends(require_role(["admin"]))])
+async def liberar_licencas_admin(
+    polo_id: str,
+    payload: LicencaLiberarRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    """Admin: libera licenças ao Polo sem cobrança ("Enviada pelo Admin: <email>"); opcionalmente envia os livros."""
+    return service.liberar_licencas_admin(polo_id, payload, current_user.id, client_ip)
+
+
+@router.get("/polos/{polo_id}/licencas/turmas/{turma_id}/alunos", dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+async def alunos_turma_para_licenca(
+    polo_id: str,
+    turma_id: str,
+    disciplina_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    """Alunos da turma com indicação de quem já possui licença ativa da disciplina."""
+    check_polo_scope(current_user, polo_id)
+    return service.alunos_turma_para_licenca(polo_id, turma_id, disciplina_id)
+
+
+@router.post("/polos/{polo_id}/licencas/distribuir-alunos", response_model=LicencaDistribuirAlunosResponse,
+             dependencies=[Depends(require_role(_PERFIS_GESTAO))])
+async def distribuir_licencas_alunos(
+    polo_id: str,
+    payload: LicencaDistribuirAlunosRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    """Polo → alunos de uma turma: 1 licença por aluno, com o número de acesso de cada um."""
+    check_polo_scope(current_user, polo_id)
+    return service.distribuir_licencas_alunos(polo_id, payload, current_user.id, client_ip)
+
+
+@router.post("/licencas-alunos/cartoes", dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def cartoes_acesso(
+    licenca_ids: List[str] = Body(..., min_length=1, max_length=500),
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+):
+    """PDF com um cartão de acesso por licença (nome, disciplina, número e instruções)."""
+    conteudo = service.cartoes_acesso_pdf(licenca_ids, current_user)
+    return Response(content=conteudo, media_type="application/pdf",
+                    headers={"Content-Disposition": 'inline; filename="cartoes-acesso.pdf"'})
+
+
+@router.post("/licencas-alunos/{licenca_id}/novo-numero", dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
+async def novo_numero_licenca(
+    licenca_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    service: PolosEscolasService = Depends(get_polos_escolas_service),
+    client_ip: Optional[str] = Depends(get_client_ip),
+):
+    """Gera um novo número de acesso (o anterior deixa de funcionar)."""
+    service.checar_escopo_licenca(licenca_id, current_user)
+    return service.regerar_numero_licenca(licenca_id, current_user.id, client_ip)
 
 
 @router.post("/escolas/{escola_id}/licencas/vender", response_model=MessageResponse, dependencies=[Depends(require_role(_PERFIS_ESCOLA))])
@@ -981,7 +1047,7 @@ async def get_perfil(
     return service.get_perfil(current_user.id)
 
 
-@router.put("/perfil", response_model=PerfilUsuarioResponse)
+@router.put("/perfil", response_model=PerfilUsuarioResponse, dependencies=[Depends(exigir_login_completo)])
 async def update_perfil(
     payload: PerfilUpdateRequest,
     current_user: UserResponse = Depends(get_current_user),
@@ -991,7 +1057,7 @@ async def update_perfil(
     return service.update_perfil(current_user.id, payload, client_ip)
 
 
-@router.post("/perfil/foto", response_model=PerfilFotoResponse)
+@router.post("/perfil/foto", response_model=PerfilFotoResponse, dependencies=[Depends(exigir_login_completo)])
 async def update_foto_perfil(
     foto_url: str = Query(...),
     current_user: UserResponse = Depends(get_current_user),
@@ -1001,7 +1067,7 @@ async def update_foto_perfil(
     return service.update_foto(current_user.id, foto_url, client_ip)
 
 
-@router.put("/perfil/senha", response_model=MessageResponse)
+@router.put("/perfil/senha", response_model=MessageResponse, dependencies=[Depends(exigir_login_completo)])
 async def update_senha_perfil(
     payload: PerfilSenhaUpdateRequest,
     current_user: UserResponse = Depends(get_current_user),

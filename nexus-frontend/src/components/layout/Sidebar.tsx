@@ -32,7 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, perfil, logout, refreshToken } = useAuthStore();
+  const { user, perfil, logout, refreshToken, viaLicenca } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [areaAlunoAberta, setAreaAlunoAberta] = useState(() =>
     location.pathname.startsWith('/aluno/')
@@ -41,7 +41,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeRole: UserRole =
     normalizeUserRole(perfil?.nome || user?.perfil?.nome) || 'aluno';
 
-  const menuGroups: MenuGroup[] = menuByRole[activeRole] || menuByRole.aluno;
+  // Entrou pelo número da licença: só a prova e as notas (sem perfil, compras etc.).
+  const ROTAS_LICENCA = ['/aluno/disciplinas', '/aluno/historico'];
+  const menuBase: MenuGroup[] = menuByRole[activeRole] || menuByRole.aluno;
+  const menuGroups: MenuGroup[] = viaLicenca
+    ? menuBase
+        .map((group) => ({ ...group, items: group.items.filter((item) => ROTAS_LICENCA.includes(item.path)) }))
+        .filter((group) => group.items.length > 0)
+    : menuBase;
 
   // Chat e Mural já existem nos menus de Polo e Escola; aqui entram só as telas próprias do aluno.
   const itensAreaAluno: MenuItem[] = user?.tambem_aluno

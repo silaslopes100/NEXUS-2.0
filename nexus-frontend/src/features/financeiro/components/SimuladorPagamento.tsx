@@ -10,6 +10,12 @@ export const SeloSimulado: React.FC = () => (
   </span>
 );
 
+export const SeloDemonstracao: React.FC = () => (
+  <span title="Dado de demonstração (pode ser removido pelo script de limpeza)" className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-300">
+    <FlaskConical size={11} /> Demonstração
+  </span>
+);
+
 const ACOES: { status: StatusSimulado; label: string; icon: React.ReactNode; className: string }[] = [
   { status: 'pago', label: 'Simular pagamento', icon: <CheckCircle2 size={13} />, className: 'border-emerald-500/40 text-emerald-300' },
   { status: 'vencido', label: 'Simular vencimento', icon: <Clock size={13} />, className: 'border-amber-500/40 text-amber-300' },

@@ -33,7 +33,7 @@ export const LogisticaPage: React.FC<{ modo: 'pendentes' | 'historico' }> = ({ m
         </div>
         <BotoesExportar
           recurso="pedidos"
-          filtrosFixos={pendentes ? { tipo: 'livro', status: 'pago_aguardando_envio' } : { tipo: 'livro' }}
+          filtrosFixos={pendentes ? { tipo: 'com_envio', status: 'pago_aguardando_envio' } : { tipo: 'com_envio' }}
         />
       </header>
       {pendentes ? (
@@ -45,7 +45,7 @@ export const LogisticaPage: React.FC<{ modo: 'pendentes' | 'historico' }> = ({ m
         titulo={pendentes ? 'Aguardando envio' : 'Pedidos de livros'}
         podeAlterarStatus={acesso.financeiro}
         podeLogistica={acesso.logistica}
-        filtrosFixos={pendentes ? { tipo: 'livro', status: 'pago_aguardando_envio' } : { tipo: 'livro' }}
+        filtrosFixos={pendentes ? { tipo: 'com_envio', status: 'pago_aguardando_envio' } : { tipo: 'com_envio' }}
       />
     </div>
   );

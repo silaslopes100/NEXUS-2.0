@@ -33,13 +33,16 @@ import { CursosPage } from '@/features/cursos/pages/CursosPage';
 import { DisciplinasPage } from '@/features/cursos/pages/DisciplinasPage';
 import { TransferenciasPage } from '@/features/transferencias/pages/TransferenciasPage';
 import { MinhasDisciplinasPage } from '@/features/alunos/pages/MinhasDisciplinasPage';
+import { RealizarAvaliacaoPage } from '@/features/avaliacoes/pages/RealizarAvaliacaoPage';
+import { SolicitacoesEscolaPage } from '@/features/solicitacoes/pages/SolicitacoesEscolaPage';
+import { SolicitacoesPoloPage } from '@/features/solicitacoes/pages/SolicitacoesPoloPage';
 import { NotasAdminPage } from '@/features/notas_historico/pages/NotasAdminPage';
 import { NotasProfessorPage } from '@/features/notas_historico/pages/NotasProfessorPage';
 import { HistoricoAlunoPage } from '@/features/notas_historico/pages/HistoricoAlunoPage';
 import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
 import { GatewaysPage } from '@/features/financeiro/pages/GatewaysPage';
 import { PagamentosPage } from '@/features/financeiro/pages/PagamentosPage';
-import { PedidosLivrosUnidadePage } from '@/features/financeiro/pages/PedidosLivrosUnidadePage';
+import { MeusPedidosPage } from '@/features/financeiro/pages/MeusPedidosPage';
 import { PedidosPage } from '@/features/financeiro/pages/PedidosPage';
 import { ProdutosPage } from '@/features/financeiro/pages/ProdutosPage';
 import { ComprarLicencasPage } from '@/features/financeiro/pages/ComprarLicencasPage';
@@ -133,7 +136,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/transferencias" element={<TransferenciasPage />} />
           <Route path="/polo/licencas" element={<LicencasPage />} />
           <Route path="/polo/comprar-licencas" element={<ComprarLicencasPage />} />
-          <Route path="/polo/livros" element={<PedidosLivrosUnidadePage />} />
+          <Route path="/polo/livros" element={<MeusPedidosPage />} />
+          <Route path="/polo/solicitacoes" element={<SolicitacoesPoloPage />} />
         </Route>
 
         {/* Módulo Escola */}
@@ -145,7 +149,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/escola/transferencias" element={<TransferenciasPage />} />
           <Route path="/escola/presencas" element={<ModulePlaceholderPage />} />
           <Route path="/escola/licencas" element={<LicencasPage />} />
-          <Route path="/escola/livros" element={<PedidosLivrosUnidadePage />} />
+          <Route path="/escola/livros" element={<MeusPedidosPage />} />
+          <Route path="/escola/solicitacoes" element={<SolicitacoesEscolaPage />} />
         </Route>
 
         {/* Módulo Professor */}
@@ -168,6 +173,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/perfil" element={<PerfilAlunoPage />} />
             <Route path="/aluno/transferencias" element={<TransferenciasPage modo="aluno" />} />
             <Route path="/aluno/disciplinas" element={<MinhasDisciplinasPage />} />
+            <Route path="/aluno/avaliacoes/:avaliacaoId" element={<RealizarAvaliacaoPage />} />
           </Route>
           <Route path="/aluno/ava" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />

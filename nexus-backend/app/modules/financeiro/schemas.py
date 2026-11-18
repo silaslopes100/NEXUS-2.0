@@ -6,7 +6,10 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-TipoPedido = Literal["livro", "licenca"]
+# "kit" = Disciplina (livro + licença), produto vendido a partir da migração 021.
+TipoPedido = Literal["livro", "licenca", "kit"]
+# Filtro de listagem: além dos tipos, "com_envio" = livro + kit (telas de logística).
+TipoFiltro = Literal["livro", "licenca", "kit", "com_envio"]
 StatusPedido = Literal[
     "aguardando_pagamento",
     "pago_aguardando_envio",
@@ -34,7 +37,7 @@ class FiltrosPeriodo(BaseModel):
     escola_id: Optional[str] = None
     modalidade: Optional[Literal["ead"]] = None
     status: Optional[str] = None
-    tipo: Optional[TipoPedido] = None
+    tipo: Optional[TipoFiltro] = None
     pedido_id: Optional[str] = None
     # Só para pagamentos/boletos (Fase 3D)
     gateway: Optional[str] = None
@@ -412,6 +415,7 @@ class VendasKpisResponse(BaseModel):
     ticket_medio: float
     receita_licencas: float
     receita_livros: float
+    receita_kits: float = 0  # Disciplinas (livro + licença)
     licencas_vendidas: int
     livros_vendidos: int
     por_status: List[VendasStatusItem]

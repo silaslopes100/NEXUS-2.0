@@ -123,6 +123,63 @@ def test_pagamento_de_pedido_credita_por_disciplina(repo):
     assert movs == [(MAT, 10.0), (PORT, 20.0)]
 
 
+def _turma(repo, alunos):
+    repo.turmas = {"t1": {"id": "t1", "nome": "Turma A", "polo_id": POLO, "escola_id": None, "curso_id": "c1"}}
+    repo.turma_alunos = [{"turma_id": "t1", "aluno_id": a} for a in alunos]
+    for a in alunos:
+        repo.alunos[a] = {"id": a, "nome": f"Aluno {a}", "polo_id": POLO, "escola_id": None, "status": "ativo",
+                          "modalidade": "polo", "numero_matricula": f"M-{a}"}
+
+
+def test_distribuir_para_alunos_gera_numero_e_pula_quem_ja_tem(repo):
+    _comprar(repo, 5, MAT)
+    _turma(repo, ["a1", "a2", "a3"])
+    r = lic.distribuir_para_alunos(repo, POLO, MAT, "t1", ["a1", "a2"], "coord")
+    assert r["distribuidas"] == 2 and r["ja_possuiam"] == 0
+    numeros = [x["numero_licenca"] for x in r["licencas"]]
+    assert len(set(numeros)) == 2 and all(n.startswith("NX-") and len(n) == 12 for n in numeros)
+    assert _saldo(repo, polo=POLO, disciplina=MAT) == 3
+
+    r2 = lic.distribuir_para_alunos(repo, POLO, MAT, "t1", ["a1", "a2", "a3"], "coord")
+    assert r2["distribuidas"] == 1 and r2["ja_possuiam"] == 2 and _saldo(repo, polo=POLO, disciplina=MAT) == 2
+
+    with pytest.raises(HTTPException) as exc:  # aluno fora da turma
+        lic.distribuir_para_alunos(repo, POLO, MAT, "t1", ["intruso"], "coord")
+    assert exc.value.status_code == 422
+    _turma(repo, ["a1", "a2", "a3", "a4", "a5", "a6"])
+    with pytest.raises(HTTPException) as exc:  # saldo insuficiente (2) para 3 novos
+        lic.distribuir_para_alunos(repo, POLO, MAT, "t1", ["a4", "a5", "a6"], "coord")
+    assert exc.value.status_code == 400
+
+
+def test_liberacao_admin_registra_email(repo):
+    movs = lic.liberar_pelo_admin(repo, POLO, [{"disciplina_id": MAT, "quantidade": 10}], "adm", "admin@nexus.com.br")
+    assert _saldo(repo, polo=POLO, disciplina=MAT) == 10
+    mov = repo.movimentacoes[movs[0]]
+    assert mov["tipo"] == "liberacao_admin" and mov["observacao"] == "Enviada pelo Admin: admin@nexus.com.br"
+
+
+def test_numero_licenca_normaliza_e_regera(repo):
+    from app.core.codigos import normalizar_numero_licenca
+
+    _comprar(repo, 2, MAT)
+    _turma(repo, ["a1"])
+    numero = lic.distribuir_para_alunos(repo, POLO, MAT, "t1", ["a1"], "c")["licencas"][0]["numero_licenca"]
+    assert normalizar_numero_licenca(numero.lower().replace("-", " ")) == numero
+    assert normalizar_numero_licenca("NX-0000-1111") is None  # 0 e 1 não existem no alfabeto
+    licenca = repo.get_licenca_por_numero(numero)
+    novo = repo.regerar_numero_licenca(licenca["id"])
+    assert novo != numero and repo.get_licenca_por_numero(numero) is None
+
+
+def test_cartoes_de_acesso_pdf():
+    from app.modules.polos_escolas.cartoes import gerar_cartoes_acesso
+
+    pdf = gerar_cartoes_acesso([{"aluno_nome": "João da Silva", "disciplina_nome": "Matemática",
+                                 "numero_licenca": "NX-7K4P-92QD"}] * 9)
+    assert pdf.startswith(b"%PDF")
+
+
 def test_reingresso_debita_da_disciplina_escolhida():
     repo = InMemoryAlunosGestaoRepository()
     repo.alunos["al-1"] = {"id": "al-1", "status": "desistente", "numero_matricula": "NX-1"}

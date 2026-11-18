@@ -64,6 +64,18 @@ async def get_current_user(
     return service._build_user_response(user, permissoes)
 
 
+async def exigir_login_completo(
+    auth_header: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+) -> None:
+    """Sessões abertas pelo número da licença não alteram dados pessoais nem senha (exige e-mail e senha)."""
+    payload = decode_access_token(auth_header.credentials) if auth_header and auth_header.credentials else None
+    if payload and payload.get("via") == "licenca":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Para alterar seus dados, entre com e-mail e senha.",
+        )
+
+
 async def get_current_active_user(
     current_user: UserResponse = Depends(get_current_user),
 ) -> UserResponse:

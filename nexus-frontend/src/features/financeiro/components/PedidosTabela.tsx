@@ -4,7 +4,8 @@ import { useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
 import { StatusPedidoBadge } from '@/features/financeiro/components/StatusPedidoBadge';
 import { PedidoDetalheDrawer } from '@/features/financeiro/components/PedidoDetalheDrawer';
-import { FiltrosPeriodo, Pedido, TIPO_PEDIDO, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
+import { SeloDemonstracao } from '@/features/financeiro/components/SimuladorPagamento';
+import { FiltrosPeriodo, Pedido, TIPO_PEDIDO, ehDemo, erroApi, formatBRL, formatData } from '@/features/financeiro/types';
 
 const PAGE_SIZE = 20;
 
@@ -86,7 +87,10 @@ export const PedidosTabela: React.FC<Props> = ({
             <tbody className="divide-y divide-slate-800">
               {items.map((p) => (
                 <tr key={p.id} onClick={() => setSelecionado(p.id)} className="cursor-pointer text-slate-300 hover:bg-slate-800/40">
-                  <td className="p-4 font-mono text-xs font-semibold text-white">{p.numero}</td>
+                  <td className="p-4 font-mono text-xs font-semibold text-white">
+                    {p.numero}
+                    {ehDemo(p) && <div className="mt-1"><SeloDemonstracao /></div>}
+                  </td>
                   <td className="p-4 text-xs">{formatData(p.criado_em)}</td>
                   {mostrarPolo && <td className="p-4 text-xs">{p.polo_nome || '-'}{p.escola_nome ? ` · ${p.escola_nome}` : ''}</td>}
                   <td className="p-4 text-xs">{TIPO_PEDIDO[p.tipo]}</td>

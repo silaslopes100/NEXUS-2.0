@@ -155,13 +155,25 @@ def test_limite_de_linhas(op, repo, rel, monkeypatch):
 # Etiqueta
 # ---------------------------------------------------------------------------
 
-def test_etiqueta_exige_remetente_e_status(op, repo, rel):
+def test_etiqueta_remetente_padrao_destino_do_polo_e_status(op, repo, rel):
     res = _pedido_pago(op, repo)
+    # Sem configuração: remetente padrão ETADEMP; com configuração completa, ela vale.
+    assert rel.remetente()["nome"] == "ETADEMP" and rel.remetente()["cep"] == "05207180"
+    repo.configuracoes = {"remetente_etiqueta": {"nome": "Incompleto"}}
+    assert rel.remetente()["nome"] == "ETADEMP"
+    assert rel.etiqueta(res.pedido.id, ADMIN).body.startswith(b"%PDF")
+    repo.configuracoes = {"remetente_etiqueta": REMETENTE}
+    assert rel.remetente()["nome"] == "Editora Nexus"
+
+    # Destinatário = endereço atual do Polo (não o snapshot do pedido)
+    destino = rel.destinatario(POLO)
+    assert destino["nome"] == "Polo Alfa" and destino["cep"] == "01001000" and destino["cidade"] == "São Paulo"
+    repo.polos[POLO]["cep"] = None
     with pytest.raises(HTTPException) as exc:
         rel.etiqueta(res.pedido.id, ADMIN)
-    assert exc.value.status_code == 409 and "remetente" in exc.value.detail
+    assert exc.value.status_code == 409 and "Endereço do Polo" in exc.value.detail
+    repo.polos[POLO]["cep"] = "01001000"
 
-    repo.configuracoes = {"remetente_etiqueta": REMETENTE}
     prod = FinanceiroService(repo).create_produto(ProdutoCreate(tipo="livro", sku="LIV-X", nome="Livro X", preco=10))
     aguardando = op.checkout(CheckoutRequest(tipo="livro", itens=[PedidoItemIn(produto_id=prod.id, quantidade=1)], meio="PIX"), POLO_USER)
     with pytest.raises(HTTPException) as exc:

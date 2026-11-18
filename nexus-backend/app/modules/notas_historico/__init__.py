@@ -260,6 +260,55 @@ def _atualizar_historico_postgres(cursor: Any, aluno_id: str, disciplina_id: str
     )
 
 
+ORIGENS_NOTA = ("manual", "ava", "prova", "legado")
+
+
+def registrar_nota(
+    aluno_id: str,
+    disciplina_id: str,
+    valor: float,
+    origem: str,
+    turma_id: Optional[str] = None,
+    lancado_por: Optional[str] = None,
+    cursor: Any = None,
+) -> str:
+    """Serviço único de gravação de nota (prova online, lançamento manual e AVA futuro).
+
+    Grava em `notas` e recalcula `historico_unificado` pela REGRA DA MAIOR NOTA (aprovado >= 6).
+    Com `cursor`, participa da transação de quem chama.
+    """
+    if origem not in ORIGENS_NOTA:
+        raise ValueError(f"origem de nota inválida: {origem}")
+    valor = round(min(max(float(valor), 0.0), 10.0), 2)
+    new_id = str(uuid.uuid4())
+    if not settings.PG_DSN:
+        agora = datetime.now(timezone.utc)
+        _notas_db[new_id] = {
+            "id": new_id, "aluno_id": aluno_id, "disciplina_id": disciplina_id, "turma_id": turma_id,
+            "origem": origem, "valor": valor, "lancado_por": lancado_por, "lancado_em": agora, "atualizado_em": agora,
+        }
+        _atualizar_historico_memoria(aluno_id, disciplina_id)
+        return new_id
+
+    def _gravar(cur: Any) -> None:
+        cur.execute(
+            """
+            INSERT INTO notas (id, aluno_id, disciplina_id, turma_id, origem, valor, lancado_por,
+                               lancado_em, criado_em, atualizado_em)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now(), now())
+            """,
+            (new_id, aluno_id, disciplina_id, turma_id, origem, valor, lancado_por),
+        )
+        _atualizar_historico_postgres(cur, aluno_id, disciplina_id)
+
+    if cursor is not None:
+        _gravar(cursor)
+    else:
+        with get_db_cursor() as cur:
+            _gravar(cur)
+    return new_id
+
+
 def _enriquecer_nota_memoria(nota: Dict[str, Any]) -> Dict[str, Any]:
     from app.modules.alunos import _alunos_db
     from app.modules.cursos_disciplinas import _disciplinas_db

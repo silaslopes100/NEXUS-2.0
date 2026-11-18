@@ -3,6 +3,7 @@ import { Ban, CheckCircle2, Loader2, MapPin, Wallet, X } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
 import { CobrancaPedido } from '@/features/financeiro/components/CobrancaPedido';
 import { LogisticaPedido } from '@/features/financeiro/components/LogisticaPedido';
+import { SeloDemonstracao } from '@/features/financeiro/components/SimuladorPagamento';
 import { StatusPedidoBadge } from '@/features/financeiro/components/StatusPedidoBadge';
 import {
   ACOES_MANUAIS,
@@ -11,7 +12,9 @@ import {
   StatusManual,
   StatusPedido,
   TIPO_PEDIDO,
+  ehDemo,
   erroApi,
+  tipoComEnvio,
   formatBRL,
   formatData,
 } from '@/features/financeiro/types';
@@ -72,7 +75,7 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
   const acoes = pedido && podeAlterarStatus
     // Livro pago segue para a logística; licença paga é concluída na hora.
     ? (ACOES_MANUAIS[pedido.status] || []).filter((a) =>
-      pedido.tipo === 'livro' ? a !== 'concluido' : a !== 'pago_aguardando_envio')
+      tipoComEnvio(pedido.tipo) ? a !== 'concluido' : a !== 'pago_aguardando_envio')
     : [];
   const end = pedido?.endereco;
 
@@ -94,6 +97,7 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
           <div className="space-y-5 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <StatusPedidoBadge status={pedido.status} />
+              {ehDemo(pedido) && <SeloDemonstracao />}
               <span className="rounded-full border border-slate-700 px-2.5 py-0.5 text-[11px] text-slate-300">{TIPO_PEDIDO[pedido.tipo]}</span>
               <span className="text-xs text-slate-500">Criado em {formatData(pedido.criado_em, true)}</span>
             </div>

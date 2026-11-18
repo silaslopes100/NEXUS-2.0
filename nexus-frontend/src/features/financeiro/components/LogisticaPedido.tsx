@@ -1,21 +1,10 @@
 import React, { useState } from 'react';
 import { CheckCircle2, Loader2, Pencil, Printer, Truck } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
-import { EnderecoEntrega, Pedido, erroApi, formatData } from '@/features/financeiro/types';
+import { Pedido, erroApi, formatData, tipoComEnvio } from '@/features/financeiro/types';
 import { abrirPdf, erroDeBlob, nomeDoArquivo } from '@/lib/download';
 
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500';
-const CAMPOS: { key: keyof EnderecoEntrega; label: string; span?: string }[] = [
-  { key: 'nome', label: 'Destinatário', span: 'col-span-2' },
-  { key: 'cep', label: 'CEP' },
-  { key: 'uf', label: 'UF' },
-  { key: 'logradouro', label: 'Logradouro', span: 'col-span-2' },
-  { key: 'numero', label: 'Número' },
-  { key: 'complemento', label: 'Complemento' },
-  { key: 'bairro', label: 'Bairro' },
-  { key: 'cidade', label: 'Cidade' },
-  { key: 'telefone', label: 'Telefone', span: 'col-span-2' },
-];
 const STATUS_FINAIS = ['enviado', 'entregue', 'concluido', 'cancelado'];
 const STATUS_ETIQUETA = ['pago_aguardando_envio', 'enviado', 'entregue'];
 
@@ -32,7 +21,6 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [envio, setEnvio] = useState({ transportadora: 'Correios', codigo_rastreio: '', volumes: 1, peso_total_g: '', observacao: '' });
-  const [endereco, setEndereco] = useState<EnderecoEntrega>(pedido.endereco || {});
   const [observacao, setObservacao] = useState(pedido.observacao || '');
   const [gerandoEtiqueta, setGerandoEtiqueta] = useState(false);
 
@@ -56,15 +44,13 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
     peso_total_g: envio.peso_total_g ? Number(envio.peso_total_g) : null,
     observacao: envio.observacao.trim() || undefined,
   }));
-  const salvarEdicao = () => executar(() => financeiroApi.editarPedido(pedido.id, {
-    endereco: pedido.tipo === 'livro' ? endereco : undefined,
-    observacao,
-  }));
+  // O destino é sempre o endereço do Polo (cadastro do Polo); aqui só a observação é editável.
+  const salvarEdicao = () => executar(() => financeiroApi.editarPedido(pedido.id, { observacao }));
 
-  const podeEnviar = podeEnvio && pedido.tipo === 'livro' && pedido.status === 'pago_aguardando_envio';
+  const podeEnviar = podeEnvio && tipoComEnvio(pedido.tipo) && pedido.status === 'pago_aguardando_envio';
   const podeEntregar = podeEnvio && pedido.status === 'enviado';
   const podeEditar = !STATUS_FINAIS.includes(pedido.status);
-  const podeEtiqueta = podeEnvio && pedido.tipo === 'livro' && STATUS_ETIQUETA.includes(pedido.status);
+  const podeEtiqueta = podeEnvio && tipoComEnvio(pedido.tipo) && STATUS_ETIQUETA.includes(pedido.status);
   if (!podeEnviar && !podeEntregar && !podeEditar && !podeEtiqueta && !(pedido.envios || []).length) return null;
 
   const imprimirEtiqueta = async () => {
@@ -112,7 +98,7 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
           )}
           {podeEditar && (
             <button onClick={() => setModo('editar')} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-xs text-slate-200">
-              <Pencil size={14} /> Editar {pedido.tipo === 'livro' ? 'entrega' : 'observação'}
+              <Pencil size={14} /> Editar observação
             </button>
           )}
         </div>
@@ -138,19 +124,8 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
 
       {modo === 'editar' && (
         <div className="space-y-2">
-          {pedido.tipo === 'livro' && (
-            <div className="grid grid-cols-2 gap-2">
-              {CAMPOS.map((c) => (
-                <input
-                  key={c.key}
-                  className={`${inputClass} ${c.span || ''}`}
-                  placeholder={c.label}
-                  maxLength={c.key === 'uf' ? 2 : undefined}
-                  value={endereco[c.key] || ''}
-                  onChange={(e) => setEndereco({ ...endereco, [c.key]: c.key === 'uf' ? e.target.value.toUpperCase() : e.target.value })}
-                />
-              ))}
-            </div>
+          {tipoComEnvio(pedido.tipo) && (
+            <p className="text-[11px] text-slate-500">A entrega vai sempre para o endereço cadastrado no Polo. Para mudar, edite o cadastro do Polo.</p>
           )}
           <textarea className={inputClass} rows={2} placeholder="Observação" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
           <div className="flex gap-2">

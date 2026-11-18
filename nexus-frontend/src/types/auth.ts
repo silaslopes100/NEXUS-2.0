@@ -39,6 +39,9 @@ export interface LoginResponse {
   usuario: User;
   perfil?: Perfil | null;
   permissoes: string[];
+  /** Login por licença: disciplina (e avaliação ativa) para onde levar o aluno. */
+  destino?: { disciplina_id?: string; avaliacao_id?: string | null } | null;
+  via?: 'licenca' | null;
 }
 
 export interface RefreshTokenResponse {

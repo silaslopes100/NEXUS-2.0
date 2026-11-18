@@ -41,11 +41,25 @@ def validar_transicao(de: str, para: str) -> None:
         )
 
 
+# "kit" = Disciplina (1 livro físico + 1 licença por unidade). É o produto vendido a partir da
+# migração 021; "livro" e "licenca" ficam para o histórico.
+TIPOS_COM_ENVIO: FrozenSet[str] = frozenset({"livro", "kit"})        # passam pela logística
+TIPOS_COM_LICENCA: FrozenSet[str] = frozenset({"licenca", "kit"})    # creditam licenças ao pagar
+
 # Status que não fazem sentido para cada tipo de pedido.
 STATUS_INVALIDOS_POR_TIPO: Dict[str, FrozenSet[str]] = {
     "livro": frozenset({"concluido"}),  # livro termina em 'entregue'
+    "kit": frozenset({"concluido"}),    # kit também termina na entrega do livro
     "licenca": frozenset({"pago_aguardando_envio", "enviado", "entregue"}),  # sem logística
 }
+
+
+def tem_envio(tipo: str) -> bool:
+    return tipo in TIPOS_COM_ENVIO
+
+
+def credita_licenca(tipo: str) -> bool:
+    return tipo in TIPOS_COM_LICENCA
 
 
 def validar_transicao_para_tipo(tipo: str, de: str, para: str) -> None:
@@ -61,9 +75,9 @@ def validar_transicao_para_tipo(tipo: str, de: str, para: str) -> None:
 def status_pos_pagamento(tipo: str) -> str:
     """Status do pedido quando o pagamento é confirmado.
 
-    Livro físico segue para a fila da logística; licença é entregue na hora.
+    Livro físico (e kit) segue para a fila da logística; licença avulsa é entregue na hora.
     """
-    return "pago_aguardando_envio" if tipo == "livro" else "concluido"
+    return "pago_aguardando_envio" if tem_envio(tipo) else "concluido"
 
 
 def _dec(valor) -> Decimal:

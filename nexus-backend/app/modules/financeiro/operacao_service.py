@@ -125,7 +125,8 @@ class OperacaoService:
         if pendente and pedido.status == "aguardando_pagamento":
             self.cobranca.cancelar_pagamento(pendente["id"], user)
         atualizado = self.pedidos.alterar_status(pedido.id, para, user.id, observacao=observacao or "Baixa manual")
-        if pedido.tipo == "licenca" and pedido.status == "aguardando_pagamento" and para == "concluido":
+        pagou = pedido.status == "aguardando_pagamento" and para in ("concluido", "pago_aguardando_envio")
+        if pagou and regras_pedido.credita_licenca(pedido.tipo):  # licença avulsa ou kit
             self.cobranca.creditar_licencas(self.repo.get_pedido(pedido.id), user.id)
         return atualizado
 
@@ -155,7 +156,7 @@ class OperacaoService:
             bruto, desconto, total = regras_pedido.calcular_totais([(i["valor_unitario"], i["quantidade"]) for i in itens])
             campos.update(valor_bruto=bruto, desconto=desconto, valor_total=total)
             alteracoes.append("itens")
-        if pedido.tipo == "livro" and payload.endereco is not None:
+        if regras_pedido.tem_envio(pedido.tipo) and payload.endereco is not None:
             faltando = [c for c in _ENDERECO_OBRIGATORIO_LIVRO if not campos.get(f"entrega_{c}")]
             if faltando:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -181,7 +182,7 @@ class OperacaoService:
 
     def marcar_enviado(self, pedido_id: str, payload: EnvioCreate, user: UserResponse) -> PedidoResponse:
         pedido = self.pedidos.get_pedido(pedido_id, user)
-        if pedido.tipo != "livro" or pedido.status != "pago_aguardando_envio":
+        if not regras_pedido.tem_envio(pedido.tipo) or pedido.status != "pago_aguardando_envio":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail="Só pedidos de livro pagos e aguardando envio podem ser enviados")
         dados = payload.model_dump()
@@ -216,6 +217,7 @@ class OperacaoService:
             ticket_medio=round(receita / pagos, 2) if pagos else 0.0,
             receita_licencas=round(float(dados.get("receita_licencas") or 0), 2),
             receita_livros=round(float(dados.get("receita_livros") or 0), 2),
+            receita_kits=round(float(dados.get("receita_kits") or 0), 2),
             licencas_vendidas=int(dados.get("licencas_vendidas") or 0),
             livros_vendidos=int(dados.get("livros_vendidos") or 0),
             por_status=dados.get("por_status") or [],

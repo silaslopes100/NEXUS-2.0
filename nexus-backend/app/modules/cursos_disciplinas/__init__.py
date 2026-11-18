@@ -82,7 +82,9 @@ class DisciplinaSchema(BaseModel):
     qtd_aulas_prevista: Optional[int] = Field(default=10, ge=0)
     tipo: str = Field(default="presencial", min_length=1, max_length=16)
     eh_extra_grade: bool = False
-    preco: Optional[float] = Field(default=None, ge=0)  # informativo (R$)
+    preco: Optional[float] = Field(default=None, ge=0)  # preço do kit (livro + licença), R$
+    peso_livro_g: Optional[int] = Field(default=None, ge=0)
+    ativo: bool = True  # inativa: fora do catálogo de compra e do preço do Curso
 
 
 class DisciplinaWriteSchema(BaseModel):
@@ -94,8 +96,11 @@ class DisciplinaWriteSchema(BaseModel):
     qtd_aulas_prevista: Optional[int] = Field(default=10, ge=0)
     tipo: str = Field(default="presencial", min_length=1, max_length=16)
     eh_extra_grade: bool = False
-    # Preço informativo (R$). Não é usado em pedidos/cobranças (o preço de venda fica em Produtos).
+    # Preço do kit da disciplina (1 livro + 1 licença). Com preço, o kit fica à venda na compra por Curso;
+    # sem preço, o kit fica inativo. Fonte única: o produto "kit" é sincronizado a partir daqui.
     preco: Optional[float] = Field(default=None, ge=0, le=9_999_999_999.99)
+    peso_livro_g: Optional[int] = Field(default=None, ge=0, le=100000)  # etiqueta/frete
+    ativo: bool = True
 
     @field_validator("preco")
     @classmethod
@@ -400,6 +405,7 @@ async def delete_curso(curso_id: uuid.UUID) -> Response:
 async def list_disciplinas(
     curso_id: Optional[str] = None,
     semestre: Optional[int] = Query(None, ge=0),
+    ativo: Optional[bool] = None,
 ):
     if not settings.PG_DSN:
         discs = list(_disciplinas_db.values())
@@ -407,11 +413,17 @@ async def list_disciplinas(
             discs = [d for d in discs if d.get("curso_id") == curso_id]
         if semestre is not None:
             discs = [d for d in discs if d.get("semestre") == semestre]
+        if ativo is not None:
+            discs = [d for d in discs if bool(d.get("ativo", True)) == ativo]
         return discs
 
-    sql = "SELECT id, curso_id, semestre, nome, ordem, carga_horaria, qtd_aulas_prevista, tipo, eh_extra_grade, preco FROM disciplinas"
+    sql = ("SELECT id, curso_id, semestre, nome, ordem, carga_horaria, qtd_aulas_prevista, tipo, eh_extra_grade, "
+           "preco, peso_livro_g, ativo FROM disciplinas")
     conds = []
     params = []
+    if ativo is not None:
+        conds.append("ativo = %s")
+        params.append(ativo)
     if curso_id:
         conds.append("curso_id = %s")
         params.append(curso_id)
@@ -499,11 +511,11 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
     sql = """
         INSERT INTO disciplinas (
             id, curso_id, semestre, nome, ordem, carga_horaria,
-            qtd_aulas_prevista, tipo, eh_extra_grade, preco, criado_em, atualizado_em
+            qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, criado_em, atualizado_em
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade, preco
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo
     """
     params = (
         new_id,
@@ -516,12 +528,15 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
         dados.tipo,
         dados.eh_extra_grade,
         dados.preco,
+        dados.peso_livro_g,
+        dados.ativo,
     )
     with get_db_cursor() as cur:
         cur.execute(sql, params)
         row = cur.fetchone()
         if row is None:
             raise RuntimeError("Não foi possível cadastrar a disciplina.")
+        _sincronizar_kit(cur, dict(row))
         return dict(row)
 
 
@@ -544,10 +559,10 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         UPDATE disciplinas
         SET curso_id = %s, semestre = %s, nome = %s, ordem = %s,
             carga_horaria = %s, qtd_aulas_prevista = %s, tipo = %s,
-            eh_extra_grade = %s, preco = %s, atualizado_em = now()
+            eh_extra_grade = %s, preco = %s, peso_livro_g = %s, ativo = %s, atualizado_em = now()
         WHERE id = %s
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade, preco
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo
     """
     params = (
         dados.curso_id,
@@ -559,6 +574,8 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         dados.tipo,
         dados.eh_extra_grade,
         dados.preco,
+        dados.peso_livro_g,
+        dados.ativo,
         uid,
     )
     with get_db_cursor() as cur:
@@ -566,6 +583,7 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
+        _sincronizar_kit(cur, dict(row))
         return dict(row)
 
 
@@ -599,7 +617,7 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
             OR EXISTS (SELECT 1 FROM licencas_estoque WHERE materia_id = %s)
             OR EXISTS (SELECT 1 FROM licencas_atribuidas WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM pedidos_itens WHERE disciplina_id = %s)
-            OR EXISTS (SELECT 1 FROM produtos WHERE disciplina_id = %s)
+            OR EXISTS (SELECT 1 FROM produtos WHERE disciplina_id = %s AND tipo <> 'kit')
             AS em_uso
     """
     with get_db_cursor() as cur:
@@ -615,8 +633,31 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
                 detail="Não é possível excluir uma disciplina que possui conteúdos ou vínculos acadêmicos.",
             )
 
+        # O kit da própria disciplina (nunca vendido, checado acima por pedidos_itens) sai junto.
+        cur.execute("DELETE FROM produtos WHERE disciplina_id = %s AND tipo = 'kit'", (uid,))
         cur.execute("DELETE FROM disciplinas WHERE id = %s", (uid,))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _sincronizar_kit(cur: Any, disciplina: Dict[str, Any]) -> None:
+    """Mantém o produto "kit" (1 livro + 1 licença) espelhando a Disciplina: fonte única do preço.
+
+    Com preço e disciplina ativa: kit à venda na compra por Curso. Sem preço ou inativa: kit inativo.
+    """
+    disciplina_id = str(disciplina["id"])
+    preco = disciplina.get("preco")
+    nome = f"{disciplina['nome']} (livro + licença)"[:255]
+    cur.execute(
+        """
+        INSERT INTO produtos (tipo, sku, nome, disciplina_id, preco, peso_g, ativo)
+        VALUES ('kit', %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (disciplina_id) WHERE tipo = 'kit'
+        DO UPDATE SET nome = EXCLUDED.nome, preco = EXCLUDED.preco, peso_g = EXCLUDED.peso_g,
+                      ativo = EXCLUDED.ativo, atualizado_em = now()
+        """,
+        (f"KIT-{disciplina_id.replace('-', '').upper()}", nome, disciplina_id, preco or 0, disciplina.get("peso_livro_g"),
+         preco is not None and float(preco) > 0 and bool(disciplina.get("ativo", True))),
+    )
 
 
 @router.get(

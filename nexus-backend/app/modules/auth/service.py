@@ -215,6 +215,85 @@ class AuthService:
             permissoes=permissoes,
         )
 
+    # Sessão por licença: sem renovação (refresh) e com prazo suficiente para a prova.
+    MINUTOS_SESSAO_LICENCA = 180
+
+    def login_licenca(self, numero: str, client_ip: Optional[str] = None) -> LoginResponse:
+        """Login do aluno de Polo/Escola só com o número da licença (cartão de acesso).
+
+        O número funciona como uma senha: bloqueio por IP, sessão curta sem refresh e sem
+        permissão para alterar dados pessoais/senha (dependência `exigir_login_completo`).
+        """
+        from app.core.codigos import mascarar_numero_licenca, normalizar_numero_licenca
+        from app.modules.polos_escolas.repository import get_polos_escolas_repository
+
+        chave_ip = f"licenca:{client_ip or 'desconhecido'}"
+        falhas = self.repo.count_recent_failed_attempts(
+            email=chave_ip, ip=None, minutes=settings.LOGIN_ATTEMPTS_WINDOW_MINUTES)
+        if falhas >= settings.MAX_LOGIN_ATTEMPTS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Muitas tentativas. Aguarde 15 minutos e tente novamente.",
+            )
+
+        def recusar(motivo: str, usuario_id: Optional[str] = None) -> HTTPException:
+            self.repo.record_login_attempt(usuario_id=usuario_id, email=chave_ip, ip=client_ip, sucesso=False)
+            self.repo.record_audit_log(usuario_id=usuario_id, acao="login_licenca_falha", entidade="licencas_alunos",
+                                       dados_depois={"numero": mascarar_numero_licenca(normalizado), "motivo": motivo},
+                                       ip=client_ip)
+            return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                                 detail="Número de licença inválido ou inativo. Confira o número do seu cartão.")
+
+        normalizado = normalizar_numero_licenca(numero)
+        if not normalizado:
+            raise recusar("formato_invalido")
+        polos_repo = get_polos_escolas_repository()
+        licenca = polos_repo.get_licenca_por_numero(normalizado)
+        if not licenca or licenca.get("status") != "ativa":
+            raise recusar("licenca_inexistente_ou_inativa")
+        aluno = polos_repo.get_aluno_usuario(str(licenca["aluno_id"])) or {}
+        if aluno.get("aluno_status", "ativo") != "ativo" or aluno.get("modalidade") == "ead":
+            raise recusar("aluno_inativo_ou_ead", str(aluno.get("id")) if aluno.get("id") else None)
+        user = self.repo.get_user_by_id(str(aluno["id"])) if aluno.get("id") else None
+        if not user or user.get("status") != "ativo":
+            raise recusar("usuario_inativo")
+
+        usuario_id = str(user["id"])
+        self.repo.record_login_attempt(usuario_id=usuario_id, email=chave_ip, ip=client_ip, sucesso=True)
+        self.repo.update_user_last_login(usuario_id)
+        self.repo.record_audit_log(usuario_id=usuario_id, acao="login_licenca", entidade="licencas_alunos",
+                                   entidade_id=str(licenca["id"]),
+                                   dados_depois={"numero": mascarar_numero_licenca(normalizado)}, ip=client_ip)
+
+        permissoes = self.repo.get_usuario_permissoes(usuario_id)
+        user_response = self._build_user_response(user, permissoes)
+        access_token = create_access_token(
+            data={"sub": usuario_id, "email": user.get("email"), "perfil": user.get("perfil_nome"),
+                  "permissoes": permissoes, "via": "licenca", "licenca_id": str(licenca["id"])},
+            expires_delta=timedelta(minutes=self.MINUTOS_SESSAO_LICENCA),
+        )
+        disciplina_id = str(licenca["materia_id"]) if licenca.get("materia_id") else None
+        avaliacao_id = None
+        if disciplina_id:
+            try:
+                from app.modules.avaliacoes.repository import get_avaliacoes_repository
+
+                av = get_avaliacoes_repository().get_avaliacao_da_disciplina(disciplina_id)
+                avaliacao_id = av["id"] if av and av.get("ativo") else None
+            except Exception:  # noqa: BLE001 - o destino é só uma conveniência de navegação
+                avaliacao_id = None
+        return LoginResponse(
+            access_token=access_token,
+            refresh_token="",  # sem renovação: ao expirar, o aluno digita o número de novo
+            token_type="bearer",
+            expires_in=self.MINUTOS_SESSAO_LICENCA * 60,
+            usuario=user_response,
+            perfil=user_response.perfil,
+            permissoes=permissoes,
+            destino={"disciplina_id": disciplina_id, "avaliacao_id": avaliacao_id},
+            via="licenca",
+        )
+
     def refresh(
         self, refresh_token_str: str, client_ip: Optional[str] = None
     ) -> RefreshTokenResponse:

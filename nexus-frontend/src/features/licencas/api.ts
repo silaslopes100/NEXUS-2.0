@@ -54,6 +54,7 @@ export interface LicencaAlunoAtiva {
   aluno_id: string;
   materia_id: string | null;
   disciplina_nome: string | null;
+  numero_licenca?: string | null;
   ativada_em?: string | null;
 }
 
@@ -66,7 +67,51 @@ export interface DistribuicaoPayload { escola_id: string; quantidade: number; di
 export interface VendaPayload { aluno_id: string; quantidade: number; disciplina_id?: string | null; }
 export interface ReclassificarPayload { de_disciplina_id?: string | null; para_disciplina_id?: string | null; quantidade: number; }
 
+export interface AlunoTurmaLicenca {
+  aluno_id: string;
+  nome: string;
+  numero_matricula?: string | null;
+  escola_id?: string | null;
+  possui_licenca: boolean;
+  numero_licenca?: string | null;
+}
+
+export interface TurmaAlunosLicenca {
+  turma: { id: string; nome?: string | null };
+  saldo_disponivel: number;
+  alunos: AlunoTurmaLicenca[];
+}
+
+export interface DistribuicaoAlunosResultado {
+  distribuidas: number;
+  ja_possuiam: number;
+  licencas: { licenca_id: string; aluno_id: string; aluno_nome?: string | null; numero_licenca: string }[];
+}
+
+export interface TurmaOpcao { id: string; nome: string; escola_id?: string | null }
+
 export const licencasApi = {
+  async turmasDoCurso(cursoId: string, poloId: string) {
+    const data = (await apiClient.get('/turmas', { params: { curso_id: cursoId, polo_id: poloId } })).data;
+    const itens = Array.isArray(data) ? data : (data?.items || []);
+    return itens.map((t: TurmaOpcao) => ({ id: t.id, nome: t.nome, escola_id: t.escola_id })) as TurmaOpcao[];
+  },
+  async alunosTurma(poloId: string, turmaId: string, disciplinaId: string) {
+    return (await apiClient.get<TurmaAlunosLicenca>(`/polos/${poloId}/licencas/turmas/${turmaId}/alunos`,
+      { params: { disciplina_id: disciplinaId } })).data;
+  },
+  async distribuirAlunos(poloId: string, payload: { disciplina_id: string; turma_id: string; aluno_ids: string[] }) {
+    return (await apiClient.post<DistribuicaoAlunosResultado>(`/polos/${poloId}/licencas/distribuir-alunos`, payload)).data;
+  },
+  async liberar(poloId: string, payload: { itens: { disciplina_id: string; quantidade: number }[]; enviar_livros: boolean; observacao?: string }) {
+    return (await apiClient.post<{ message: string }>(`/polos/${poloId}/licencas/liberar`, payload)).data;
+  },
+  async cartoes(licencaIds: string[]) {
+    return (await apiClient.post<Blob>('/licencas-alunos/cartoes', licencaIds, { responseType: 'blob' })).data;
+  },
+  async novoNumero(licencaId: string) {
+    return (await apiClient.post<{ licenca_id: string; numero_licenca: string }>(`/licencas-alunos/${licencaId}/novo-numero`)).data;
+  },
   async getKpis(poloId: string) { return (await apiClient.get<LicencaKpis>(`/polos/${poloId}/dashboard/kpis`)).data; },
   async getKpisEscola(escolaId: string) { return (await apiClient.get<EscolaLicencaKpis>(`/escolas/${escolaId}/dashboard/kpis`)).data; },
   async listMovimentacoes(poloId: string, params?: { limit?: number; offset?: number }) { return (await apiClient.get<{ total: number; items: MovimentacaoLicenca[] }>(`/polos/${poloId}/licencas/movimentacoes`, { params })).data; },

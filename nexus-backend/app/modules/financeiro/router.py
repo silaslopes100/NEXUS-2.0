@@ -42,6 +42,7 @@ from app.modules.financeiro.schemas import (
     ProdutoResponse,
     ProdutoUpdate,
     SimularPagamentoRequest,
+    TipoFiltro,
     TipoPedido,
 )
 from app.modules.financeiro.cobranca_service import CobrancaService
@@ -81,7 +82,7 @@ def filtros_periodo(
     escola_id: Optional[str] = None,
     modalidade: Optional[str] = Query(None, pattern="^ead$"),
     status_filtro: Optional[str] = Query(None, alias="status"),
-    tipo: Optional[TipoPedido] = None,
+    tipo: Optional[TipoFiltro] = None,
     pedido_id: Optional[str] = None,
     gateway: Optional[str] = None,
     meio: Optional[str] = Query(None, pattern="^(BOLETO|PIX|CREDIT_CARD)$"),
@@ -355,6 +356,28 @@ async def checkout(
 ):
     """Cria o pedido e gera o boleto/PIX. Se o gateway falhar, o pedido fica aguardando pagamento."""
     return operacao.checkout(payload, current_user)
+
+
+@router.get("/catalogo/cursos", dependencies=[Depends(require_role(["admin", "financeiro", "polo", "escola"]))])
+async def catalogo_cursos(repo: FinanceiroRepositoryInterface = Depends(get_financeiro_repository)):
+    """Cursos com Disciplinas à venda (kit = 1 livro + 1 licença), com quantidade e faixa de preço."""
+    return repo.catalogo_cursos()
+
+
+@router.get("/catalogo/cursos/{curso_id}", dependencies=[Depends(require_role(["admin", "financeiro", "polo", "escola"]))])
+async def catalogo_curso(
+    curso_id: str,
+    polo_id: Optional[str] = None,
+    current_user: UserResponse = Depends(get_current_user),
+    repo: FinanceiroRepositoryInterface = Depends(get_financeiro_repository),
+):
+    """Disciplinas do curso com preço do kit e saldo atual de licenças do Polo (do usuário ou informado)."""
+    escopo = escopo_do_usuario(current_user)
+    polo = escopo.polo_id or (current_user.polo_id if escopo.escola_id else polo_id)
+    curso = repo.catalogo_curso(curso_id, polo)
+    if not curso:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
+    return curso
 
 
 @router.get("/regras", response_model=list[RegraPagamentoResponse], dependencies=[Depends(require_area("financeiro"))])

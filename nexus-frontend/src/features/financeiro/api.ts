@@ -3,6 +3,8 @@ import {
   Ambiente,
   CheckoutOpcoes,
   CheckoutResposta,
+  CursoCatalogo,
+  CursoCatalogoDetalhe,
   EnvioPayload,
   PedidoUpdatePayload,
   RegraPagamento,
@@ -88,6 +90,16 @@ export const financeiroApi = {
   },
   async listWebhookEventos(params?: { gateway?: string; status?: string; payment_id?: string; limit?: number; offset?: number }) {
     return (await apiClient.get<Paginado<WebhookEvento>>('/financeiro/webhooks/eventos', { params })).data;
+  },
+
+  // Catálogo por Curso (kit = 1 livro + 1 licença por Disciplina)
+  async catalogoCursos() {
+    return (await apiClient.get<CursoCatalogo[]>('/financeiro/catalogo/cursos')).data;
+  },
+  async catalogoCurso(cursoId: string, poloId?: string) {
+    return (await apiClient.get<CursoCatalogoDetalhe>(`/financeiro/catalogo/cursos/${cursoId}`, {
+      params: poloId ? { polo_id: poloId } : undefined,
+    })).data;
   },
 
   // Fase 3B: checkout e regras de pagamento

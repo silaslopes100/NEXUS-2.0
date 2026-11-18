@@ -5,6 +5,7 @@ import {
   BookOpen,
   CalendarDays,
   CheckCircle2,
+  ClipboardCheck,
   ClipboardList,
   Eye,
   Loader2,
@@ -24,6 +25,9 @@ import {
 } from '@/features/cursos/api';
 import { aulasApi, DisciplinaAulasResumo } from '@/features/aulas/api';
 import { formatarData } from '@/features/turmas/api';
+import { avaliacoesApi, AvaliacaoResumo } from '@/features/avaliacoes/api';
+import { AvaliacaoEditorModal } from '@/features/avaliacoes/components/AvaliacaoEditorModal';
+import { MenuAcoes } from '@/components/content/MenuAcoes';
 
 type DisciplinaForm = {
   curso_id: string;
@@ -34,7 +38,9 @@ type DisciplinaForm = {
   qtd_aulas_prevista: string;
   tipo: string;
   eh_extra_grade: boolean;
+  ativo: boolean;
   preco: string;
+  peso_livro_g: string;
 };
 
 const initialForm: DisciplinaForm = {
@@ -46,7 +52,9 @@ const initialForm: DisciplinaForm = {
   qtd_aulas_prevista: '10',
   tipo: 'presencial',
   eh_extra_grade: false,
+  ativo: true,
   preco: '',
+  peso_livro_g: '',
 };
 
 const formatBRL = (valor?: number | null) =>
@@ -74,6 +82,7 @@ export const DisciplinasPage: React.FC = () => {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [cursoFilter, setCursoFilter] = useState('');
+  const [situacaoFilter, setSituacaoFilter] = useState<'todas' | 'ativas' | 'inativas'>('todas');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<Disciplina | null>(null);
   const [form, setForm] = useState<DisciplinaForm>(initialForm);
@@ -88,6 +97,15 @@ export const DisciplinasPage: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
+  const [avaliacoesPorDisciplina, setAvaliacoesPorDisciplina] = useState<Map<string, AvaliacaoResumo>>(
+    new Map()
+  );
+  const [editandoAvaliacao, setEditandoAvaliacao] = useState<Disciplina | null>(null);
+  const carregarAvaliacoes = () =>
+    avaliacoesApi
+      .listar()
+      .then((itens) => setAvaliacoesPorDisciplina(new Map(itens.map((item) => [item.disciplina_id, item]))))
+      .catch(() => setAvaliacoesPorDisciplina(new Map()));
   const [aulasPorDisciplina, setAulasPorDisciplina] = useState<Map<string, DisciplinaAulasResumo>>(
     new Map()
   );
@@ -116,6 +134,7 @@ export const DisciplinasPage: React.FC = () => {
       .resumoDisciplinas()
       .then((itens) => setAulasPorDisciplina(new Map(itens.map((item) => [item.disciplina_id, item]))))
       .catch(() => setAulasPorDisciplina(new Map()));
+    void carregarAvaliacoes();
   }, []);
 
   useEffect(() => {
@@ -158,11 +177,14 @@ export const DisciplinasPage: React.FC = () => {
     const termo = search.trim().toLocaleLowerCase('pt-BR');
     return disciplinas.filter((disciplina) => {
       if (cursoFilter && disciplina.curso_id !== cursoFilter) return false;
+      const ativa = disciplina.ativo !== false;
+      if (situacaoFilter === 'ativas' && !ativa) return false;
+      if (situacaoFilter === 'inativas' && ativa) return false;
       if (!termo) return true;
       const cursoNome = cursoPorId.get(disciplina.curso_id || '') || '';
       return `${disciplina.nome} ${cursoNome}`.toLocaleLowerCase('pt-BR').includes(termo);
     });
-  }, [cursoFilter, cursoPorId, disciplinas, search]);
+  }, [cursoFilter, situacaoFilter, cursoPorId, disciplinas, search]);
 
   const abrirCadastro = () => {
     setEditing(null);
@@ -184,7 +206,9 @@ export const DisciplinasPage: React.FC = () => {
         disciplina.qtd_aulas_prevista == null ? '' : String(disciplina.qtd_aulas_prevista),
       tipo: disciplina.tipo || 'presencial',
       eh_extra_grade: disciplina.eh_extra_grade ?? false,
+      ativo: disciplina.ativo !== false,
       preco: disciplina.preco == null ? '' : Number(disciplina.preco).toFixed(2).replace('.', ','),
+      peso_livro_g: disciplina.peso_livro_g == null ? '' : String(disciplina.peso_livro_g),
     });
     setFormError('');
     setIsFormOpen(true);
@@ -203,6 +227,7 @@ export const DisciplinasPage: React.FC = () => {
 
     const payload: DisciplinaInput = {
       preco,
+      peso_livro_g: optionalNumber(form.peso_livro_g),
       curso_id: form.curso_id || null,
       semestre: optionalNumber(form.semestre),
       nome: form.nome.trim(),
@@ -211,6 +236,7 @@ export const DisciplinasPage: React.FC = () => {
       qtd_aulas_prevista: optionalNumber(form.qtd_aulas_prevista),
       tipo: form.tipo.trim(),
       eh_extra_grade: form.eh_extra_grade,
+      ativo: form.ativo,
     };
 
     try {
@@ -305,7 +331,7 @@ export const DisciplinasPage: React.FC = () => {
             <h2 className="font-bold text-white">Lista de disciplinas</h2>
             <p className="text-xs text-slate-500">{disciplinasFiltradas.length} disciplinas</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -328,6 +354,16 @@ export const DisciplinasPage: React.FC = () => {
                   {curso.nome}
                 </option>
               ))}
+            </select>
+            <select
+              aria-label="Filtrar por situação"
+              className={inputClass}
+              value={situacaoFilter}
+              onChange={(event) => setSituacaoFilter(event.target.value as 'todas' | 'ativas' | 'inativas')}
+            >
+              <option value="todas">Ativas e inativas</option>
+              <option value="ativas">Só ativas</option>
+              <option value="inativas">Só inativas</option>
             </select>
           </div>
         </div>
@@ -367,6 +403,11 @@ export const DisciplinasPage: React.FC = () => {
                       <p className="font-semibold text-white">{disciplina.nome}</p>
                       {disciplina.eh_extra_grade && (
                         <span className="text-xs text-amber-300">Extra-grade</span>
+                      )}
+                      {disciplina.ativo === false && (
+                        <span className="ml-1 rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-400">
+                          Inativa
+                        </span>
                       )}
                     </td>
                     <td className="p-4">
@@ -424,27 +465,51 @@ export const DisciplinasPage: React.FC = () => {
                         >
                           <Eye size={16} />
                         </button>
-                        <button
-                          type="button"
-                          aria-label={`Editar ${disciplina.nome}`}
-                          onClick={() => abrirEdicao(disciplina)}
-                          className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Excluir ${disciplina.nome}`}
-                          disabled={deletingId === disciplina.id}
-                          onClick={() => void excluirDisciplina(disciplina)}
-                          className="rounded-lg border border-red-500/30 p-2 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
-                        >
-                          {deletingId === disciplina.id ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : (
-                            <Trash2 size={16} />
-                          )}
-                        </button>
+                        {(() => {
+                          const av = avaliacoesPorDisciplina.get(disciplina.id);
+                          return (
+                            <button
+                              type="button"
+                              aria-label={`Avaliação de ${disciplina.nome}`}
+                              title={
+                                av
+                                  ? `${av.ativo ? 'Avaliação ativa' : 'Avaliação em rascunho'} · ${av.total_questoes} questão(ões)`
+                                  : 'Cadastrar avaliação'
+                              }
+                              onClick={() => setEditandoAvaliacao(disciplina)}
+                              className={`relative rounded-lg border p-2 ${
+                                av?.ativo
+                                  ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10'
+                                  : 'border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white'
+                              }`}
+                            >
+                              <ClipboardCheck size={16} />
+                              <span
+                                className={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-slate-900 ${
+                                  av?.ativo ? 'bg-emerald-400' : av ? 'bg-amber-400' : 'bg-slate-600'
+                                }`}
+                              />
+                            </button>
+                          );
+                        })()}
+                        <MenuAcoes
+                          rotulo={`Mais ações de ${disciplina.nome}`}
+                          acoes={[
+                            { label: 'Editar', icon: <Pencil size={14} />, onClick: () => abrirEdicao(disciplina) },
+                            {
+                              label: deletingId === disciplina.id ? 'Excluindo…' : 'Excluir',
+                              icon:
+                                deletingId === disciplina.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                ),
+                              perigo: true,
+                              disabled: deletingId === disciplina.id,
+                              onClick: () => void excluirDisciplina(disciplina),
+                            },
+                          ]}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -463,6 +528,22 @@ export const DisciplinasPage: React.FC = () => {
           </div>
         ) : null}
       </section>
+
+      {editandoAvaliacao && (
+        <AvaliacaoEditorModal
+          disciplinaId={editandoAvaliacao.id}
+          disciplinaNome={editandoAvaliacao.nome}
+          onClose={() => setEditandoAvaliacao(null)}
+          onSalvo={(ativo) => {
+            setFeedback({
+              type: 'success',
+              message: ativo ? 'Avaliação salva e ativada.' : 'Avaliação salva como rascunho.',
+            });
+            setEditandoAvaliacao(null);
+            void carregarAvaliacoes();
+          }}
+        />
+      )}
 
       {visualizando && (
         <div
@@ -683,7 +764,7 @@ export const DisciplinasPage: React.FC = () => {
                 />
               </label>
               <label className="space-y-1.5 text-sm text-slate-300">
-                <span>Preço (R$)</span>
+                <span>Preço da disciplina (R$)</span>
                 <input
                   inputMode="decimal"
                   placeholder="Ex.: 49,90"
@@ -691,7 +772,22 @@ export const DisciplinasPage: React.FC = () => {
                   value={form.preco}
                   onChange={(event) => setForm({ ...form, preco: event.target.value })}
                 />
-                <span className="block text-xs text-slate-500">Informativo. Deixe em branco se não houver.</span>
+                <span className="block text-xs text-slate-500">
+                  Valor de 1 livro + 1 licença. Com preço, a disciplina fica à venda em "Comprar Disciplinas"; em branco, não é vendida.
+                </span>
+              </label>
+              <label className="space-y-1.5 text-sm text-slate-300">
+                <span>Peso do livro (g)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={10}
+                  placeholder="Ex.: 450"
+                  className={inputClass}
+                  value={form.peso_livro_g}
+                  onChange={(event) => setForm({ ...form, peso_livro_g: event.target.value })}
+                />
+                <span className="block text-xs text-slate-500">Usado na etiqueta de envio.</span>
               </label>
               <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-300">
                 <input
@@ -701,6 +797,20 @@ export const DisciplinasPage: React.FC = () => {
                   className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-blue-600"
                 />
                 Disciplina extra-grade
+              </label>
+              <label className="flex items-start gap-2 text-sm text-slate-300 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.ativo}
+                  onChange={(event) => setForm({ ...form, ativo: event.target.checked })}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-950 text-blue-600"
+                />
+                <span>
+                  Disciplina ativa
+                  <span className="block text-xs text-slate-500">
+                    Inativa sai da compra por Curso e não entra no preço do curso. Pedidos e notas já feitos não mudam.
+                  </span>
+                </span>
               </label>
             </div>
 

@@ -9,6 +9,7 @@ from datetime import date, datetime, timezone
 from threading import RLock
 from typing import Any, ContextManager, Dict, Iterator, List, Optional, Protocol, Tuple
 
+from app.core.codigos import gerar_numero_licenca
 from app.core.database import get_db_cursor
 from app.modules.auth.roles import nomes_equivalentes
 
@@ -151,6 +152,10 @@ class PolosEscolasRepositoryInterface(Protocol):
 
     # ---------- Licenças de alunos ----------
     def vincular_licenca_aluno(self, data: Dict[str, Any]) -> str: ...
+    def get_licenca_por_numero(self, numero: str) -> Optional[Dict[str, Any]]: ...
+    def regerar_numero_licenca(self, licenca_id: str) -> str: ...
+    def get_turma(self, turma_id: str) -> Optional[Dict[str, Any]]: ...
+    def list_alunos_da_turma(self, turma_id: str) -> List[Dict[str, Any]]: ...
     def get_licenca_aluno_ativa(
         self, aluno_id: str, materia_id: Optional[str] = TODAS_DISCIPLINAS
     ) -> Optional[Dict[str, Any]]: ...
@@ -981,13 +986,52 @@ class PostgresPolosEscolasRepository:
             cur.execute(
                 """
                 INSERT INTO licencas_alunos (id, aluno_id, escola_id, polo_id, materia_id, movimentacao_id,
-                                             status, ativada_em)
-                VALUES (%s, %s, %s, %s, %s, %s, 'ativa', now())
+                                             numero_licenca, status, ativada_em)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'ativa', now())
                 """,
                 (new_id, data["aluno_id"], data.get("escola_id"), data.get("polo_id"),
-                 data.get("materia_id"), data.get("movimentacao_id")),
+                 data.get("materia_id"), data.get("movimentacao_id"),
+                 data.get("numero_licenca") or gerar_numero_licenca()),
             )
         return new_id
+
+    def get_turma(self, turma_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            uuid.UUID(str(turma_id))
+        except ValueError:
+            return None
+        with get_db_cursor() as cur:
+            cur.execute("SELECT id, nome, polo_id, escola_id, curso_id FROM turmas WHERE id = %s", (str(turma_id),))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def list_alunos_da_turma(self, turma_id: str) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.id AS aluno_id, a.escola_id, a.polo_id, a.modalidade, a.numero_matricula,
+                       concat_ws(' ', u.nome, u.sobrenome) AS nome
+                  FROM turma_alunos ta
+                  JOIN alunos a ON a.id = ta.aluno_id
+                  LEFT JOIN usuarios u ON u.id = a.usuario_id
+                 WHERE ta.turma_id = %s AND COALESCE(ta.status, 'ativo') = 'ativo' AND a.status = 'ativo'
+                 ORDER BY u.nome, u.sobrenome
+                """,
+                (str(turma_id),),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def get_licenca_por_numero(self, numero: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM licencas_alunos WHERE numero_licenca = %s", (numero,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def regerar_numero_licenca(self, licenca_id: str) -> str:
+        numero = gerar_numero_licenca()
+        with get_db_cursor() as cur:
+            cur.execute("UPDATE licencas_alunos SET numero_licenca = %s WHERE id = %s", (numero, str(licenca_id)))
+        return numero
 
     def get_licenca_aluno_ativa(
         self, aluno_id: str, materia_id: Optional[str] = TODAS_DISCIPLINAS
@@ -2214,8 +2258,36 @@ class InMemoryPolosEscolasRepository:
             "status": "ativa",
             "ativada_em": _now(),
             **data,
+            "numero_licenca": data.get("numero_licenca") or gerar_numero_licenca(),
         }
         return new_id
+
+    def get_turma(self, turma_id: str) -> Optional[Dict[str, Any]]:
+        t = getattr(self, "turmas", {}).get(str(turma_id))
+        return dict(t) if t else None
+
+    def list_alunos_da_turma(self, turma_id: str) -> List[Dict[str, Any]]:
+        saida = []
+        for ta in getattr(self, "turma_alunos", []):
+            if str(ta["turma_id"]) != str(turma_id):
+                continue
+            a = self.alunos.get(str(ta["aluno_id"]))
+            if a and a.get("status", "ativo") == "ativo":
+                saida.append({"aluno_id": a["id"], "escola_id": a.get("escola_id"), "polo_id": a.get("polo_id"),
+                              "modalidade": a.get("modalidade"), "numero_matricula": a.get("numero_matricula"),
+                              "nome": a.get("nome")})
+        return saida
+
+    def get_licenca_por_numero(self, numero: str) -> Optional[Dict[str, Any]]:
+        for lic in self.licencas_alunos.values():
+            if lic.get("numero_licenca") == numero:
+                return lic.copy()
+        return None
+
+    def regerar_numero_licenca(self, licenca_id: str) -> str:
+        numero = gerar_numero_licenca()
+        self.licencas_alunos[str(licenca_id)]["numero_licenca"] = numero
+        return numero
 
     def get_licenca_aluno_ativa(
         self, aluno_id: str, materia_id: Optional[str] = TODAS_DISCIPLINAS

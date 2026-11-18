@@ -5,7 +5,7 @@ Fase 3A: o estoque é por disciplina. `disciplina_id=None` representa o saldo
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 
@@ -208,6 +208,91 @@ def devolver_de_aluno_para_escola(
             "observacao": f"Devolução da licença do aluno à escola (cancelamento de curso){_rotulo(disciplina_id)}",
         }
     )
+
+
+def distribuir_para_alunos(
+    repo: PolosEscolasRepositoryInterface,
+    polo_id: str,
+    disciplina_id: str,
+    turma_id: str,
+    aluno_ids: List[str],
+    actor_id: Optional[str],
+) -> Dict[str, Any]:
+    """Polo → Alunos de uma turma: 1 licença da disciplina por aluno, com número de acesso.
+
+    Quem já tem licença ativa da disciplina é pulado (não consome saldo).
+    """
+    turma = repo.get_turma(turma_id)
+    if not turma or str(turma.get("polo_id")) != str(polo_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turma não encontrada neste Polo")
+    da_turma = {str(a["aluno_id"]): a for a in repo.list_alunos_da_turma(turma_id)}
+    fora = [a for a in aluno_ids if str(a) not in da_turma]
+    if fora:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"{len(fora)} aluno(s) selecionado(s) não pertencem a esta turma")
+    alvos = [str(a) for a in dict.fromkeys(aluno_ids) if not repo.get_licenca_aluno_ativa(a, materia_id=disciplina_id)]
+    ja_possuiam = len(dict.fromkeys(aluno_ids)) - len(alvos)
+    if not alvos:
+        return {"distribuidas": 0, "ja_possuiam": ja_possuiam, "licencas": []}
+    if len(alvos) > _saldo(repo, polo_id=polo_id, disciplina_id=disciplina_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Saldo insuficiente: {len(alvos)} licença(s) necessária(s) nesta disciplina",
+        )
+    repo.ajustar_estoque(polo_id=polo_id, escola_id=None, delta_disponivel=-len(alvos), materia_id=disciplina_id)
+    licencas = []
+    for aluno_id in alvos:
+        aluno = da_turma[aluno_id]
+        mov_id = repo.registrar_movimentacao({
+            "tipo": "distribuicao_polo_aluno",
+            "polo_id": polo_id,
+            "escola_id": aluno.get("escola_id"),
+            "aluno_id": aluno_id,
+            "materia_id": disciplina_id,
+            "quantidade": 1,
+            "status": "vendida_ativa",
+            "actor_id": actor_id,
+            "observacao": f"Licença atribuída pelo Polo (turma {turma.get('nome') or turma_id})",
+        })
+        licenca_id = repo.vincular_licenca_aluno({
+            "aluno_id": aluno_id, "escola_id": aluno.get("escola_id"), "polo_id": polo_id,
+            "materia_id": disciplina_id, "movimentacao_id": mov_id,
+        })
+        licencas.append({
+            "licenca_id": licenca_id,
+            "aluno_id": aluno_id,
+            "aluno_nome": aluno.get("nome"),
+            "numero_licenca": repo.get_licenca_aluno(licenca_id)["numero_licenca"],
+        })
+    return {"distribuidas": len(licencas), "ja_possuiam": ja_possuiam, "licencas": licencas}
+
+
+def liberar_pelo_admin(
+    repo: PolosEscolasRepositoryInterface,
+    polo_id: str,
+    itens: List[Dict[str, Any]],
+    actor_id: Optional[str],
+    actor_email: str,
+    observacao: Optional[str] = None,
+) -> List[str]:
+    """Admin → Polo sem cobrança: credita o estoque e registra "Enviada pelo Admin: <email>"."""
+    texto = f"Enviada pelo Admin: {actor_email}" + (f" - {observacao.strip()}" if observacao and observacao.strip() else "")
+    movimentos = []
+    for item in itens:
+        disciplina_id = _disciplina(item.get("disciplina_id"))
+        quantidade = int(item["quantidade"])
+        repo.ajustar_estoque(polo_id=polo_id, escola_id=None, delta_disponivel=quantidade, materia_id=disciplina_id)
+        movimentos.append(repo.registrar_movimentacao({
+            "tipo": "liberacao_admin",
+            "polo_id": polo_id,
+            "materia_id": disciplina_id,
+            "quantidade": quantidade,
+            "valor_unitario": 0,
+            "status": "disponivel_polo",
+            "actor_id": actor_id,
+            "observacao": texto,
+        }))
+    return movimentos
 
 
 def reclassificar_saldo_polo(

@@ -7,6 +7,12 @@ import { EnderecoCompleto } from '@/types/polos';
 /** Chave em `configuracoes` lida pelo backend ao gerar a etiqueta 10×15. */
 export const CHAVE_REMETENTE = 'remetente_etiqueta';
 
+/** Mesmo padrão do backend (relatorios.REMETENTE_PADRAO), usado quando nada foi salvo. */
+const REMETENTE_PADRAO = {
+  nome: 'ETADEMP', logradouro: 'Rua Crispim do Amaral', numero: '33', bairro: 'Perus',
+  cidade: 'São Paulo', uf: 'SP', cep: '05207-180',
+};
+
 interface Remetente {
   nome?: string;
   documento?: string;
@@ -41,7 +47,8 @@ export const RemetenteEtiquetaCard: React.FC<{ valorAtual?: unknown; onSalvo: (m
   const { changeAddress, lookup } = useCepAddress(setEndereco, 'remetente');
 
   useEffect(() => {
-    const atual = (valorAtual && typeof valorAtual === 'object' ? valorAtual : {}) as Remetente;
+    const configurado = valorAtual && typeof valorAtual === 'object' && (valorAtual as Remetente).nome;
+    const atual = (configurado ? valorAtual : REMETENTE_PADRAO) as Remetente;
     setDados({ nome: atual.nome, documento: atual.documento, telefone: atual.telefone });
     setEndereco({
       cep: atual.cep, logradouro: atual.logradouro, numero: atual.numero, complemento: atual.complemento,
@@ -81,7 +88,10 @@ export const RemetenteEtiquetaCard: React.FC<{ valorAtual?: unknown; onSalvo: (m
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-bold text-white"><Truck className="h-4 w-4 text-indigo-300" /> Remetente das etiquetas</h2>
-          <p className="text-xs text-slate-500">Impresso na etiqueta 10×15 dos pedidos de livros. Sem estes dados, a etiqueta não é gerada.</p>
+          <p className="text-xs text-slate-500">
+            Impresso na etiqueta 10×15 dos pedidos de livros. Padrão: ETADEMP, Rua Crispim do Amaral, 33 – Perus – São Paulo/SP.
+            O destinatário é sempre o endereço cadastrado no Polo.
+          </p>
         </div>
         <button disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
           {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar

@@ -19,6 +19,9 @@ from app.modules.cupons import router as cupons_router
 from app.modules.cursos_disciplinas import router as cursos_disciplinas_router
 from app.modules.ead import router as ead_router
 from app.modules.financeiro import router as financeiro_router
+from app.modules.avaliacoes import router as avaliacoes_router
+from app.modules.notificacoes import router as notificacoes_router
+from app.modules.solicitacoes import router as solicitacoes_router
 from app.modules.notas_historico import router as notas_historico_router
 from app.modules.polos_escolas import router as polos_escolas_router
 from app.modules.presencas import router as presencas_router
@@ -76,6 +79,9 @@ app.include_router(notas_historico_router)
 app.include_router(certificados_router)
 app.include_router(cupons_router)
 app.include_router(financeiro_router)
+app.include_router(avaliacoes_router)
+app.include_router(notificacoes_router)
+app.include_router(solicitacoes_router)
 app.include_router(transferencias_router)
 app.include_router(comunicacao_router)
 

@@ -147,8 +147,11 @@ def where_periodo(
         conds.append(f"{coluna_status} = %s")
         params.append(filtros.status)
     if filtros.tipo and coluna_tipo:
-        conds.append(f"{coluna_tipo} = %s")
-        params.append(filtros.tipo)
+        if filtros.tipo == "com_envio":  # livro + kit (logística)
+            conds.append(f"{coluna_tipo} IN ('livro', 'kit')")
+        else:
+            conds.append(f"{coluna_tipo} = %s")
+            params.append(filtros.tipo)
     if filtros.pedido_id and coluna_pedido:
         conds.append(f"{coluna_pedido} = %s")
         params.append(filtros.pedido_id)
@@ -212,6 +215,9 @@ class FinanceiroRepositoryInterface(Protocol):
     def registrar_envio(self, pedido_id: str, dados: Dict[str, Any], usuario_id: Optional[str]) -> str: ...
     def update_pedido(self, pedido_id: str, campos: Dict[str, Any], itens: Optional[List[Dict[str, Any]]],
                       usuario_id: Optional[str], observacao: str) -> None: ...
+    # catálogo por Curso (kits)
+    def catalogo_cursos(self) -> List[Dict[str, Any]]: ...
+    def catalogo_curso(self, curso_id: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]: ...
     # exportação e etiqueta (Fase 4)
     def ultimos_envios(self, pedido_ids: Sequence[str]) -> Dict[str, Dict[str, Any]]: ...
     def get_configuracao(self, chave: str) -> Any: ...
@@ -603,6 +609,54 @@ class PostgresFinanceiroRepository:
                 (usuario_id, observacao, str(pedido_id)),
             )
 
+    # ---------------- catálogo por Curso ----------------
+
+    def catalogo_cursos(self) -> List[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT c.id, c.nome, c.modalidade,
+                       COUNT(d.id) AS disciplinas,
+                       COUNT(p.id) AS disciplinas_a_venda,
+                       COALESCE(SUM(p.preco), 0) AS preco_curso,
+                       MIN(p.preco) AS preco_min, MAX(p.preco) AS preco_max
+                  FROM cursos c
+                  JOIN disciplinas d ON d.curso_id = c.id AND d.ativo
+                  LEFT JOIN produtos p ON p.disciplina_id = d.id AND p.tipo = 'kit' AND p.ativo
+                 WHERE COALESCE(c.status, 'ativo') = 'ativo'
+                 GROUP BY c.id, c.nome, c.modalidade
+                 ORDER BY c.nome
+                """
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
+    def catalogo_curso(self, curso_id: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        try:
+            uuid.UUID(str(curso_id))
+        except ValueError:
+            return None
+        with get_db_cursor() as cur:
+            cur.execute("SELECT id, nome, modalidade FROM cursos WHERE id = %s", (str(curso_id),))
+            curso = _limpar(cur.fetchone())
+            if not curso:
+                return None
+            cur.execute(
+                """
+                SELECT d.id AS disciplina_id, d.nome, d.semestre, d.ordem, p.id AS produto_id, p.preco,
+                       (p.id IS NOT NULL) AS a_venda,
+                       COALESCE(le.quantidade_disponivel, 0) AS saldo_polo
+                  FROM disciplinas d
+                  LEFT JOIN produtos p ON p.disciplina_id = d.id AND p.tipo = 'kit' AND p.ativo
+                  LEFT JOIN licencas_estoque le
+                         ON le.materia_id = d.id AND le.escola_id IS NULL AND le.polo_id::text = %s
+                 WHERE d.curso_id = %s AND d.ativo
+                 ORDER BY d.semestre NULLS LAST, d.ordem, d.nome
+                """,
+                (str(polo_id or ""), str(curso_id)),
+            )
+            curso["disciplinas"] = [_limpar(r) for r in cur.fetchall()]
+            return curso
+
     # ---------------- exportação e etiqueta ----------------
 
     def ultimos_envios(self, pedido_ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
@@ -649,7 +703,8 @@ class PostgresFinanceiroRepository:
                        COALESCE(SUM(p.valor_total) FILTER (WHERE {pago}), 0) AS receita_paga,
                        COALESCE(SUM(p.valor_total) FILTER (WHERE p.status = 'aguardando_pagamento'), 0) AS a_receber,
                        COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'licenca'), 0) AS receita_licencas,
-                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'livro'), 0) AS receita_livros
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'livro'), 0) AS receita_livros,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'kit'), 0) AS receita_kits
                   FROM pedidos p {where}
                 """,
                 tuple(params),
@@ -694,8 +749,9 @@ class PostgresFinanceiroRepository:
                 tuple(params),
             )
             top = [_limpar(r) for r in cur.fetchall()]
-        return {**kpis, "vencido": vencido, "licencas_vendidas": quantidades.get("licenca", 0),
-                "livros_vendidos": quantidades.get("livro", 0), "por_status": por_status, "top_polos": top}
+        kits = quantidades.get("kit", 0)  # cada kit = 1 livro + 1 licença
+        return {**kpis, "vencido": vencido, "licencas_vendidas": quantidades.get("licenca", 0) + kits,
+                "livros_vendidos": quantidades.get("livro", 0) + kits, "por_status": por_status, "top_polos": top}
 
     def serie_vendas(self, filtros: FiltrosPeriodo, escopo: Escopo) -> List[Dict[str, Any]]:
         where, params = self._where_vendas(filtros, escopo)
@@ -916,7 +972,10 @@ def _casa_periodo(
         return False
     if filtros.status and campo_status and registro.get(campo_status) != filtros.status:
         return False
-    if filtros.tipo and tipo != filtros.tipo:
+    if filtros.tipo == "com_envio":
+        if tipo not in ("livro", "kit"):
+            return False
+    elif filtros.tipo and tipo != filtros.tipo:
         return False
     if filtros.pedido_id and registro.get("pedido_id") != filtros.pedido_id:
         return False
@@ -1169,6 +1228,48 @@ class InMemoryFinanceiroRepository:
             "observacao": observacao, "criado_em": _agora(),
         })
 
+    # catálogo por Curso (testes: self.cursos {id: {...}}, self.disciplinas {id: {...curso_id}})
+    def _kits_ativos(self) -> Dict[str, Dict[str, Any]]:
+        return {str(p["disciplina_id"]): p for p in self.produtos.values()
+                if p.get("tipo") == "kit" and p.get("ativo") and p.get("disciplina_id")}
+
+    def _disciplinas_ativas(self, curso_id: str) -> Dict[str, Dict[str, Any]]:
+        return {d: disc for d, disc in getattr(self, "disciplinas", {}).items()
+                if disc.get("curso_id") == curso_id and disc.get("ativo", True)}
+
+    def catalogo_cursos(self) -> List[Dict[str, Any]]:
+        kits = self._kits_ativos()
+        saida = []
+        for cid, curso in getattr(self, "cursos", {}).items():
+            if (curso.get("status") or "ativo") != "ativo":
+                continue
+            ativas = self._disciplinas_ativas(cid)
+            if not ativas:
+                continue
+            precos = [float(kits[d]["preco"]) for d in ativas if d in kits]
+            saida.append({"id": cid, "nome": curso["nome"], "modalidade": curso.get("modalidade"),
+                          "disciplinas": len(ativas), "disciplinas_a_venda": len(precos),
+                          "preco_curso": round(sum(precos), 2),
+                          "preco_min": min(precos) if precos else None, "preco_max": max(precos) if precos else None})
+        return sorted(saida, key=lambda c: c["nome"])
+
+    def catalogo_curso(self, curso_id: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        curso = getattr(self, "cursos", {}).get(str(curso_id))
+        if not curso:
+            return None
+        kits = self._kits_ativos()
+        saldos = getattr(self, "saldos_polo", {})
+        disciplinas = [
+            {"disciplina_id": d, "nome": disc["nome"], "semestre": disc.get("semestre"), "ordem": disc.get("ordem", 0),
+             "produto_id": kits[d]["id"] if d in kits else None,
+             "preco": float(kits[d]["preco"]) if d in kits else None, "a_venda": d in kits,
+             "saldo_polo": int(saldos.get((str(polo_id), d), 0))}
+            for d, disc in self._disciplinas_ativas(str(curso_id)).items()
+        ]
+        disciplinas.sort(key=lambda x: (x["semestre"] or 99, x["ordem"], x["nome"]))
+        return {"id": str(curso_id), "nome": curso["nome"], "modalidade": curso.get("modalidade"),
+                "disciplinas": disciplinas}
+
     # exportação e etiqueta
     def ultimos_envios(self, pedido_ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
         ids = {str(i) for i in pedido_ids}
@@ -1228,10 +1329,11 @@ class InMemoryFinanceiroRepository:
             "a_receber": sum(float(p["valor_total"] or 0) for p in pedidos if p["id"] in aguardando),
             "receita_licencas": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "licenca"),
             "receita_livros": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "livro"),
+            "receita_kits": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "kit"),
             "vencido": sum(float(pg["valor"] or 0) for pg in self.pagamentos.values()
                            if pg.get("status") == "vencido" and pg.get("pedido_id") in aguardando),
-            "licencas_vendidas": quantidades.get("licenca", 0),
-            "livros_vendidos": quantidades.get("livro", 0),
+            "licencas_vendidas": quantidades.get("licenca", 0) + quantidades.get("kit", 0),
+            "livros_vendidos": quantidades.get("livro", 0) + quantidades.get("kit", 0),
             "por_status": sorted(por_status.values(), key=lambda s: s["status"]),
             "top_polos": sorted(polos.values(), key=lambda x: x["receita"], reverse=True)[:10],
         }

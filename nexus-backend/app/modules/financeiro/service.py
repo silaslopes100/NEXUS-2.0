@@ -78,7 +78,7 @@ class FinanceiroService:
     def create_produto(self, payload: ProdutoCreate) -> ProdutoResponse:
         dados = payload.model_dump()
         dados["sku"] = dados["sku"].strip().upper()
-        if dados["tipo"] == "licenca" and not dados.get("disciplina_id"):
+        if regras.credita_licenca(dados["tipo"]) and not dados.get("disciplina_id"):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=self._MSG_LICENCA_SEM_DISCIPLINA)
         return ProdutoResponse(**self.repo.create_produto(dados))
 
@@ -86,7 +86,7 @@ class FinanceiroService:
         campos = payload.model_dump(exclude_unset=True)
         if "disciplina_id" in campos and not campos["disciplina_id"]:
             atual = self.repo.get_produtos_por_ids([produto_id]).get(str(produto_id))
-            if atual and atual.get("tipo") == "licenca":
+            if atual and regras.credita_licenca(atual.get("tipo")):
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                                     detail=self._MSG_LICENCA_SEM_DISCIPLINA)
         atualizado = self.repo.update_produto(produto_id, campos)
@@ -122,6 +122,11 @@ class FinanceiroService:
         itens: List[Dict[str, Any]] = []
         for produto_id, qtd in quantidades.items():
             produto = produtos.get(produto_id)
+            if produto and not produto.get("ativo") and produto.get("tipo") == "kit":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"'{produto['nome']}' não está à venda: a disciplina está inativa ou sem preço",
+                )
             if not produto or not produto.get("ativo"):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -150,7 +155,7 @@ class FinanceiroService:
         else:
             base = self.repo.get_endereco_polo(polo_id) or {}
         endereco = {f"entrega_{c}": base.get(c) for c in _CAMPOS_ENDERECO}
-        if payload.tipo == "livro":
+        if regras.tem_envio(payload.tipo):  # livro ou kit: precisa de endereço de entrega
             faltando = [c for c in _ENDERECO_OBRIGATORIO_LIVRO if not endereco.get(f"entrega_{c}")]
             if faltando:
                 raise HTTPException(

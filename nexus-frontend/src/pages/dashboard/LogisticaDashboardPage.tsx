@@ -16,7 +16,7 @@ export const LogisticaDashboardPage: React.FC = () => {
     setLoading(true);
     const hoje = new Date();
     const total = (status: string, extra: Record<string, string> = {}) =>
-      financeiroApi.listPedidos({ tipo: 'livro', status, limit: 1, ...extra }).then((r) => r.total);
+      financeiroApi.listPedidos({ tipo: 'com_envio', status, limit: 1, ...extra }).then((r) => r.total);
     try {
       // Pedido pelo mês de criação: "entregues no mês" aproxima os pedidos do mês já entregues.
       const [pendentes, enviados, entreguesMes] = await Promise.all([
