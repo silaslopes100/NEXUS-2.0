@@ -29,7 +29,9 @@ export interface PoloItem {
 
 export interface EscolaItem {
   id: string;
-  polo_id: string;
+  /** null em escolas migradas do legado sem polo vinculado */
+  polo_id: string | null;
+  polo_nome?: string | null;
   nome: string;
   secretario_id?: string;
   secretario_nome?: string;

@@ -207,6 +207,7 @@ async def list_escolas_gerenciamento(
     q: Optional[str] = Query(None, max_length=255),
     status_filter: Optional[str] = Query(None, alias="status", pattern="^(ativo|inativo)$"),
     polo_id: Optional[str] = None,
+    sem_polo: bool = Query(False, description="Somente escolas sem polo vinculado"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: UserResponse = Depends(get_current_user),
@@ -217,12 +218,14 @@ async def list_escolas_gerenciamento(
         if polo_id and str(polo_id) != polo_escopo:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Acesso negado a este Polo")
         polo_id = polo_escopo
+        sem_polo = False  # coordenador so ve as escolas do proprio polo
     elif polo_id and perfil_do_usuario(current_user) not in _PERFIS_MODULO_COMERCIAL:
         check_polo_scope(current_user, polo_id)
     return service.list_escolas(
         polo_id=polo_id,
         q=q,
         status_filter=status_filter,
+        sem_polo=sem_polo,
         limit=limit,
         offset=offset,
     )

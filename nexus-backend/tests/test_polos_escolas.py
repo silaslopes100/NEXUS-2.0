@@ -1441,3 +1441,29 @@ async def test_polo_e_escola_expoe_complemento_e_dados_coordenador(client: Async
     assert escola["secretario_nome"] == "Diretora Ana"
     assert escola["secretario_cpf"] == "22233344455"
     assert escola["secretario_email"] == "secretaria@escola.com"
+
+
+@pytest.mark.asyncio
+async def test_listagem_escolas_traz_polo_nome_e_filtra_sem_polo(client: AsyncClient, repos):
+    _, polos_repo = repos
+    polo_a = polos_repo.create_polo({"nome": "Polo Alfa"})
+    com_polo = polos_repo.create_escola({"polo_id": polo_a, "nome": "Escola Com Polo", "status": "ativo"})
+    # escola migrada do legado sem polo
+    sem_polo = polos_repo.create_escola({"polo_id": None, "nome": "Escola Orfa", "status": "ativo"})
+
+    todas = await client.get("/escolas", headers=_bearer("admin-1"))
+    assert todas.status_code == 200, todas.text
+    por_id = {i["id"]: i for i in todas.json()["items"]}
+    assert por_id[com_polo]["polo_nome"] == "Polo Alfa"
+    assert por_id[com_polo]["polo_id"] == polo_a
+    # sem polo: null (antes saia a string "None")
+    assert por_id[sem_polo]["polo_id"] is None and por_id[sem_polo]["polo_nome"] is None
+
+    filtro = await client.get("/escolas", params={"polo_id": polo_a}, headers=_bearer("admin-1"))
+    assert {i["id"] for i in filtro.json()["items"]} == {com_polo}
+
+    orfas = await client.get("/escolas", params={"sem_polo": "true"}, headers=_bearer("admin-1"))
+    assert {i["id"] for i in orfas.json()["items"]} == {sem_polo}
+
+    detalhe = await client.get(f"/escolas/{com_polo}", headers=_bearer("admin-1"))
+    assert detalhe.json()["polo_nome"] == "Polo Alfa"

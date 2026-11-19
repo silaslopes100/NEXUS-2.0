@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import psycopg2
 from psycopg2.extras import execute_values
@@ -69,6 +69,8 @@ class PostgresTarget:
         columns: Sequence[str],
         rows: Sequence[Sequence],
         conflict_columns: Sequence[str] = ("legacy_table", "legacy_id"),
+        insert_only: Sequence[str] = (),
+        update_expressions: Mapping[str, str] | None = None,
     ) -> list[tuple[str, bool]]:
         """Insere/atualiza em lote.
 
@@ -78,12 +80,20 @@ class PostgresTarget:
         legadas). Retorna, na MESMA ordem das linhas de entrada, (id, inseriu)
         para o registry registrar os novos ids antes dos mappers filhos
         resolverem as FKs.
+
+        `insert_only`: colunas gravadas so no INSERT (nunca sobrescritas no
+        conflito), ex.: dados que passam a ser mantidos pelo NEXUS.
+        `update_expressions`: expressao SQL custom do UPDATE por coluna;
+        `{table}` e substituido pelo nome da tabela (valor atual da linha).
         """
         if not rows:
             return []
+        exprs = update_expressions or {}
         non_tracking = [c for c in columns if c not in TRACKING_COLS]
         updates = ", ".join(
-            f"{c} = EXCLUDED.{c}" for c in non_tracking if c != "id"
+            f"{c} = " + (exprs[c].format(table=table) if c in exprs else f"EXCLUDED.{c}")
+            for c in non_tracking
+            if c != "id" and c not in insert_only
         )
         # legacy_table/legacy_id tambem sao atualizados quando o conflito e por
         # outra coluna (ex.: nome), para o registro apontar pro legado certo.

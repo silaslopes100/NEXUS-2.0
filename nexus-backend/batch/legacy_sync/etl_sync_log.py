@@ -18,6 +18,7 @@ class RunLogger:
         self.total_inserido = 0
         self.total_atualizado = 0
         self.total_erro = 0
+        self.total_aviso = 0
 
     def start(self) -> None:
         with self.target.conn.cursor() as cur:
@@ -47,6 +48,21 @@ class RunLogger:
             (self.run_id, tabela, str(id_origem), erro[:4000], raw),
         )
 
+    def add_avisos(self, tabela: str, avisos: list[str]) -> None:
+        """Avisos de qualidade (ex.: e-mail/CPF duplicado -> NULL).
+
+        Vao para etl_erros com prefixo 'AVISO:' mas NAO contam como erro:
+        a linha foi gravada, so perdeu o campo problematico.
+        """
+        self.total_aviso += len(avisos)
+        if self.run_id is None or not avisos:
+            return
+        self.target.executemany(
+            "INSERT INTO etl_erros (execucao_id, tabela_origem, id_origem, erro, linha_raw) "
+            "VALUES (%s, %s, NULL, %s, NULL)",
+            [(self.run_id, tabela, f"AVISO: {a}"[:4000]) for a in avisos],
+        )
+
     def finish(self, status: str) -> None:
         self.target.execute(
             "UPDATE etl_sync_runs SET finalizado_em = now(), status = %s, "
@@ -64,10 +80,17 @@ class RunLogger:
         self.target.commit()
 
     def last_successful_run(self) -> Any:
-        """Maior finalizado_em de uma execucao bem-sucedida (base do incremental)."""
+        """Inicio da ultima execucao COMPLETA bem-sucedida (base do incremental).
+
+        Conta full e incremental (antes so o full contava, e cada incremental
+        relia tudo desde a ultima carga). Execucoes com --only gravam
+        modo='parcial' e nao entram: nao cobriram todas as tabelas.
+        Usa iniciado_em (nao finalizado_em) para nao perder o que mudou no
+        legado durante a propria execucao.
+        """
         sql = (
-            "SELECT MAX(finalizado_em) FROM etl_sync_runs "
-            "WHERE status = 'ok' AND modo = 'full'"
+            "SELECT MAX(iniciado_em) FROM etl_sync_runs "
+            "WHERE status = 'ok' AND modo IN ('full', 'incremental')"
         )
         with self.target.conn.cursor() as cur:
             cur.execute(sql)

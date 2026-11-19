@@ -10,7 +10,7 @@ pgserver = pytest.importorskip("pgserver")
 import psycopg2
 
 from batch.legacy_sync.etl_sync_log import RunLogger
-from batch.legacy_sync.mappers.alunos_mapper import AlunoMapper
+from batch.legacy_sync.mappers.alunos_mapper import AlunoMapper, gerar_matriculas_nx
 from batch.legacy_sync.mappers.perfis_mapper import ensure_defaults
 from batch.legacy_sync.mappers.polos_mapper import PoloMapper
 from batch.legacy_sync.mappers.usuarios_mapper import UsuarioMapper
@@ -27,13 +27,17 @@ class FakeMySQLSource:
     def __init__(self, tabelas: dict[str, list[dict]]):
         self.tabelas = tabelas
 
-    def stream(self, table, columns, where=None, params=(), order=None):
+    def stream(self, table, columns, where=None, params=(), order=None, offset=0):
+        import re
+
+        roles = None
+        if where:
+            m = re.search(r"role_id IN \(([\d, ]+)\)", where) or re.search(r"role_id = (\d+)", where)
+            if m:
+                roles = {int(x) for x in m.group(1).split(",")}
         for row in self.tabelas.get(table, []):
-            if where:
-                col = where.split(" ")[0]
-                # aceita apenas filtros simples 'col > %s' (incremental)
-                if row.get(col) is not None and row.get(col) <= params[0]:
-                    continue
+            if roles is not None and row.get("role_id") not in roles:
+                continue
             yield row
 
 
@@ -87,10 +91,10 @@ def test_pipeline_completo_e_idempotente(pg):
              "first_name": "Ana", "last_name": "R", "email": "ana@x",
              "cpf": "1", "cep": "01000-000", "uf": "SP", "telefone": None,
              "status": 1},
-            # Joao: polo 5 sem role -> coordenador de polo (NAO vira aluno)
-            _usuarios_linha(id=1, polo=5, email="joao@x.com"),
-            # Bia: sem polo/escola -> aluno EAD
-            _usuarios_linha(id=2, polo=0, email="bia@x.com", cpf="2",
+            # Joao: role 2 com polo 5 -> aluno do polo (regra da migracao)
+            _usuarios_linha(id=1, role_id=2, polo=5, email="joao@x.com"),
+            # Bia: role 2 sem polo/escola -> aluno EAD
+            _usuarios_linha(id=2, role_id=2, polo=0, email="bia@x.com", cpf="2",
                             codigo="MAT-9"),
         ],
     }
@@ -103,8 +107,9 @@ def test_pipeline_completo_e_idempotente(pg):
     _rodar(pg, registry, run_log, tabelas, [PoloMapper, UsuarioMapper, AlunoMapper])
 
     assert _contagem(pg, "polos") == 1
-    assert _contagem(pg, "usuarios") == 3
-    assert _contagem(pg, "alunos") == 1  # so Bia; Joao e coordenador de polo
+    assert _contagem(pg, "usuarios") == 2  # so role 2
+    assert _contagem(pg, "alunos") == 2  # Joao (polo) e Bia (EAD)
+    gerar_matriculas_nx(pg)
 
     # FKs resolvidas
     with pg.conn.cursor() as cur:
@@ -119,7 +124,7 @@ def test_pipeline_completo_e_idempotente(pg):
             "SELECT a.numero_matricula FROM alunos a "
             "JOIN usuarios u ON u.id = a.usuario_id WHERE u.email='bia@x.com'"
         )
-        assert cur.fetchone()[0] == "MAT-9"
+        assert cur.fetchone()[0].startswith("NX-")  # padrao NEXUS, sem codigo legado
 
     # 2a execucao: idempotente (atualiza, nao duplica)
     registry2 = IdRegistry(pg)
@@ -128,8 +133,8 @@ def test_pipeline_completo_e_idempotente(pg):
     _rodar(pg, registry2, run_log2, tabelas, [PoloMapper, UsuarioMapper, AlunoMapper])
 
     assert _contagem(pg, "polos") == 1
-    assert _contagem(pg, "usuarios") == 3
-    assert _contagem(pg, "alunos") == 1
+    assert _contagem(pg, "usuarios") == 2  # so role 2
+    assert _contagem(pg, "alunos") == 2
 
     # a 2a execucao atualizou (inseridos=0)
     assert run_log2.total_inserido == 0

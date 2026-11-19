@@ -3,6 +3,8 @@
 Le users com role_id=3 (coordenador polo), expande campo CSV `escolas`,
 faz join com users role_id=4 (gestor escola) via escola_old.
 Resolve polo_id via registry (polos ja carregados com legacy_id = u3.id).
+Escolas de contas role 4 nao listadas por nenhum polo tambem sao criadas,
+sem polo_id. legacy_id = escola_old em ambos os casos (sem duplicar).
 """
 from __future__ import annotations
 
@@ -88,8 +90,28 @@ class EscolaLegacyMapper(BaseMapper):
                 }
                 yield row
 
+        # Escolas de contas role 4 que nenhum polo lista no campo `escolas`:
+        # entram sem polo (vincular depois no NEXUS), para que a conta de
+        # secretaria tenha a sua escola.
+        orfas = 0
+        for u4 in source.stream(
+            self.source_table,
+            ["escola_old", "nome_escola", "cep", "logradouro", "numero",
+             "bairro", "cidade", "uf", "complemento"],
+            where="role_id = 4 AND escola_old IS NOT NULL", order="id",
+        ):
+            legacy_id = self.as_int(u4.get("escola_old"))
+            if not legacy_id or legacy_id in self._processados:
+                continue
+            self._processados.add(legacy_id)
+            orfas += 1
+            yield {**u4, "id": None, "polo": None, "escola_old": legacy_id}
+        if orfas:
+            self.warn(f"{orfas} escola(s) de contas role 4 sem polo no legado: criadas sem polo_id")
+
     def map(self, row: dict) -> dict | None:
-        polo_id = self.registry.resolve("polos", "teo-eadetademp.users", row["id"]) if self.registry else None
+        # o runner grava legacy_table = source_table ('users'), nao o legacy_table da classe
+        polo_id = self.registry.resolve("polos", "users", row["id"]) if self.registry else None
 
         def pick(u4_key: str, u3_key: str) -> str | None:
             val = self.str_clean(row.get(u4_key))

@@ -30,6 +30,7 @@ import {
 import { useAuthStore } from '@/stores/authStore';
 
 const PAGE_SIZE = 50;
+const SEM_POLO = '__sem_polo__';
 const initialForm: EscolaCreatePayload = {
   polo_id: '',
   nome: '',
@@ -89,6 +90,7 @@ export const EscolasPage: React.FC = () => {
   const [query, setQuery] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [poloFilter, setPoloFilter] = useState('');
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -115,7 +117,10 @@ export const EscolasPage: React.FC = () => {
       const result = await polosEscolasApi.listarEscolas({
         q: appliedQuery || undefined,
         status: statusFilter || undefined,
-        polo_id: isAdmin ? undefined : user?.polo_id || undefined,
+        polo_id: isAdmin
+          ? (poloFilter && poloFilter !== SEM_POLO ? poloFilter : undefined)
+          : user?.polo_id || undefined,
+        sem_polo: isAdmin && poloFilter === SEM_POLO ? true : undefined,
         limit: PAGE_SIZE,
         offset,
       });
@@ -127,7 +132,7 @@ export const EscolasPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [appliedQuery, isAdmin, offset, statusFilter, user?.polo_id]);
+  }, [appliedQuery, isAdmin, offset, poloFilter, statusFilter, user?.polo_id]);
 
   useEffect(() => {
     void loadSchools();
@@ -174,6 +179,11 @@ export const EscolasPage: React.FC = () => {
     try {
       let items: Registro[] = [];
       if (kind === 'alunos') {
+        if (!selectedSchool.polo_id) {
+          setFeedback('Esta escola não tem polo vinculado. Vincule um polo para consultar os alunos.');
+          setIndicatorItems([]);
+          return;
+        }
         const result = await alunosApi.listar(selectedSchool.polo_id, {
           escola_id: selectedSchool.id,
           limit: 100,
@@ -223,8 +233,9 @@ export const EscolasPage: React.FC = () => {
       setQuery('');
       setAppliedQuery('');
       setStatusFilter('');
+      setPoloFilter('');
       setOffset(0);
-      if (!appliedQuery && !statusFilter && offset === 0) await loadSchools();
+      if (!appliedQuery && !statusFilter && !poloFilter && offset === 0) await loadSchools();
     } catch (error) {
       const err = error as { response?: { data?: { detail?: string } } };
       const detail = err.response?.data?.detail;
@@ -252,6 +263,12 @@ export const EscolasPage: React.FC = () => {
   };
 
   const address = selectedSchool?.endereco;
+  const polesSorted = useMemo(
+    () => [...poles].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    [poles],
+  );
+  const poloNome = (school: EscolaItem) =>
+    school.polo_nome || poles.find((polo) => polo.id === school.polo_id)?.nome || null;
   const indicatorColumns = useMemo(() => {
     if (!indicator) return [];
     const fields: Record<Indicador, Array<[string, keyof Registro]>> = {
@@ -321,6 +338,18 @@ export const EscolasPage: React.FC = () => {
             <option value="ativo">Ativas</option>
             <option value="inativo">Inativas</option>
           </select>
+          {isAdmin && (
+            <select
+              value={poloFilter}
+              onChange={(event) => { setPoloFilter(event.target.value); setOffset(0); }}
+              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white sm:max-w-xs"
+              aria-label="Filtrar por polo"
+            >
+              <option value="">Todos os polos</option>
+              <option value={SEM_POLO}>Sem polo vinculado</option>
+              {polesSorted.map((polo) => <option key={polo.id} value={polo.id}>{polo.nome}</option>)}
+            </select>
+          )}
         </div>
         {loading ? (
           <div className="flex justify-center py-16 text-indigo-300"><Loader2 className="animate-spin" /></div>
@@ -328,12 +357,17 @@ export const EscolasPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
-                <tr><th className="p-4">Escola</th><th className="p-4">Cidade</th><th className="p-4">Responsável</th><th className="p-4">Status</th><th className="p-4 text-right">Ações</th></tr>
+                <tr><th className="p-4">Escola</th><th className="p-4">Polo</th><th className="p-4">Cidade</th><th className="p-4">Responsável</th><th className="p-4">Status</th><th className="p-4 text-right">Ações</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {schools.map((school) => (
                   <tr key={school.id} className="text-slate-300 hover:bg-slate-800/40">
                     <td className="p-4 font-semibold text-white">{school.nome}</td>
+                    <td className="p-4">
+                      {poloNome(school) || (
+                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-300">Sem polo</span>
+                      )}
+                    </td>
                     <td className="p-4">{school.endereco?.cidade || '—'}</td>
                     <td className="p-4">{school.secretario_nome || '—'}</td>
                     <td className="p-4"><span className={`rounded-full border px-2.5 py-1 text-xs ${statusClass(school.status)}`}>{school.status}</span></td>
@@ -348,7 +382,7 @@ export const EscolasPage: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-                {!schools.length && <tr><td colSpan={5} className="p-12 text-center text-slate-500">Nenhuma escola encontrada.</td></tr>}
+                {!schools.length && <tr><td colSpan={6} className="p-12 text-center text-slate-500">Nenhuma escola encontrada.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -383,7 +417,7 @@ export const EscolasPage: React.FC = () => {
                 <section className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
                   <h3 className="mb-4 flex items-center gap-2 font-semibold text-white"><Building2 size={17} className="text-indigo-300" /> Dados cadastrais</h3>
                   <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                    <div><span className="block text-xs uppercase text-slate-500">Polo</span><span className="text-slate-200">{poles.find((polo) => polo.id === selectedSchool.polo_id)?.nome || selectedSchool.polo_id}</span></div>
+                    <div><span className="block text-xs uppercase text-slate-500">Polo</span><span className="text-slate-200">{poloNome(selectedSchool) || 'Sem polo vinculado'}</span></div>
                     <div><span className="block text-xs uppercase text-slate-500">Responsável</span><span className="text-slate-200">{selectedSchool.secretario_nome || '—'}</span></div>
                     <div><span className="block text-xs uppercase text-slate-500">CPF</span><span className="text-slate-200">{selectedSchool.secretario_cpf || '—'}</span></div>
                     <div><span className="block text-xs uppercase text-slate-500">E-mail</span><span className="text-slate-200">{selectedSchool.secretario_email || '—'}</span></div>

@@ -76,6 +76,32 @@ def ensure_defaults(target) -> None:
     target.commit()
 
 
+ROLE_PERFIL_NS = "role_perfil"
+
+
+def preload_role_map(source, registry) -> int:
+    """Carrega role_id -> nome do perfil direto da tabela `role` do legado.
+
+    Necessario porque `perfis` e unico por nome: varias roles (ex.: admin,
+    secretaria, diretor) colapsam em 'admin' e so a ultima fica com o
+    legacy_id. Sem este mapa, users das demais roles caiam na heuristica por
+    flags e podiam ser classificados com outro perfil. Funciona tambem com
+    --only (PerfilMapper nao roda). Retorna quantas roles foram mapeadas.
+    """
+    total = 0
+    try:
+        for row in source.stream("role", ["id", "name"]):
+            rid = BaseMapper.as_int(row.get("id"))
+            nome = PerfilMapper.normalize_name(row.get("name"))
+            if rid and nome:
+                registry.set_value(ROLE_PERFIL_NS, str(rid), nome)
+                total += 1
+    except Exception as exc:  # noqa: BLE001 - fallback: SELECT em perfis (registry)
+        logger.warning("Nao foi possivel ler `role` do legado: %s", exc)
+    logger.info("Mapa role -> perfil: %d roles", total)
+    return total
+
+
 def resolve_profile_for_row(row: dict) -> str:
     """Decide o perfil de um user legado quando a role_id nao mapeia."""
     for flags, perfil in FLAG_TO_PERFIL:

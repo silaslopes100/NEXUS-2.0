@@ -649,7 +649,7 @@ class PostgresAdminRepository:
             SELECT id, modo, iniciado_em, finalizado_em, total_lido, total_inserido,
                    total_atualizado, total_erro, status,
                    EXTRACT(EPOCH FROM (COALESCE(finalizado_em, now()) - iniciado_em)) as duracao_segundos,
-                   (SELECT COUNT(*) FROM etl_erros WHERE execucao_id = etl_sync_runs.id) as total_erros_detalhados
+                   (SELECT COUNT(*) FROM etl_erros WHERE execucao_id = etl_sync_runs.id AND erro NOT LIKE 'AVISO:%%') as total_erros_detalhados
             FROM etl_sync_runs
             {where_clause}
             ORDER BY iniciado_em DESC
@@ -669,7 +669,7 @@ class PostgresAdminRepository:
             SELECT id, modo, iniciado_em, finalizado_em, total_lido, total_inserido,
                    total_atualizado, total_erro, status,
                    EXTRACT(EPOCH FROM (COALESCE(finalizado_em, now()) - iniciado_em)) as duracao_segundos,
-                   (SELECT COUNT(*) FROM etl_erros WHERE execucao_id = etl_sync_runs.id) as total_erros_detalhados
+                   (SELECT COUNT(*) FROM etl_erros WHERE execucao_id = etl_sync_runs.id AND erro NOT LIKE 'AVISO:%%') as total_erros_detalhados
             FROM etl_sync_runs
             WHERE id = %s
             LIMIT 1

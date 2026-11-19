@@ -2,7 +2,8 @@
 
 Opcoes:
   --mode full|incremental   modo de execucao
-  --only NomeDoMapper       roda apenas um mapper (ex: --only=UsuarioMapper)
+  --only A,B,...             roda apenas os mappers listados, na ordem de dependencia
+                            (ex: --only=PoloMapper,EscolaLegacyMapper,UsuarioMapper)
   --create-schema           cria/valida o schema do destino antes de rodar
   --dry-run                 nao toca o destino: so valida conexoes, preflight
                             de colunas e contagens
@@ -56,7 +57,7 @@ def _preflight(source: MySQLSource) -> None:
 def _main() -> None:
     parser = argparse.ArgumentParser(description="ETL NEXUS 2.0 (legado MySQL -> NeonDB)")
     parser.add_argument("--mode", choices=["full", "incremental"], default="full")
-    parser.add_argument("--only", default=None, help="Nome do mapper (ex: UsuarioMapper)")
+    parser.add_argument("--only", default=None, help="Mapper(s) separados por virgula (ex: PoloMapper,UsuarioMapper)")
     parser.add_argument("--create-schema", action="store_true", help="cria/valida o schema")
     parser.add_argument("--dry-run", action="store_true", help="so valida conexoes e colunas")
     parser.add_argument("--no-report", action="store_true", help="nao gera relatorio no full")
@@ -80,7 +81,8 @@ def _main() -> None:
                 target.ensure_schema()
 
             registry = IdRegistry(target)
-            run_log = RunLogger(target, args.mode)
+            # --only nao cobre todas as tabelas: nao pode virar base do incremental
+            run_log = RunLogger(target, "parcial" if args.only else args.mode)
             run_log.start()
             runner = MapperRunner(source, target, registry, run_log)
 
@@ -107,9 +109,9 @@ def _main() -> None:
                 raise
             run_log.finish("ok")
             logger.info(
-                "Execucao concluida: %d lidos, %d inseridos, %d atualizados, %d erros.",
+                "Execucao concluida: %d lidos, %d inseridos, %d atualizados, %d erros, %d avisos.",
                 run_log.total_lido, run_log.total_inserido,
-                run_log.total_atualizado, run_log.total_erro,
+                run_log.total_atualizado, run_log.total_erro, run_log.total_aviso,
             )
         finally:
             target.close()

@@ -19,6 +19,10 @@ _SECRETARIO_COLS = (
     "sec.id AS secretario_usuario_id, sec.nome AS secretario_nome, sec.email AS secretario_email, sec.cpf AS secretario_cpf, "
     "(SELECT COUNT(*) FROM turmas t WHERE t.escola_id = e.id) AS total_turmas"
 )
+# Nome do polo da escola (LEFT JOIN: escolas migradas podem estar sem polo).
+_POLO_COLS = "pl.nome AS polo_nome"
+_POLO_JOIN = "LEFT JOIN polos pl ON pl.id = e.polo_id"
+
 _SECRETARIO_JOIN = """
     LEFT JOIN LATERAL (
         SELECT u.id, u.nome, u.email, u.cpf
@@ -94,6 +98,7 @@ class PolosEscolasRepositoryInterface(Protocol):
         offset: int = 0,
         q: Optional[str] = None,
         status_filter: Optional[str] = None,
+        sem_polo: bool = False,
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
     # ---------- Estoque de licenças ----------
@@ -524,8 +529,9 @@ class PostgresPolosEscolasRepository:
         with self._cursor() as cur:
             cur.execute(
                 f"""
-                SELECT e.*, {_SECRETARIO_COLS}
+                SELECT e.*, {_SECRETARIO_COLS}, {_POLO_COLS}
                 FROM escolas e
+                {_POLO_JOIN}
                 {_SECRETARIO_JOIN}
                 WHERE e.id = %s
                 LIMIT 1
@@ -542,12 +548,15 @@ class PostgresPolosEscolasRepository:
         offset: int = 0,
         q: Optional[str] = None,
         status_filter: Optional[str] = None,
+        sem_polo: bool = False,
     ) -> Tuple[int, List[Dict[str, Any]]]:
         conditions = []
         params: List[Any] = []
         if polo_id:
             conditions.append("e.polo_id = %s")
             params.append(str(polo_id))
+        elif sem_polo:
+            conditions.append("e.polo_id IS NULL")
         if q and q.strip():
             conditions.append("(lower(e.nome) LIKE %s OR lower(coalesce(e.cidade, '')) LIKE %s)")
             pattern = f"%{q.strip().lower()}%"
@@ -561,8 +570,9 @@ class PostgresPolosEscolasRepository:
             total = int(cur.fetchone()["total"])
             cur.execute(
                 f"""
-                SELECT e.*, {_SECRETARIO_COLS}
+                SELECT e.*, {_SECRETARIO_COLS}, {_POLO_COLS}
                 FROM escolas e
+                {_POLO_JOIN}
                 {_SECRETARIO_JOIN}
                 {where}
                 ORDER BY e.nome ASC
@@ -1993,6 +2003,8 @@ class InMemoryPolosEscolasRepository:
         data["secretario_nome"] = (secretario or {}).get("nome")
         data["secretario_email"] = (secretario or {}).get("email")
         data["secretario_cpf"] = (secretario or {}).get("cpf")
+        polo = self.polos.get(str(escola.get("polo_id"))) if escola.get("polo_id") else None
+        data["polo_nome"] = (polo or {}).get("nome")
         return data
 
     def list_escolas(
@@ -2002,10 +2014,13 @@ class InMemoryPolosEscolasRepository:
         offset: int = 0,
         q: Optional[str] = None,
         status_filter: Optional[str] = None,
+        sem_polo: bool = False,
     ) -> Tuple[int, List[Dict[str, Any]]]:
         items = list(self.escolas.values())
         if polo_id:
             items = [e for e in items if str(e.get("polo_id")) == str(polo_id)]
+        elif sem_polo:
+            items = [e for e in items if not e.get("polo_id")]
         if q and q.strip():
             term = q.strip().lower()
             items = [

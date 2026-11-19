@@ -68,12 +68,15 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
       setKpis(indicators);
       setEstoque(saldo);
       setItems(movements.items || []);
-      const studentList = await alunosApi.listar(schoolInfo.polo_id, {
-        escola_id: escolaId,
-        status: 'ativo',
-        limit: 200,
-        offset: 0,
-      });
+      // escola sem polo (migrada do legado): a rota de alunos e por polo
+      const studentList = schoolInfo.polo_id
+        ? await alunosApi.listar(schoolInfo.polo_id, {
+            escola_id: escolaId,
+            status: 'ativo',
+            limit: 200,
+            offset: 0,
+          })
+        : { items: [] };
       setStudents(studentList.items || []);
     } catch (error) {
       const err = error as { response?: { data?: { detail?: string } } };

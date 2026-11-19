@@ -46,6 +46,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** Opção "Polo teste" do formulário de cadastro (ignora o filtro de polo da listagem). */
+async function opcaoPoloDoCadastro() {
+  const options = await screen.findAllByRole('option', { name: 'Polo teste' });
+  const doCadastro = options.find(
+    (option) => option.parentElement?.getAttribute('aria-label') !== 'Filtrar por polo',
+  );
+  if (!doCadastro) throw new Error('select de polo do cadastro não encontrado');
+  return doCadastro;
+}
+
 function Harness() {
   const [address, setAddress] = useState<EnderecoCompleto>({ numero: '42', complemento: 'Sala' });
   const { changeAddress, lookup } = useCepAddress(setAddress, 'test');
@@ -155,7 +165,7 @@ describe.each([
 ] as const)('cadastro de escola em %s', (_name, open) => {
   it('consulta usuários de escola e vincula o responsável selecionado', async () => {
     await open();
-    const option = await screen.findByRole('option', { name: 'Polo teste' });
+    const option = await opcaoPoloDoCadastro();
     fireEvent.change(option.parentElement!, { target: { value: 'p1' } });
     await screen.findByRole('option', { name: /Ana Silva/ });
     expect(vi.mocked(polosEscolasApi.listarUsuariosVinculaveis)).toHaveBeenCalledWith(
@@ -176,7 +186,7 @@ describe.each([
 
   it('mantém a opção de criar um responsável novo', async () => {
     await open();
-    const option = await screen.findByRole('option', { name: 'Polo teste' });
+    const option = await opcaoPoloDoCadastro();
     fireEvent.change(option.parentElement!, { target: { value: 'p1' } });
     fireEvent.click(screen.getByLabelText('Criar usuário'));
     fireEvent.change(screen.getByPlaceholderText('Nome'), { target: { value: 'Secretária' } });
@@ -235,5 +245,35 @@ describe.each([
     fireEvent.change(field('Cep'), { target: { value: '01000000' } });
     await waitFor(() => expect(field('Cidade').value).toBe('São Paulo'));
     expect(field('Estado').value).toBe('SP');
+  });
+});
+
+describe('listagem de escolas', () => {
+  it('mostra a coluna do polo e filtra por polo e por escolas sem polo', async () => {
+    vi.mocked(polosEscolasApi.listarEscolas).mockResolvedValue({
+      items: [
+        { id: 'e1', polo_id: 'p1', polo_nome: 'Polo teste', nome: 'Escola Um', endereco: {}, status: 'ativo' },
+        { id: 'e2', polo_id: null, polo_nome: null, nome: 'Escola Órfã', endereco: {}, status: 'ativo' },
+      ],
+      total: 2,
+    });
+    render(<MemoryRouter><EscolasPage /></MemoryRouter>);
+
+    expect(await screen.findByRole('columnheader', { name: 'Polo' })).toBeTruthy();
+    const linhaUm = (await screen.findByText('Escola Um')).closest('tr')!;
+    expect(linhaUm.textContent).toContain('Polo teste');
+    expect(screen.getByText('Escola Órfã').closest('tr')!.textContent).toContain('Sem polo');
+
+    const filtro = screen.getByLabelText('Filtrar por polo');
+    await screen.findAllByRole('option', { name: 'Polo teste' });
+    fireEvent.change(filtro, { target: { value: 'p1' } });
+    await waitFor(() => expect(polosEscolasApi.listarEscolas).toHaveBeenLastCalledWith(
+      expect.objectContaining({ polo_id: 'p1', sem_polo: undefined, offset: 0 }),
+    ));
+
+    fireEvent.change(filtro, { target: { value: '__sem_polo__' } });
+    await waitFor(() => expect(polosEscolasApi.listarEscolas).toHaveBeenLastCalledWith(
+      expect.objectContaining({ polo_id: undefined, sem_polo: true }),
+    ));
   });
 });

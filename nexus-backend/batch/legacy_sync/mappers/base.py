@@ -8,10 +8,13 @@ por linha fica registrado em etl_erros pelo runner.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
+
+INCREMENTAL_MARGIN = timedelta(hours=6)
 
 
 class BaseMapper:
@@ -24,6 +27,10 @@ class BaseMapper:
     conflict_columns: ClassVar[list[str]] = []         # cols de conflito p/ sem tracking
     upsert_conflict_columns: ClassVar[tuple[str, ...]] = ("legacy_table", "legacy_id")
     legacy_table: ClassVar[str | None] = None          # valor para coluna legacy_table (default: source_table)
+    # colunas gravadas so no INSERT: o re-upsert nao sobrescreve o que o NEXUS mantem
+    insert_only_columns: ClassVar[tuple[str, ...]] = ()
+    # expressao SQL custom no DO UPDATE ({table} = linha atual; EXCLUDED = legado)
+    update_expressions: ClassVar[dict[str, str]] = {}
 
     def __init__(self, registry=None) -> None:
         from ..registry import IdRegistry
@@ -101,6 +108,14 @@ class BaseMapper:
             s = s[:max_len]
         return s
 
+    @staticmethod
+    def only_digits(value: Any) -> str | None:
+        """So os digitos (CPF/CNPJ com ou sem mascara -> forma canonica)."""
+        if value is None:
+            return None
+        digits = re.sub(r"\D", "", str(value))
+        return digits or None
+
     # --- contrato ---
 
     def map(self, row: dict) -> dict | None:
@@ -114,10 +129,9 @@ class BaseMapper:
     def iter_source(self, source, last_run=None):
         """Iteracao padrao: stream da tabela de origem (com filtro incremental)."""
         where = None
-        params = ()
+        params: tuple = ()
         if last_run is not None and self.incremental_column:
-            where = f"{self.incremental_column} > %s"
-            params = (last_run,)
+            where, params = self.incremental_filter(last_run)
         extra = self.initial_where(last_run)
         if extra:
             where = f"({where}) AND ({extra})" if where else extra
@@ -125,6 +139,29 @@ class BaseMapper:
             self.source_table, self.source_columns, where=where,
             params=params, order=self.order_by, offset=self.initial_offset(last_run),
         )
+
+    def incremental_filter(self, last_run: Any) -> tuple[str, tuple]:
+        """WHERE incremental tolerante ao tipo da coluna no legado.
+
+        O legado guarda datas ora como unix int, ora como DATETIME/varchar. Um
+        `int > '2026-01-01 ...'` no MySQL vira `int > 2026` e deixa passar
+        tudo, por isso a comparacao e feita com o parametro do tipo certo.
+        Aplica uma margem de seguranca (fuso do legado / relogios): reler um
+        pouco a mais e inofensivo, pois o upsert e idempotente.
+        """
+        col = self.incremental_column
+        ref = last_run
+        if isinstance(ref, datetime):
+            ref = ref - INCREMENTAL_MARGIN
+            unix = int(ref.timestamp())
+            text = ref.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            unix, text = ref, ref
+        where = (
+            f"(({col} REGEXP '^[0-9]+$' AND {col} > %s) "
+            f"OR ({col} NOT REGEXP '^[0-9]+$' AND {col} > %s))"
+        )
+        return where, (unix, text)
 
     def current_legacy_id(self, row: dict):
         """id legado que vira a chave (legacy_table, legacy_id) do destino."""

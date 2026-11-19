@@ -68,6 +68,8 @@ export const polosEscolasApi = {
   // ---------- Escolas ----------
   listarEscolas: async (params?: {
     polo_id?: string;
+    /** somente escolas sem polo vinculado */
+    sem_polo?: boolean;
     q?: string;
     status?: string;
     limit?: number;

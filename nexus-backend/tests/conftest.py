@@ -78,6 +78,10 @@ class FakeRegistry:
         return self._user_polos.get(int(user_legacy_id))
 
     def role_to_perfil_nome(self, role_id):
+        if role_id not in (None, "", 0):
+            nome = self.get_value("role_perfil", str(role_id))
+            if nome:
+                return nome
         uuid = self.resolve("perfis", "role", role_id)
         if not uuid:
             return None

@@ -15,7 +15,7 @@ interface EnderecoSchema {
 
 export interface EscolaItem {
   id: string;
-  polo_id: string;
+  polo_id: string | null;
   nome: string;
   endereco: EnderecoSchema;
   status: string;

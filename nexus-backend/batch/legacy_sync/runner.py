@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+import psycopg2
+
 from .etl_sync_log import RunLogger
 from .mappers.base import BaseMapper
 from .registry import IdRegistry
@@ -62,18 +64,14 @@ class MapperRunner:
                     key = tuple(vals[i] for i in key_idx) if key_idx else (mapper.source_table, legacy_id)
                     uniq[key] = (legacy_id, vals)
                 itens = list(uniq.values())
-                rows = [v for _, v in itens]
-                legacy_ids = [lid for lid, _ in itens]
-                outcomes = self.target.upsert_rows(
-                    mapper.target_table, cols, rows, mapper.upsert_conflict_columns
-                )
-                for legacy_id, (row_id, inseriu) in zip(legacy_ids, outcomes):
+                resultados = self._upsert_isolado(mapper, cols, itens, contador)
+                for legacy_id, (row_id, inseriu) in resultados:
                     if inseriu and mapper.source_table:
                         self.registry.register(
                             mapper.target_table, mapper.source_table, legacy_id, row_id
                         )
-                contador["inserido"] += sum(1 for _, ins in outcomes if ins)
-                contador["atualizado"] += sum(1 for _, ins in outcomes if not ins)
+                contador["inserido"] += sum(1 for _, (_, ins) in resultados if ins)
+                contador["atualizado"] += sum(1 for _, (_, ins) in resultados if not ins)
             else:
                 contador["inserido"] += self.target.upsert_rows_conflict(
                     mapper.target_table, cols, mapper.conflict_columns, buffer
@@ -113,6 +111,58 @@ class MapperRunner:
                 flush()
 
         flush()
+        if mapper.warnings:
+            logger.warning(
+                "%s: %d aviso(s) (ex.: %s) -> gravados em etl_erros",
+                mapper.target_table, len(mapper.warnings), mapper.warnings[0],
+            )
+            self.run_log.add_avisos(mapper.target_table, mapper.warnings)
+            self.target.commit()
         self.run_log.add_lido(contador["lido"])
         self.run_log.add_result(contador["inserido"], contador["atualizado"])
         return contador
+
+    def _upsert(self, mapper: BaseMapper, cols: list[str], rows: list) -> list:
+        return self.target.upsert_rows(
+            mapper.target_table, cols, rows, mapper.upsert_conflict_columns,
+            insert_only=mapper.insert_only_columns,
+            update_expressions=mapper.update_expressions,
+        )
+
+    def _upsert_isolado(
+        self, mapper: BaseMapper, cols: list[str], itens: list[tuple], contador: dict
+    ) -> list[tuple]:
+        """Upsert do lote; se o banco rejeitar (ex.: UNIQUE de e-mail/CPF),
+        refaz linha a linha com SAVEPOINT e manda as falhas para etl_erros,
+        em vez de abortar a execucao inteira.
+
+        Retorna [(legacy_id, (row_id, inseriu))] das linhas gravadas.
+        """
+        self.target.execute("SAVEPOINT etl_lote")
+        try:
+            outcomes = self._upsert(mapper, cols, [v for _, v in itens])
+            self.target.execute("RELEASE SAVEPOINT etl_lote")
+            return [(lid, out) for (lid, _), out in zip(itens, outcomes)]
+        except psycopg2.Error as exc:
+            self.target.execute("ROLLBACK TO SAVEPOINT etl_lote")
+            logger.warning(
+                "%s: lote de %d rejeitado (%s); refazendo linha a linha",
+                mapper.target_table, len(itens), type(exc).__name__,
+            )
+
+        resultados: list[tuple] = []
+        for legacy_id, vals in itens:
+            self.target.execute("SAVEPOINT etl_linha")
+            try:
+                (out,) = self._upsert(mapper, cols, [vals])
+                self.target.execute("RELEASE SAVEPOINT etl_linha")
+                resultados.append((legacy_id, out))
+            except psycopg2.Error as exc:
+                self.target.execute("ROLLBACK TO SAVEPOINT etl_linha")
+                contador["erro"] += 1
+                self.run_log.add_erro(
+                    mapper.target_table, legacy_id,
+                    f"{type(exc).__name__}: {str(exc).strip()}",
+                    dict(zip(cols, vals)),
+                )
+        return resultados

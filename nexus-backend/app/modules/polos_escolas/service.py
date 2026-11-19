@@ -213,7 +213,8 @@ class PolosEscolasService:
 
         return EscolaResponse(
             id=str(escola["id"]),
-            polo_id=str(escola["polo_id"]),
+            polo_id=str(escola["polo_id"]) if escola.get("polo_id") else None,
+            polo_nome=escola.get("polo_nome"),
             nome=escola["nome"],
             endereco=self._endereco_from(escola),
             status=escola.get("status", "ativo"),
@@ -597,6 +598,7 @@ class PolosEscolasService:
         offset: int = 0,
         q: Optional[str] = None,
         status_filter: Optional[str] = None,
+        sem_polo: bool = False,
     ) -> EscolaListResponse:
         total, items = self.repo.list_escolas(
             polo_id=polo_id,
@@ -604,6 +606,7 @@ class PolosEscolasService:
             offset=offset,
             q=q,
             status_filter=status_filter,
+            sem_polo=sem_polo,
         )
         return EscolaListResponse(
             total=total,

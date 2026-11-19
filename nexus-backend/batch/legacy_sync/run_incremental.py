@@ -6,15 +6,16 @@ from __future__ import annotations
 
 import logging
 
-from .run_full_load import FULL_LOAD_ORDER, POST_STEPS
+from .mappers.perfis_mapper import preload_role_map
+from .run_full_load import rodar_pos_passos, selecionar_mappers
 
 logger = logging.getLogger(__name__)
 
 
 def run_incremental(source, target, registry, run_log, runner, last_run, only: str | None = None) -> None:
-    mappers = [m for m in FULL_LOAD_ORDER if not only or m.__name__.lower() == only.lower()]
-    if not mappers:
-        raise SystemExit(f"Nenhum mapper encontrado para --only={only}")
+    mappers = selecionar_mappers(only)
+
+    preload_role_map(source, registry)
 
     for cls in mappers:
         mapper = cls(registry=registry)
@@ -30,6 +31,4 @@ def run_incremental(source, target, registry, run_log, runner, last_run, only: s
             )
         runner.run(mapper, last_run=last_run if mapper.incremental_column else None)
 
-    for nome, step in POST_STEPS:
-        logger.info("Passo pos-migracao: %s", nome)
-        step(target)
+    rodar_pos_passos(source, target, mappers)

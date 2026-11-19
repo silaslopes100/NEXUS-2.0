@@ -179,7 +179,8 @@ class EscolaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    polo_id: str
+    polo_id: Optional[str] = None  # escolas migradas sem polo no legado
+    polo_nome: Optional[str] = None
     nome: str
     endereco: EnderecoSchema
     status: str = "ativo"

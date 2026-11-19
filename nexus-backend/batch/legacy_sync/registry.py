@@ -95,6 +95,11 @@ class IdRegistry:
             rid = int(role_id)
         except (TypeError, ValueError):
             return None
+        # 1o: mapa completo lido da tabela `role` (perfis_mapper.preload_role_map)
+        nome = self.get_value("role_perfil", str(rid))
+        if nome:
+            return nome
+        # fallback: perfis.legacy_id guarda so UMA role por nome (upsert por nome)
         if not hasattr(self, "_role_perfil_cache"):
             self._role_perfil_cache: dict[int, str] = {}
             sql = (
