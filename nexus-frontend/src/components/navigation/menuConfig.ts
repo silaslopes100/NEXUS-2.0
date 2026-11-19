@@ -329,6 +329,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: ArrowLeftRight,
         },
         {
+          title: 'Presenças & Frequência',
+          path: '/polo/presencas',
+          icon: Clock,
+        },
+        {
           title: 'Central de Estágio',
           path: '/polo/estagios',
           icon: Briefcase,
@@ -418,7 +423,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Presenças & Frequência',
           path: '/escola/presencas',
           icon: Clock,
-          isPlaceholder: true,
         },
         {
           title: 'Licenças Atribuídas',

@@ -688,25 +688,7 @@ def _registros_do_aluno(usuario_id: str) -> List[Dict[str, Any]]:
         ]
     with get_db_cursor() as cur:
         cur.execute(
-            """
-            SELECT COALESCE(vinculo.disciplina_id, presenca.materia_id)::text AS disciplina_id,
-                   disciplina.nome AS disciplina_nome,
-                   turma.nome AS turma_nome,
-                   NULLIF(concat_ws(' ', professor_usuario.nome, professor_usuario.sobrenome), '') AS professor_nome,
-                   presenca.data_aula, presenca.numero_aula, presenca.presente,
-                   aula.conteudo_ministrado
-              FROM presencas presenca
-              JOIN alunos aluno ON aluno.id = presenca.aluno_id
-              LEFT JOIN professor_disciplinas vinculo ON vinculo.id = presenca.professor_disciplina_id
-              LEFT JOIN disciplinas disciplina ON disciplina.id = COALESCE(vinculo.disciplina_id, presenca.materia_id)
-              LEFT JOIN turmas turma ON turma.id = vinculo.turma_id
-              LEFT JOIN professores professor ON professor.id = vinculo.professor_id
-              LEFT JOIN usuarios professor_usuario ON professor_usuario.id = professor.usuario_id
-              LEFT JOIN aulas_ministradas aula
-                     ON aula.professor_disciplina_id = presenca.professor_disciplina_id
-                    AND aula.data_aula = presenca.data_aula
-                    AND aula.numero_aula = presenca.numero_aula
-                    AND aula.visivel_aluno
+            f"""{_SELECT_REGISTROS}
              WHERE aluno.usuario_id = %s
              ORDER BY presenca.data_aula DESC NULLS LAST, presenca.numero_aula DESC NULLS LAST
             """,
@@ -715,15 +697,39 @@ def _registros_do_aluno(usuario_id: str) -> List[Dict[str, Any]]:
         return [dict(row) for row in cur.fetchall()]
 
 
-@router.get(
-    "/me",
-    response_model=MinhaFrequenciaSchema,
-    dependencies=[Depends(require_role(["aluno"]))],
-)
-async def minha_frequencia(current_user: UserResponse = Depends(get_current_user)):
-    """Presenças do aluno logado, agrupadas por disciplina, com o conteúdo da ata de cada aula."""
+# Presença ligada à disciplina pelo vínculo do professor (professor_disciplinas); o conteúdo vem da ata.
+_FROM_REGISTROS = """
+      FROM presencas presenca
+      JOIN alunos aluno ON aluno.id = presenca.aluno_id
+      JOIN usuarios aluno_usuario ON aluno_usuario.id = aluno.usuario_id
+      LEFT JOIN escolas escola ON escola.id = aluno.escola_id
+      LEFT JOIN professor_disciplinas vinculo ON vinculo.id = presenca.professor_disciplina_id
+      LEFT JOIN disciplinas disciplina ON disciplina.id = vinculo.disciplina_id
+      LEFT JOIN turmas turma ON turma.id = vinculo.turma_id
+"""
+
+_SELECT_REGISTROS = f"""
+    SELECT vinculo.disciplina_id::text AS disciplina_id,
+           disciplina.nome AS disciplina_nome,
+           turma.nome AS turma_nome,
+           NULLIF(concat_ws(' ', professor_usuario.nome, professor_usuario.sobrenome), '') AS professor_nome,
+           presenca.data_aula, presenca.numero_aula, presenca.presente,
+           aula.conteudo_ministrado
+      {_FROM_REGISTROS}
+      LEFT JOIN professores professor ON professor.id = vinculo.professor_id
+      LEFT JOIN usuarios professor_usuario ON professor_usuario.id = professor.usuario_id
+      LEFT JOIN aulas_ministradas aula
+             ON aula.professor_disciplina_id = presenca.professor_disciplina_id
+            AND aula.data_aula = presenca.data_aula
+            AND aula.numero_aula = presenca.numero_aula
+            AND aula.visivel_aluno
+"""
+
+
+def _agrupar_frequencia(registros: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Frequência por disciplina (e turma) com a lista de aulas e o resumo geral."""
     grupos: Dict[str, Dict[str, Any]] = {}
-    for registro in _registros_do_aluno(current_user.id):
+    for registro in registros:
         chave = f"{registro.get('disciplina_id') or 'sem'}|{registro.get('turma_nome') or ''}"
         grupo = grupos.setdefault(chave, {
             "disciplina_id": registro.get("disciplina_id"),
@@ -752,7 +758,7 @@ async def minha_frequencia(current_user: UserResponse = Depends(get_current_user
             "percentual": percentual,
             "situacao": "regular" if percentual >= FREQUENCIA_MINIMA else "em_risco",
         })
-    disciplinas.sort(key=lambda d: d["disciplina_nome"].casefold())
+    disciplinas.sort(key=lambda d: (d["disciplina_nome"].casefold(), d.get("turma_nome") or ""))
 
     total = sum(d["total_aulas"] for d in disciplinas)
     presentes = sum(d["presencas"] for d in disciplinas)
@@ -763,3 +769,209 @@ async def minha_frequencia(current_user: UserResponse = Depends(get_current_user
         "percentual": round(presentes / total * 100, 1) if total else None,
         "disciplinas": disciplinas,
     }
+
+
+@router.get(
+    "/me",
+    response_model=MinhaFrequenciaSchema,
+    dependencies=[Depends(require_role(["aluno"]))],
+)
+async def minha_frequencia(current_user: UserResponse = Depends(get_current_user)):
+    """Presenças do aluno logado, agrupadas por disciplina, com o conteúdo da ata de cada aula."""
+    return _agrupar_frequencia(_registros_do_aluno(current_user.id))
+
+
+
+# ---------------------------------------------------------------------------
+# Frequência dos alunos da unidade (Polo / Escola; Admin vê todas) — somente leitura
+# ---------------------------------------------------------------------------
+
+class OpcaoSchema(BaseModel):
+    id: str
+    nome: str
+
+
+class FrequenciaAlunoLinhaSchema(BaseModel):
+    aluno_id: str
+    aluno_nome: str
+    numero_matricula: Optional[str] = None
+    escola_nome: Optional[str] = None
+    disciplina_id: Optional[str] = None
+    disciplina_nome: str
+    turma_id: Optional[str] = None
+    turma_nome: Optional[str] = None
+    total_aulas: int
+    presencas: int
+    faltas: int
+    percentual: float
+    situacao: str  # regular | em_risco
+
+
+class FrequenciaUnidadeSchema(BaseModel):
+    frequencia_minima: float = FREQUENCIA_MINIMA
+    total_alunos: int = 0
+    alunos_em_risco: int = 0
+    percentual: Optional[float] = None
+    disciplinas: List[OpcaoSchema] = Field(default_factory=list)
+    turmas: List[OpcaoSchema] = Field(default_factory=list)
+    linhas: List[FrequenciaAlunoLinhaSchema] = Field(default_factory=list)
+
+
+class FrequenciaAlunoSchema(MinhaFrequenciaSchema):
+    aluno_id: str
+    aluno_nome: str
+    numero_matricula: Optional[str] = None
+
+
+def _escopo_unidade(user: UserResponse, polo_id: Optional[str], escola_id: Optional[str]) -> tuple:
+    """Condição SQL de visibilidade: Polo vê os alunos do polo, Escola os da escola, Admin todos (com filtros)."""
+    perfil = perfil_do_usuario(user)
+    if perfil == "polo":
+        if not user.polo_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Polo sem vínculo.")
+        conds, params = ["aluno.polo_id = %s"], [str(user.polo_id)]
+        if escola_id:
+            conds.append("aluno.escola_id = %s")
+            params.append(escola_id)
+        return conds, params
+    if perfil == "escola":
+        if not user.escola_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Usuário Escola sem vínculo.")
+        return ["aluno.escola_id = %s"], [str(user.escola_id)]
+    conds, params = [], []
+    if polo_id:
+        conds.append("aluno.polo_id = %s")
+        params.append(polo_id)
+    if escola_id:
+        conds.append("aluno.escola_id = %s")
+        params.append(escola_id)
+    return conds, params
+
+
+def _onde(conds: List[str]) -> str:
+    return f"WHERE {' AND '.join(conds)}" if conds else ""
+
+
+@router.get(
+    "/unidade",
+    response_model=FrequenciaUnidadeSchema,
+    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+)
+async def frequencia_unidade(
+    disciplina_id: Optional[str] = None,
+    turma_id: Optional[str] = None,
+    escola_id: Optional[str] = None,
+    polo_id: Optional[str] = None,
+    busca: Optional[str] = Query(None, max_length=100),
+    situacao: Optional[str] = Query(None, pattern="^(regular|em_risco)$"),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """Frequência por aluno e disciplina (a partir das chamadas dos professores) dos alunos da unidade."""
+    for valor in (disciplina_id, turma_id, escola_id, polo_id):
+        if valor:
+            try:
+                uuid.UUID(valor)
+            except ValueError:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Filtro inválido.") from None
+    if not settings.PG_DSN:
+        return FrequenciaUnidadeSchema()
+    base_conds, base_params = _escopo_unidade(current_user, polo_id or None, escola_id or None)
+    base_conds.append("vinculo.disciplina_id IS NOT NULL")
+    conds, params = list(base_conds), list(base_params)
+    if disciplina_id:
+        conds.append("vinculo.disciplina_id = %s")
+        params.append(disciplina_id)
+    if turma_id:
+        conds.append("vinculo.turma_id = %s")
+        params.append(turma_id)
+    if busca and busca.strip():
+        conds.append("(lower(concat_ws(' ', aluno_usuario.nome, aluno_usuario.sobrenome)) LIKE %s "
+                     "OR aluno.numero_matricula ILIKE %s)")
+        termo = f"%{busca.strip().lower()}%"
+        params.extend([termo, termo])
+
+    with get_db_cursor() as cur:
+        cur.execute(
+            f"""SELECT DISTINCT disciplina.id::text AS id, disciplina.nome
+                  {_FROM_REGISTROS} {_onde(base_conds)} ORDER BY disciplina.nome""",
+            base_params,
+        )
+        disciplinas = [dict(r) for r in cur.fetchall() if r["id"]]
+        turma_conds = base_conds + (["vinculo.disciplina_id = %s"] if disciplina_id else []) + ["turma.id IS NOT NULL"]
+        cur.execute(
+            f"""SELECT DISTINCT turma.id::text AS id, turma.nome
+                  {_FROM_REGISTROS} {_onde(turma_conds)} ORDER BY turma.nome""",
+            base_params + ([disciplina_id] if disciplina_id else []),
+        )
+        turmas = [dict(r) for r in cur.fetchall()]
+        cur.execute(
+            f"""SELECT aluno.id::text AS aluno_id,
+                       concat_ws(' ', aluno_usuario.nome, aluno_usuario.sobrenome) AS aluno_nome,
+                       aluno.numero_matricula, escola.nome AS escola_nome,
+                       vinculo.disciplina_id::text AS disciplina_id, disciplina.nome AS disciplina_nome,
+                       turma.id::text AS turma_id, turma.nome AS turma_nome,
+                       COUNT(*) AS total_aulas,
+                       COUNT(*) FILTER (WHERE presenca.presente) AS presencas
+                  {_FROM_REGISTROS} {_onde(conds)}
+                 GROUP BY aluno.id, aluno_usuario.nome, aluno_usuario.sobrenome, aluno.numero_matricula,
+                          escola.nome, vinculo.disciplina_id, disciplina.nome, turma.id, turma.nome
+                 ORDER BY aluno_nome, disciplina.nome, turma.nome
+                 LIMIT 5000""",
+            params,
+        )
+        linhas = []
+        for r in cur.fetchall():
+            total, presentes = int(r["total_aulas"]), int(r["presencas"])
+            percentual = round(presentes / total * 100, 1) if total else 0.0
+            linhas.append({**dict(r), "disciplina_nome": r["disciplina_nome"] or "Disciplina não informada",
+                           "total_aulas": total, "presencas": presentes, "faltas": total - presentes,
+                           "percentual": percentual,
+                           "situacao": "regular" if percentual >= FREQUENCIA_MINIMA else "em_risco"})
+
+    if situacao:
+        linhas = [linha for linha in linhas if linha["situacao"] == situacao]
+    total = sum(linha["total_aulas"] for linha in linhas)
+    presentes = sum(linha["presencas"] for linha in linhas)
+    return {
+        "total_alunos": len({linha["aluno_id"] for linha in linhas}),
+        "alunos_em_risco": len({linha["aluno_id"] for linha in linhas if linha["situacao"] == "em_risco"}),
+        "percentual": round(presentes / total * 100, 1) if total else None,
+        "disciplinas": disciplinas,
+        "turmas": turmas,
+        "linhas": linhas,
+    }
+
+
+@router.get(
+    "/unidade/alunos/{aluno_id}",
+    response_model=FrequenciaAlunoSchema,
+    dependencies=[Depends(require_role(["admin", "polo", "escola"]))],
+)
+async def frequencia_aluno_unidade(aluno_id: str, current_user: UserResponse = Depends(get_current_user)):
+    """Detalhe da frequência de um aluno da unidade (aulas e conteúdo das atas), por disciplina."""
+    try:
+        uuid.UUID(aluno_id)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado.") from None
+    if not settings.PG_DSN:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado.")
+    conds, params = _escopo_unidade(current_user, None, None)
+    with get_db_cursor() as cur:
+        cur.execute(
+            f"""SELECT aluno.id::text AS aluno_id, aluno.numero_matricula,
+                       concat_ws(' ', u.nome, u.sobrenome) AS aluno_nome
+                  FROM alunos aluno JOIN usuarios u ON u.id = aluno.usuario_id
+                  {_onde(conds + ['aluno.id = %s'])}""",
+            params + [aluno_id],
+        )
+        aluno = cur.fetchone()
+        if not aluno:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado.")
+        cur.execute(
+            f"""{_SELECT_REGISTROS}
+             WHERE aluno.id = %s
+             ORDER BY presenca.data_aula DESC NULLS LAST, presenca.numero_aula DESC NULLS LAST""",
+            (aluno_id,),
+        )
+        registros = [dict(r) for r in cur.fetchall()]
+    return {**_agrupar_frequencia(registros), **dict(aluno)}
