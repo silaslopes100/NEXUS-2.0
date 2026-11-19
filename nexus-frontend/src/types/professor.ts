@@ -28,6 +28,7 @@ export interface Professor {
   usuario_id?: string | null;
   nome?: string | null;
   email?: string | null;
+  foto_url?: string | null;
   polo_id?: string | null;
   polo_nome?: string | null;
   escola_id?: string | null;

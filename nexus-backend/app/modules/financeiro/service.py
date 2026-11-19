@@ -166,6 +166,9 @@ class FinanceiroService:
 
     def criar_pedido(self, payload: PedidoCreate, user: UserResponse) -> PedidoResponse:
         """Cria o pedido em 'aguardando_pagamento'. A cobrança é gerada na Fase 3 (checkout)."""
+        if regras.eh_troca(payload.tipo):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail="Troca de licença é solicitada pela tela de licenças")
         polo_id, escola_id = self._resolver_unidade(payload, user)
         itens = self._montar_itens(payload)
         bruto, desconto, total = regras.calcular_totais(

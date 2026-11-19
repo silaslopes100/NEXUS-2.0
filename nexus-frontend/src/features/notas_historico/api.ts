@@ -28,21 +28,6 @@ export interface AdminNotaListResponse {
   offset: number;
 }
 
-export interface AdminAlunoNota {
-  aluno_id: string;
-  aluno_nome?: string | null;
-  aluno_email?: string | null;
-  aluno_matricula?: string | null;
-  atualizado_em?: string | null;
-}
-
-export interface AdminAlunoNotaListResponse {
-  items: AdminAlunoNota[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
 export interface NotaCreate {
   aluno_id: string;
   disciplina_id: string;
@@ -64,19 +49,6 @@ export interface HistoricoItem {
 }
 
 export const notasHistoricoApi = {
-  listarAlunosAdmin: async (params?: {
-    q?: string;
-    disciplina_id?: string;
-    disciplina_nome?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<AdminAlunoNotaListResponse> => {
-    const { data } = await apiClient.get<AdminAlunoNotaListResponse>('/notas-historico/alunos/admin', {
-      params: { limit: 30, ...params },
-    });
-    return data;
-  },
-
   listarNotas: async (params?: {
     aluno_id?: string;
     disciplina_id?: string;

@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
-  ArrowLeft,
   BookOpen,
   Building2,
   CalendarDays,
@@ -28,9 +27,8 @@ const campo =
 type ChaveFiltro = 'disciplina' | 'polo' | 'professor' | 'de' | 'ate' | 'q';
 
 export const AulasAuditoriaPage: React.FC = () => {
-  const { disciplinaId: disciplinaDaRota } = useParams<{ disciplinaId?: string }>();
   const [params, setParams] = useSearchParams();
-  const disciplinaId = disciplinaDaRota || params.get('disciplina') || '';
+  const disciplinaId = params.get('disciplina') || '';
   const pagina = Math.max(1, Number(params.get('pagina')) || 1);
 
   const [opcoes, setOpcoes] = useState<FiltrosAuditoria>({ disciplinas: [], polos: [], professores: [] });
@@ -102,22 +100,13 @@ export const AulasAuditoriaPage: React.FC = () => {
     return Array.from(mapa.entries());
   }, [aulas]);
 
-  const nomeDisciplina = opcoes.disciplinas.find((d) => d.id === disciplinaId)?.nome || aulas[0]?.disciplina_nome;
-  const temFiltro =
-    ['polo', 'professor', 'de', 'ate', 'q'].some((k) => params.get(k)) || Boolean(!disciplinaDaRota && disciplinaId);
+  const temFiltro = ['disciplina', 'polo', 'professor', 'de', 'ate', 'q'].some((k) => params.get(k));
   const paginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="max-w-7xl space-y-6">
       <header className="glass rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:p-8">
-        {disciplinaDaRota && (
-          <Link to="/admin/disciplinas" className="mb-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white">
-            <ArrowLeft className="h-3.5 w-3.5" /> Disciplinas
-          </Link>
-        )}
-        <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-          {disciplinaDaRota ? nomeDisciplina || 'Aulas da disciplina' : 'Aulas de todos os polos'}
-        </h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Aulas de todos os polos</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
           Ata, material e presença de cada aula registrada pelos professores. Filtre por polo, professor, período ou
           busque no texto da ata e no nome do material.
@@ -126,14 +115,12 @@ export const AulasAuditoriaPage: React.FC = () => {
 
       <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-md">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_150px_150px]">
-          {!disciplinaDaRota && (
-            <select aria-label="Disciplina" value={disciplinaId} onChange={(e) => definir('disciplina', e.target.value)} className={campo}>
-              <option value="">Todas as disciplinas</option>
-              {opcoes.disciplinas.map((o) => (
-                <option key={o.id} value={o.id}>{o.nome}</option>
-              ))}
-            </select>
-          )}
+          <select aria-label="Disciplina" value={disciplinaId} onChange={(e) => definir('disciplina', e.target.value)} className={campo}>
+            <option value="">Todas as disciplinas</option>
+            {opcoes.disciplinas.map((o) => (
+              <option key={o.id} value={o.id}>{o.nome}</option>
+            ))}
+          </select>
           <select aria-label="Polo" value={params.get('polo') || ''} onChange={(e) => definir('polo', e.target.value)} className={campo}>
             <option value="">Todos os polos</option>
             {params.get('polo') && !opcoes.polos.some((o) => o.id === params.get('polo')) && (

@@ -40,6 +40,7 @@ COLUNAS_PEDIDO = (
     "entrega_complemento", "entrega_bairro", "entrega_cidade", "entrega_uf",
     "entrega_telefone", "observacao", "pago_em", "cancelado_em",
     "motivo_cancelamento", "enviado_em", "entregue_em",
+    "troca_motivo", "troca_descricao",
 )
 # Campos que alterar_status_pedido pode atualizar junto com o status.
 CAMPOS_STATUS_EXTRA = frozenset(
@@ -144,11 +145,14 @@ def where_periodo(
         conds.append(f"{alias}.escola_id = %s")
         params.append(escola_id)
     if filtros.status and coluna_status:
-        conds.append(f"{coluna_status} = %s")
-        params.append(filtros.status)
+        if filtros.status == "fila_envio":  # Pendentes de envio: venda paga ou troca solicitada
+            conds.append(f"{coluna_status} IN ('pago_aguardando_envio', 'troca_solicitada')")
+        else:
+            conds.append(f"{coluna_status} = %s")
+            params.append(filtros.status)
     if filtros.tipo and coluna_tipo:
-        if filtros.tipo == "com_envio":  # livro + kit (logística)
-            conds.append(f"{coluna_tipo} IN ('livro', 'kit')")
+        if filtros.tipo == "com_envio":  # livro + kit + troca (logística)
+            conds.append(f"{coluna_tipo} IN ('livro', 'kit', 'troca')")
         else:
             conds.append(f"{coluna_tipo} = %s")
             params.append(filtros.tipo)
@@ -183,7 +187,11 @@ class FinanceiroRepositoryInterface(Protocol):
     def create_produto(self, dados: Dict[str, Any]) -> Dict[str, Any]: ...
     def update_produto(self, produto_id: str, campos: Dict[str, Any]) -> Optional[Dict[str, Any]]: ...
     # pedidos
-    def create_pedido(self, dados: Dict[str, Any], itens: List[Dict[str, Any]], usuario_id: Optional[str]) -> str: ...
+    def create_pedido(self, dados: Dict[str, Any], itens: List[Dict[str, Any]], usuario_id: Optional[str],
+                      troca_itens: Optional[List[Dict[str, Any]]] = None) -> str: ...
+    def get_disciplinas(self, ids: Sequence[str]) -> Dict[str, Dict[str, Any]]: ...
+    def movimentar_estoque_troca(self, pedido_id: str, linhas: List[Dict[str, Any]], usuario_id: Optional[str],
+                                 observacao: str) -> None: ...
     def get_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]: ...
     def list_pedidos(self, filtros: FiltrosPeriodo, escopo: Escopo) -> Tuple[int, List[Dict[str, Any]]]: ...
     def alterar_status_pedido(
@@ -215,6 +223,12 @@ class FinanceiroRepositoryInterface(Protocol):
     def registrar_envio(self, pedido_id: str, dados: Dict[str, Any], usuario_id: Optional[str]) -> str: ...
     def update_pedido(self, pedido_id: str, campos: Dict[str, Any], itens: Optional[List[Dict[str, Any]]],
                       usuario_id: Optional[str], observacao: str) -> None: ...
+    # estoque central de livros (por Disciplina)
+    def list_estoque(self, q: Optional[str] = None, curso_id: Optional[str] = None) -> List[Dict[str, Any]]: ...
+    def movimentar_estoque(self, disciplina_id: str, tipo: str, quantidade: int, usuario_id: Optional[str],
+                           observacao: Optional[str]) -> Optional[Dict[str, Any]]: ...
+    def list_movimentacoes_estoque(self, disciplina_id: str, limite: int = 200) -> List[Dict[str, Any]]: ...
+    def baixar_estoque_envio(self, pedido_id: str, usuario_id: Optional[str], observacao: str) -> int: ...
     # catálogo por Curso (kits)
     def catalogo_cursos(self) -> List[Dict[str, Any]]: ...
     def catalogo_curso(self, curso_id: str, polo_id: Optional[str]) -> Optional[Dict[str, Any]]: ...
@@ -318,7 +332,8 @@ class PostgresFinanceiroRepository:
 
     # ---------------- pedidos ----------------
 
-    def create_pedido(self, dados: Dict[str, Any], itens: List[Dict[str, Any]], usuario_id: Optional[str]) -> str:
+    def create_pedido(self, dados: Dict[str, Any], itens: List[Dict[str, Any]], usuario_id: Optional[str],
+                      troca_itens: Optional[List[Dict[str, Any]]] = None) -> str:
         campos = _filtrar_colunas(dados, COLUNAS_PEDIDO)
         cols = ", ".join(campos)
         marks = ", ".join(["%s"] * len(campos))
@@ -340,6 +355,14 @@ class PostgresFinanceiroRepository:
                         item.get("descricao"), item["quantidade"], item["valor_unitario"],
                         item["valor_total"],
                     ),
+                )
+            for linha in troca_itens or []:
+                cur.execute(
+                    """
+                    INSERT INTO pedidos_troca_itens (pedido_id, disciplina_devolver_id, disciplina_receber_id, quantidade)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (pedido_id, linha["disciplina_devolver_id"], linha["disciplina_receber_id"], linha["quantidade"]),
                 )
             cur.execute(
                 """
@@ -380,7 +403,45 @@ class PostgresFinanceiroRepository:
                 (pedido["id"],),
             )
             pedido["envios"] = [_limpar(r) for r in cur.fetchall()]
+            if pedido.get("tipo") == "troca":
+                cur.execute(
+                    """
+                    SELECT t.id, t.disciplina_devolver_id, dd.nome AS disciplina_devolver_nome,
+                           t.disciplina_receber_id, dr.nome AS disciplina_receber_nome, t.quantidade
+                      FROM pedidos_troca_itens t
+                      LEFT JOIN disciplinas dd ON dd.id = t.disciplina_devolver_id
+                      LEFT JOIN disciplinas dr ON dr.id = t.disciplina_receber_id
+                     WHERE t.pedido_id = %s
+                     ORDER BY t.criado_em, t.id
+                    """,
+                    (pedido["id"],),
+                )
+                pedido["troca_itens"] = [_limpar(r) for r in cur.fetchall()]
             return pedido
+
+    def get_disciplinas(self, ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+        validos = []
+        for i in ids:
+            try:
+                validos.append(str(uuid.UUID(str(i))))
+            except ValueError:
+                continue
+        if not validos:
+            return {}
+        with get_db_cursor() as cur:
+            cur.execute("SELECT id, nome, ativo FROM disciplinas WHERE id::text = ANY(%s)", (validos,))
+            return {str(r["id"]): _limpar(r) for r in cur.fetchall()}
+
+    def movimentar_estoque_troca(self, pedido_id: str, linhas: List[Dict[str, Any]], usuario_id: Optional[str],
+                                 observacao: str) -> None:
+        """Troca efetuada: livro devolvido volta ao Estoque Central e o livro novo sai (uma transação)."""
+        with get_db_cursor() as cur:
+            for linha in linhas:
+                q = int(linha["quantidade"])
+                self._aplicar_movimento(cur, str(linha["disciplina_devolver_id"]), "troca_entrada", q,
+                                        usuario_id, observacao, pedido_id=str(pedido_id))
+                self._aplicar_movimento(cur, str(linha["disciplina_receber_id"]), "troca_saida", -q,
+                                        usuario_id, observacao, pedido_id=str(pedido_id))
 
     def list_pedidos(self, filtros: FiltrosPeriodo, escopo: Escopo) -> Tuple[int, List[Dict[str, Any]]]:
         conds, params = where_periodo(
@@ -610,6 +671,131 @@ class PostgresFinanceiroRepository:
             )
 
     # ---------------- catálogo por Curso ----------------
+
+    # ---------------- estoque central ----------------
+
+    def list_estoque(self, q: Optional[str] = None, curso_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        conds: List[str] = []
+        params: List[Any] = []
+        termo = (q or "").strip()
+        if termo:
+            conds.append("(d.nome ILIKE %s OR d.sku ILIKE %s)")
+            params.extend([f"%{termo}%", f"%{termo}%"])
+        if curso_id:
+            try:
+                uuid.UUID(str(curso_id))
+            except ValueError:
+                return []
+            conds.append("d.curso_id = %s")
+            params.append(str(curso_id))
+        with get_db_cursor() as cur:
+            # LEFT JOIN: toda Disciplina aparece (nova = saldo 0) sem precisar de linha prévia no estoque.
+            cur.execute(
+                f"""
+                SELECT d.id AS disciplina_id, d.nome AS disciplina_nome, d.sku, d.semestre,
+                       d.ativo AS disciplina_ativa, c.id AS curso_id, c.nome AS curso_nome,
+                       COALESCE(e.quantidade, 0) AS quantidade, e.atualizado_em
+                  FROM disciplinas d
+                  LEFT JOIN cursos c ON c.id = d.curso_id
+                  LEFT JOIN estoque_livros e ON e.disciplina_id = d.id
+                  {_where(conds)}
+                 ORDER BY c.nome NULLS LAST, d.semestre NULLS LAST, d.ordem, d.nome
+                """,
+                tuple(params),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
+    @staticmethod
+    def _aplicar_movimento(cur: Any, disciplina_id: str, tipo: str, quantidade: int, usuario_id: Optional[str],
+                           observacao: Optional[str], pedido_id: Optional[str] = None) -> int:
+        """Atualiza o saldo e registra a movimentação na transação do cursor. Retorna o novo saldo.
+
+        entrada/baixa_envio: `quantidade` é a variação com sinal. ajuste: `quantidade` é o novo saldo.
+        """
+        cur.execute(
+            "INSERT INTO estoque_livros (disciplina_id, quantidade, atualizado_por) VALUES (%s, 0, %s) "
+            "ON CONFLICT (disciplina_id) DO NOTHING",
+            (disciplina_id, usuario_id),
+        )
+        cur.execute("SELECT quantidade FROM estoque_livros WHERE disciplina_id = %s FOR UPDATE", (disciplina_id,))
+        atual = int(cur.fetchone()["quantidade"] or 0)
+        novo = quantidade if tipo == "ajuste" else atual + quantidade
+        cur.execute(
+            "UPDATE estoque_livros SET quantidade = %s, atualizado_em = now(), atualizado_por = %s "
+            "WHERE disciplina_id = %s",
+            (novo, usuario_id, disciplina_id),
+        )
+        cur.execute(
+            """
+            INSERT INTO estoque_movimentacoes (disciplina_id, tipo, quantidade, saldo_apos, pedido_id,
+                                               usuario_id, observacao)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (disciplina_id, tipo, novo - atual, novo, pedido_id, usuario_id, observacao),
+        )
+        return novo
+
+    def movimentar_estoque(self, disciplina_id: str, tipo: str, quantidade: int, usuario_id: Optional[str],
+                           observacao: Optional[str]) -> Optional[Dict[str, Any]]:
+        try:
+            uuid.UUID(str(disciplina_id))
+        except ValueError:
+            return None
+        with get_db_cursor() as cur:
+            cur.execute("SELECT id FROM disciplinas WHERE id = %s", (str(disciplina_id),))
+            if cur.fetchone() is None:
+                return None
+            self._aplicar_movimento(cur, str(disciplina_id), tipo, quantidade, usuario_id, observacao)
+        itens = [i for i in self.list_estoque() if str(i["disciplina_id"]) == str(disciplina_id)]
+        return itens[0] if itens else None
+
+    def list_movimentacoes_estoque(self, disciplina_id: str, limite: int = 200) -> List[Dict[str, Any]]:
+        try:
+            uuid.UUID(str(disciplina_id))
+        except ValueError:
+            return []
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT m.*, p.numero AS pedido_numero,
+                       NULLIF(concat_ws(' ', u.nome, u.sobrenome), '') AS usuario_nome
+                  FROM estoque_movimentacoes m
+                  LEFT JOIN pedidos p ON p.id = m.pedido_id
+                  LEFT JOIN usuarios u ON u.id = m.usuario_id
+                 WHERE m.disciplina_id = %s
+                 ORDER BY m.criado_em DESC
+                 LIMIT %s
+                """,
+                (str(disciplina_id), limite),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
+    def baixar_estoque_envio(self, pedido_id: str, usuario_id: Optional[str], observacao: str) -> int:
+        with get_db_cursor() as cur:
+            # Item de livro pode não ter disciplina_id direto: usa a disciplina do produto.
+            # Disciplinas já baixadas para este pedido ficam de fora (não baixa duas vezes).
+            cur.execute(
+                """
+                SELECT COALESCE(pi.disciplina_id, pr.disciplina_id) AS disciplina_id,
+                       SUM(pi.quantidade)::int AS quantidade
+                  FROM pedidos_itens pi
+                  LEFT JOIN produtos pr ON pr.id = pi.produto_id
+                 WHERE pi.pedido_id = %s
+                   AND COALESCE(pi.disciplina_id, pr.disciplina_id) IS NOT NULL
+                   AND NOT EXISTS (
+                       SELECT 1 FROM estoque_movimentacoes m
+                        WHERE m.pedido_id = pi.pedido_id AND m.tipo = 'baixa_envio'
+                          AND m.disciplina_id = COALESCE(pi.disciplina_id, pr.disciplina_id)
+                   )
+                 GROUP BY 1
+                """,
+                (str(pedido_id),),
+            )
+            linhas = cur.fetchall()
+            for linha in linhas:
+                self._aplicar_movimento(cur, str(linha["disciplina_id"]), "baixa_envio", -int(linha["quantidade"]),
+                                        usuario_id, observacao, pedido_id=str(pedido_id))
+            return len(linhas)
 
     def catalogo_cursos(self) -> List[Dict[str, Any]]:
         with get_db_cursor() as cur:
@@ -970,10 +1156,13 @@ def _casa_periodo(
     escola_id = escopo.escola_id or filtros.escola_id
     if escola_id and registro.get("escola_id") != escola_id:
         return False
-    if filtros.status and campo_status and registro.get(campo_status) != filtros.status:
+    if filtros.status == "fila_envio" and campo_status:
+        if registro.get(campo_status) not in ("pago_aguardando_envio", "troca_solicitada"):
+            return False
+    elif filtros.status and campo_status and registro.get(campo_status) != filtros.status:
         return False
     if filtros.tipo == "com_envio":
-        if tipo not in ("livro", "kit"):
+        if tipo not in ("livro", "kit", "troca"):
             return False
     elif filtros.tipo and tipo != filtros.tipo:
         return False
@@ -1000,6 +1189,9 @@ class InMemoryFinanceiroRepository:
         self.gateway_configs: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self.gateway_clientes: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
         self.webhooks: Dict[str, Dict[str, Any]] = {}
+        self.estoque: Dict[str, Dict[str, Any]] = {}
+        self.estoque_movimentacoes: List[Dict[str, Any]] = []
+        self.troca_itens: List[Dict[str, Any]] = []
         self._seq = 0
 
     # produtos
@@ -1038,7 +1230,8 @@ class InMemoryFinanceiroRepository:
         return dict(p)
 
     # pedidos
-    def create_pedido(self, dados: Dict[str, Any], itens: List[Dict[str, Any]], usuario_id: Optional[str]) -> str:
+    def create_pedido(self, dados: Dict[str, Any], itens: List[Dict[str, Any]], usuario_id: Optional[str],
+                      troca_itens: Optional[List[Dict[str, Any]]] = None) -> str:
         pid = str(uuid.uuid4())
         self._seq += 1
         agora = _agora()
@@ -1054,6 +1247,8 @@ class InMemoryFinanceiroRepository:
         self.pedidos[pid] = pedido
         for item in itens:
             self.itens.append({"id": str(uuid.uuid4()), "pedido_id": pid, **item})
+        for linha in troca_itens or []:
+            self.troca_itens.append({"id": str(uuid.uuid4()), "pedido_id": pid, **linha})
         self.historico.append({
             "id": str(uuid.uuid4()), "pedido_id": pid, "status_de": None,
             "status_para": pedido["status"], "usuario_id": usuario_id,
@@ -1069,7 +1264,29 @@ class InMemoryFinanceiroRepository:
         if completo:
             p["historico"] = [dict(h) for h in self.historico if h["pedido_id"] == p["id"]]
             p["envios"] = [dict(e) for e in self.envios if e["pedido_id"] == p["id"]]
+            if p.get("tipo") == "troca":
+                nomes = self._disciplinas()
+                p["troca_itens"] = [
+                    {**t,
+                     "disciplina_devolver_nome": (nomes.get(t["disciplina_devolver_id"]) or {}).get("nome"),
+                     "disciplina_receber_nome": (nomes.get(t["disciplina_receber_id"]) or {}).get("nome")}
+                    for t in self.troca_itens if t["pedido_id"] == p["id"]
+                ]
         return p
+
+    def get_disciplinas(self, ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+        todas = self._disciplinas()
+        return {str(i): {"id": str(i), "nome": todas[str(i)].get("nome"), "ativo": bool(todas[str(i)].get("ativo", True))}
+                for i in ids if str(i) in todas}
+
+    def movimentar_estoque_troca(self, pedido_id: str, linhas: List[Dict[str, Any]], usuario_id: Optional[str],
+                                 observacao: str) -> None:
+        for linha in linhas:
+            q = int(linha["quantidade"])
+            self._aplicar_movimento(str(linha["disciplina_devolver_id"]), "troca_entrada", q, usuario_id, observacao,
+                                    pedido_id=str(pedido_id))
+            self._aplicar_movimento(str(linha["disciplina_receber_id"]), "troca_saida", -q, usuario_id, observacao,
+                                    pedido_id=str(pedido_id))
 
     def get_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]:
         p = self.pedidos.get(str(pedido_id))
@@ -1204,6 +1421,73 @@ class InMemoryFinanceiroRepository:
                 r["atualizado_em"] = _agora()
                 return self._regra_completa(r)
         return None
+
+    # estoque central
+    @staticmethod
+    def _disciplinas() -> Dict[str, Dict[str, Any]]:
+        from app.modules import cursos_disciplinas
+
+        return cursos_disciplinas._disciplinas_db
+
+    def list_estoque(self, q: Optional[str] = None, curso_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        termo = (q or "").strip().casefold()
+        itens = []
+        for did, d in self._disciplinas().items():
+            texto = f"{d.get('nome') or ''} {d.get('sku') or ''}".casefold()
+            if termo and termo not in texto:
+                continue
+            if curso_id and str(d.get("curso_id")) != str(curso_id):
+                continue
+            saldo = self.estoque.get(did, {})
+            itens.append({
+                "disciplina_id": did, "disciplina_nome": d.get("nome") or "", "sku": d.get("sku"),
+                "semestre": d.get("semestre"), "disciplina_ativa": bool(d.get("ativo", True)),
+                "curso_id": d.get("curso_id"), "curso_nome": None,
+                "quantidade": int(saldo.get("quantidade") or 0), "atualizado_em": saldo.get("atualizado_em"),
+            })
+        return sorted(itens, key=lambda i: i["disciplina_nome"])
+
+    def _aplicar_movimento(self, disciplina_id: str, tipo: str, quantidade: int, usuario_id: Optional[str],
+                           observacao: Optional[str], pedido_id: Optional[str] = None) -> int:
+        saldo = self.estoque.setdefault(disciplina_id, {"quantidade": 0})
+        atual = int(saldo["quantidade"])
+        novo = quantidade if tipo == "ajuste" else atual + quantidade
+        saldo.update(quantidade=novo, atualizado_em=_agora(), atualizado_por=usuario_id)
+        self.estoque_movimentacoes.append({
+            "id": str(uuid.uuid4()), "disciplina_id": disciplina_id, "tipo": tipo, "quantidade": novo - atual,
+            "saldo_apos": novo, "pedido_id": pedido_id, "usuario_id": usuario_id, "observacao": observacao,
+            "criado_em": _agora(),
+        })
+        return novo
+
+    def movimentar_estoque(self, disciplina_id: str, tipo: str, quantidade: int, usuario_id: Optional[str],
+                           observacao: Optional[str]) -> Optional[Dict[str, Any]]:
+        if str(disciplina_id) not in self._disciplinas():
+            return None
+        self._aplicar_movimento(str(disciplina_id), tipo, quantidade, usuario_id, observacao)
+        return next(i for i in self.list_estoque() if i["disciplina_id"] == str(disciplina_id))
+
+    def list_movimentacoes_estoque(self, disciplina_id: str, limite: int = 200) -> List[Dict[str, Any]]:
+        movs = [dict(m) for m in self.estoque_movimentacoes if m["disciplina_id"] == str(disciplina_id)]
+        for m in movs:
+            m["pedido_numero"] = (self.pedidos.get(str(m.get("pedido_id"))) or {}).get("numero")
+        return list(reversed(movs))[:limite]
+
+    def baixar_estoque_envio(self, pedido_id: str, usuario_id: Optional[str], observacao: str) -> int:
+        ja_baixadas = {m["disciplina_id"] for m in self.estoque_movimentacoes
+                       if m["pedido_id"] == str(pedido_id) and m["tipo"] == "baixa_envio"}
+        totais: Dict[str, int] = {}
+        for item in self.itens:
+            if item["pedido_id"] != str(pedido_id):
+                continue
+            produto = self.produtos.get(str(item.get("produto_id"))) or {}
+            disciplina_id = item.get("disciplina_id") or produto.get("disciplina_id")
+            if disciplina_id and str(disciplina_id) not in ja_baixadas:
+                totais[str(disciplina_id)] = totais.get(str(disciplina_id), 0) + int(item["quantidade"])
+        for disciplina_id, qtd in totais.items():
+            self._aplicar_movimento(disciplina_id, "baixa_envio", -qtd, usuario_id, observacao,
+                                    pedido_id=str(pedido_id))
+        return len(totais)
 
     # logística
     def registrar_envio(self, pedido_id: str, dados: Dict[str, Any], usuario_id: Optional[str]) -> str:

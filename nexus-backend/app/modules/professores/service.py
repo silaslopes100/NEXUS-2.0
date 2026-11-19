@@ -828,6 +828,7 @@ class ProfessoresService:
             usuario_id=str(row["usuario_id"]) if row.get("usuario_id") else None,
             nome=row.get("nome"),
             email=row.get("email"),
+            foto_url=row.get("foto_url"),
             polo_id=str(row["polo_id"]) if row.get("polo_id") else None,
             polo_nome=row.get("polo_nome"),
             escola_id=str(row["escola_id"]) if row.get("escola_id") else None,

@@ -60,7 +60,7 @@ def definir(preco: float, curso_id: Optional[str], so_sem_preco: bool) -> None:
     where = (" WHERE " + " AND ".join(conds)) if conds else ""
     with get_db_cursor() as cur:  # uma transação: preço + kits juntos
         cur.execute(f"UPDATE disciplinas SET preco = %s, atualizado_em = now(){where} "
-                    "RETURNING id, nome, preco, peso_livro_g, ativo", tuple(params))
+                    "RETURNING id, nome, preco, peso_livro_g, ativo, sku", tuple(params))
         linhas = cur.fetchall()
         for row in linhas:
             _sincronizar_kit(cur, dict(row))

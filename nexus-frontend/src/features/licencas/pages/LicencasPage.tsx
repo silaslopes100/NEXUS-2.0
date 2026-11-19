@@ -7,6 +7,7 @@ import {
   Loader2,
   Printer,
   RefreshCw,
+  Repeat,
   Shuffle,
   X,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import {
   DisciplinaSelect, paraDisciplinaId, TabelaEstoqueDisciplina, useDisciplinas, VALOR_SEM_DISCIPLINA,
 } from '@/features/licencas/components/EstoqueDisciplina';
 import { LicencasEscolaPage } from '@/features/licencas/pages/LicencasEscolaPage';
+import { TrocaLicencaModal } from '@/features/licencas/components/TrocaLicencaModal';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import { abrirPdf, erroDeBlob } from '@/lib/download';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
@@ -26,7 +28,7 @@ import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500';
 const labelCls = 'block space-y-1 text-sm text-slate-300';
 
-type Acao = 'distribuir' | 'liberar' | 'reclassificar';
+type Acao = 'distribuir' | 'liberar' | 'reclassificar' | 'trocar';
 interface Opcao { id: string; nome: string }
 
 const listaDe = (data: unknown): Opcao[] => {
@@ -136,6 +138,11 @@ const LicencasPolo: React.FC<{ isAdmin: boolean; poloDoUsuario: string }> = ({ i
           <button onClick={() => setAction('distribuir')} disabled={!poloId} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-on-accent disabled:opacity-50">
             <ArrowUpFromLine size={16} /> Distribuir
           </button>
+          {!isAdmin && (
+            <button onClick={() => setAction('trocar')} disabled={!poloId} className="inline-flex items-center gap-2 rounded-xl border border-blue-500/40 px-4 py-2.5 text-sm font-semibold text-blue-300 hover:bg-blue-500/10 disabled:opacity-50">
+              <Repeat size={16} /> Trocar licença
+            </button>
+          )}
         </div>
       </header>
 
@@ -235,6 +242,13 @@ const LicencasPolo: React.FC<{ isAdmin: boolean; poloDoUsuario: string }> = ({ i
           onConcluido={concluir}
         />
       )}
+      {action === 'trocar' && (
+        <TrocaLicencaModal
+          estoque={estoque}
+          onFechar={() => setAction(null)}
+          onConcluido={(pedido) => concluir(`Solicitação de troca ${pedido.numero} enviada ao administrador.`)}
+        />
+      )}
       {action === 'liberar' && (
         <ModalLiberar poloId={poloId} poloNome={polos.find((p) => p.id === poloId)?.nome} onFechar={() => setAction(null)} onConcluido={concluir} />
       )}
@@ -255,6 +269,9 @@ const ROTULO_MOVIMENTO: Record<string, string> = {
   devolucao_aluno_escola: 'Devolvida pelo aluno',
   reingresso_churn: 'Reingresso de aluno',
   reclassificacao: 'Disciplina definida',
+  troca_reserva: 'Reservada para troca',
+  troca_recebimento: 'Recebida na troca',
+  troca_estorno: 'Troca recusada (estorno)',
 };
 
 // ---------------------------------------------------------------------------

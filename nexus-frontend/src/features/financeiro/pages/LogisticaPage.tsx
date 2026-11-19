@@ -5,7 +5,7 @@ import { useAcessoModulo } from '@/features/financeiro/acesso';
 import { BotoesExportar } from '@/features/financeiro/components/BotoesExportar';
 import { STATUS_PEDIDO } from '@/features/financeiro/types';
 
-const STATUS_HISTORICO = (['aguardando_pagamento', 'pago_aguardando_envio', 'enviado', 'entregue', 'cancelado'] as const)
+const STATUS_HISTORICO = (['aguardando_pagamento', 'pago_aguardando_envio', 'enviado', 'entregue', 'troca_solicitada', 'troca', 'cancelado'] as const)
   .map((value) => ({ value, label: STATUS_PEDIDO[value].label }));
 
 /**
@@ -31,7 +31,7 @@ export const LogisticaPage: React.FC<{ modo: 'pendentes' | 'historico' }> = ({ m
         </div>
         <BotoesExportar
           recurso="pedidos"
-          filtrosFixos={pendentes ? { tipo: 'com_envio', status: 'pago_aguardando_envio' } : { tipo: 'com_envio' }}
+          filtrosFixos={pendentes ? { tipo: 'com_envio', status: 'fila_envio' } : { tipo: 'com_envio' }}
         />
       </header>
       {pendentes ? (
@@ -43,7 +43,7 @@ export const LogisticaPage: React.FC<{ modo: 'pendentes' | 'historico' }> = ({ m
         titulo={pendentes ? 'Aguardando envio' : 'Pedidos de livros'}
         podeAlterarStatus={acesso.financeiro}
         podeLogistica={acesso.logistica}
-        filtrosFixos={pendentes ? { tipo: 'com_envio', status: 'pago_aguardando_envio' } : { tipo: 'com_envio' }}
+        filtrosFixos={pendentes ? { tipo: 'com_envio', status: 'fila_envio' } : { tipo: 'com_envio' }}
       />
     </div>
   );

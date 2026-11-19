@@ -67,7 +67,7 @@ export const MembrosPainel: React.FC<Props> = ({ detalhe, meuId, onFechar, onAtu
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {detalhe.membros.map((m) => (
           <li key={m.id} className="flex items-center gap-3 border-b border-slate-800/60 px-4 py-2.5">
-            <Avatar nome={m.nome} fotoUrl={m.foto_url} tamanho="sm" />
+            <Avatar nome={m.nome} usuarioId={m.id} fotoUrl={m.foto_url} tamanho="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-white">{m.nome}{m.id === meuId && <span className="text-slate-500"> (você)</span>}</p>
               <p className="flex items-center gap-1 text-[11px] text-slate-400">

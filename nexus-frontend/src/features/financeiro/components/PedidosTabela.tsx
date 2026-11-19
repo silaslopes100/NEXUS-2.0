@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
 import { StatusPedidoBadge } from '@/features/financeiro/components/StatusPedidoBadge';
@@ -35,7 +36,17 @@ export const PedidosTabela: React.FC<Props> = ({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
-  const [selecionado, setSelecionado] = useState<string | null>(null);
+  // Link de notificação (?pedido=<id>) abre o detalhe direto.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selecionado, setSelecionado] = useState<string | null>(() => searchParams.get('pedido'));
+  const fecharDetalhe = () => {
+    setSelecionado(null);
+    if (searchParams.has('pedido')) {
+      const proximo = new URLSearchParams(searchParams);
+      proximo.delete('pedido');
+      setSearchParams(proximo, { replace: true });
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,10 +104,16 @@ export const PedidosTabela: React.FC<Props> = ({
                   </td>
                   <td className="p-4 text-xs">{formatData(p.criado_em)}</td>
                   {mostrarPolo && <td className="p-4 text-xs">{p.polo_nome || '-'}{p.escola_nome ? ` · ${p.escola_nome}` : ''}</td>}
-                  <td className="p-4 text-xs">{TIPO_PEDIDO[p.tipo]}</td>
+                  <td className="p-4 text-xs">
+                    {p.tipo === 'troca' ? (
+                      <span className="whitespace-nowrap rounded-full border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                        Troca de livro
+                      </span>
+                    ) : TIPO_PEDIDO[p.tipo]}
+                  </td>
                   <td className="p-4 text-center text-xs">{p.itens.reduce((s, i) => s + i.quantidade, 0)}</td>
                   <td className="p-4"><StatusPedidoBadge status={p.status} /></td>
-                  <td className="p-4 text-right font-semibold text-white">{formatBRL(p.valor_total)}</td>
+                  <td className="p-4 text-right font-semibold text-white">{p.tipo === 'troca' ? '—' : formatBRL(p.valor_total)}</td>
                 </tr>
               ))}
               {!items.length && (
@@ -120,7 +137,7 @@ export const PedidosTabela: React.FC<Props> = ({
           pedidoId={selecionado}
           podeAlterarStatus={podeAlterarStatus}
           podeLogistica={podeLogistica}
-          onClose={() => setSelecionado(null)}
+          onClose={fecharDetalhe}
           onAlterado={load}
         />
       )}

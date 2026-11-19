@@ -17,6 +17,7 @@ import { ProfessorModal } from '@/features/professores/components/ProfessorModal
 import { ProfessorDetalheModal } from '@/features/professores/components/ProfessorDetalheModal';
 import { LotacoesChips } from '@/features/professores/components/LotacoesChips';
 import { Professor, UnidadeOption } from '@/types/professor';
+import { UserAvatar } from '@/components/avatar/UserAvatar';
 
 const PAGE_SIZE = 20;
 
@@ -337,9 +338,12 @@ export const ProfessoresPage: React.FC = () => {
                   <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center text-on-accent font-bold text-xs shrink-0">
-                          {(p.nome || '?').charAt(0).toUpperCase()}
-                        </div>
+                        <UserAvatar
+                          usuarioId={p.usuario_id}
+                          fotoUrl={p.foto_url}
+                          nome={p.nome || '?'}
+                          className="w-8 h-8 rounded-lg text-xs shrink-0"
+                        />
                         <div>
                           <p className="font-semibold text-white">{p.nome || 'Sem vínculo'}</p>
                           <p className="text-[11px] text-slate-400">{p.email || '—'}</p>

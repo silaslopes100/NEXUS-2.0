@@ -32,8 +32,8 @@ REMETENTE_PADRAO: Dict[str, Any] = {
     "cep": "05207180",
 }
 CAMPOS_ENDERECO_POLO_OBRIGATORIOS = {"cep": "CEP", "logradouro": "logradouro", "cidade": "cidade", "uf": "UF"}
-STATUS_ETIQUETA = ("pago_aguardando_envio", "enviado", "entregue")
-TIPO_LABEL = {"livro": "Livro", "licenca": "Licença", "kit": "Disciplina (livro + licença)"}
+STATUS_ETIQUETA = ("pago_aguardando_envio", "enviado", "entregue", "troca_solicitada", "troca")
+TIPO_LABEL = {"livro": "Livro", "licenca": "Licença", "kit": "Disciplina (livro + licença)", "troca": "Troca de livro"}
 STATUS_LABEL = {
     "aguardando_pagamento": "Aguardando pagamento",
     "pago_aguardando_envio": "Pago - aguardando envio",
@@ -41,6 +41,8 @@ STATUS_LABEL = {
     "entregue": "Entregue",
     "concluido": "Concluído",
     "cancelado": "Cancelado",
+    "troca_solicitada": "Troca solicitada",
+    "troca": "Troca",
 }
 
 

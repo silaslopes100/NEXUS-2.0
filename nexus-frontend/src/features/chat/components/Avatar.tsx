@@ -1,15 +1,17 @@
 import React from 'react';
 import { Users } from 'lucide-react';
+import { UserAvatar } from '@/components/avatar/UserAvatar';
 import { iniciais } from '../utils';
 
 interface Props {
   nome?: string | null;
+  usuarioId?: string | null;
   fotoUrl?: string | null;
   grupo?: boolean;
   tamanho?: 'sm' | 'md';
 }
 
-export const Avatar: React.FC<Props> = ({ nome, fotoUrl, grupo, tamanho = 'md' }) => {
+export const Avatar: React.FC<Props> = ({ nome, usuarioId, fotoUrl, grupo, tamanho = 'md' }) => {
   const cls = tamanho === 'sm' ? 'h-8 w-8 text-[11px]' : 'h-10 w-10 text-xs';
   if (grupo) {
     return (
@@ -18,12 +20,14 @@ export const Avatar: React.FC<Props> = ({ nome, fotoUrl, grupo, tamanho = 'md' }
       </span>
     );
   }
-  if (fotoUrl) {
-    return <img src={fotoUrl} alt="" className={`${cls} shrink-0 rounded-full object-cover`} />;
-  }
   return (
-    <span className={`${cls} flex shrink-0 items-center justify-center rounded-full bg-nexus-yellow/15 font-semibold text-nexus-yellow`}>
-      {iniciais(nome)}
-    </span>
+    <UserAvatar
+      usuarioId={usuarioId}
+      fotoUrl={fotoUrl}
+      nome={nome}
+      className={`${cls} shrink-0 rounded-full`}
+      fallbackClassName="bg-nexus-yellow/15 font-semibold text-nexus-yellow"
+      fallbackTexto={iniciais(nome)}
+    />
   );
 };

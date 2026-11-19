@@ -59,6 +59,8 @@ export interface Disciplina {
   peso_livro_g?: number | null;
   /** Inativa: fora do catálogo de compra e do preço do Curso. */
   ativo?: boolean;
+  /** SKU do kit (livro + licença). */
+  sku?: string | null;
 }
 
 export interface DisciplinaInput {
@@ -73,6 +75,8 @@ export interface DisciplinaInput {
   preco?: number | null;
   peso_livro_g?: number | null;
   ativo?: boolean;
+  /** Vazio: gerado automaticamente. */
+  sku?: string | null;
 }
 
 export interface ProfessorVinculadoDisciplina {

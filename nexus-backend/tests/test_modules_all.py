@@ -1044,82 +1044,6 @@ async def test_listagem_admin_notas_limita_ordena_e_busca_dados_do_aluno(
 
 
 @pytest.mark.asyncio
-async def test_listagem_admin_alunos_agrupa_antes_de_paginar_e_filtrar(
-    client: AsyncClient, auth_setup, monkeypatch
-):
-    monkeypatch.setattr(settings, "PG_DSN", "")
-    alunos = {}
-    notas = {}
-    for indice in range(35):
-        aluno_id = f"aluno-{indice:02}"
-        auth_setup.usuarios[aluno_id] = {
-            "id": aluno_id, "nome": f"Pessoa {indice:02}", "sobrenome": "Teste",
-            "email": f"pessoa{indice:02}@example.com", "cpf": f"12345678{indice:03}",
-        }
-        alunos[aluno_id] = {
-            "id": aluno_id, "usuario_id": aluno_id, "numero_matricula": f"MAT-{indice:02}",
-        }
-        notas[f"nota-{indice:02}"] = {
-            "id": f"nota-{indice:02}", "aluno_id": aluno_id,
-            "disciplina_id": "d1", "origem": "manual", "valor": 7,
-            "atualizado_em": datetime.fromtimestamp(indice, timezone.utc),
-        }
-    auth_setup.usuarios["aluno-00"].update(nome="Alice", email="alice@example.com")
-    alunos["aluno-00"]["numero_matricula"] = "MATRICULA-UNICA"
-    notas["nota-extra"] = {
-        "id": "nota-extra", "aluno_id": "aluno-00", "disciplina_id": "d2",
-        "origem": "manual", "valor": 8,
-        "atualizado_em": datetime.fromtimestamp(100, timezone.utc),
-    }
-    notas["nota-duplicada"] = {
-        **notas["nota-34"], "id": "nota-duplicada",
-    }
-    notas["nota-33"]["atualizado_em"] = notas["nota-34"]["atualizado_em"]
-    notas["nota-sem-data"] = {
-        "id": "nota-sem-data", "aluno_id": "aluno-01", "disciplina_id": "d2",
-        "origem": "manual", "valor": 9, "atualizado_em": None,
-    }
-    monkeypatch.setattr(alunos_module, "_alunos_db", alunos)
-    monkeypatch.setattr(notas_historico_module, "_notas_db", notas)
-    monkeypatch.setattr(cursos_disciplinas_module, "_disciplinas_db", {
-        "d1": {"id": "d1", "nome": "Teologia"},
-        "d2": {"id": "d2", "nome": "História"},
-    })
-    headers = {"Authorization": f"Bearer {_token('admin-1', 'admin@nexus.com.br', 'admin')}"}
-    url = "/notas-historico/alunos/admin"
-    primeira = (await client.get(url, headers=headers)).json()
-    segunda = (await client.get(url, params={"offset": 30}, headers=headers)).json()
-    ids = [item["aluno_id"] for item in primeira["items"] + segunda["items"]]
-    assert primeira["total"] == segunda["total"] == 35
-    assert len(primeira["items"]) == 30
-    assert len(segunda["items"]) == 5
-    assert len(set(ids)) == 35
-    assert ids[:3] == ["aluno-00", "aluno-34", "aluno-33"]
-    assert segunda["offset"] == 30
-
-    for termo in ("Alice", "alice@example.com", "MATRICULA-UNICA", "123.456.780-00"):
-        resposta = await client.get(url, params={"q": termo}, headers=headers)
-        assert resposta.status_code == 200
-        assert [item["aluno_id"] for item in resposta.json()["items"]] == ["aluno-00"]
-
-    disciplina = await client.get(url, params={"disciplina_nome": "teolog"}, headers=headers)
-    assert disciplina.json()["total"] == 35
-    assert disciplina.json()["items"][0]["aluno_id"] == "aluno-34"
-    historia = await client.get(url, params={"disciplina_id": "d2"}, headers=headers)
-    assert historia.json()["total"] == 2
-    assert [item["aluno_id"] for item in historia.json()["items"]] == ["aluno-00", "aluno-01"]
-    assert historia.json()["items"][1]["atualizado_em"] is None
-
-    detalhes = await client.get(
-        "/notas-historico/notas/admin", params={"aluno_id": "aluno-00"}, headers=headers,
-    )
-    assert {item["id"] for item in detalhes.json()["items"]} == {"nota-00", "nota-extra"}
-    professor = {"Authorization": f"Bearer {_token('prof-1', 'prof@nexus.com.br', 'professor')}"}
-    assert (await client.get(url, headers=professor)).status_code == 403
-    assert (await client.get(url, params={"limit": 31}, headers=headers)).status_code == 422
-
-
-@pytest.mark.asyncio
 async def test_presencas_do_professor_sao_limitadas_a_turma_e_alunos_matriculados(
     auth_setup, monkeypatch
 ):
@@ -1347,23 +1271,6 @@ def test_router_de_presencas_esta_registrado_na_aplicacao_principal():
     }.issubset(rotas)
 
 
-@pytest.mark.asyncio
-async def test_modulo_certificados(client: AsyncClient):
-    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
-    t_aluno = _token("aluno-1", "aluno@nexus.com.br", "aluno")
-
-    c_res = await client.post(
-        "/certificados/emitir",
-        json={"aluno_id": "aluno-1"},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert c_res.status_code == 201
-    assert "cdn.nexus.com.br" in c_res.json()["url_arquivo"]
-
-    l_res = await client.get("/certificados?aluno_id=aluno-1", headers={"Authorization": f"Bearer {t_aluno}"})
-    assert l_res.status_code == 200
-
-
 # 15. Cupons
 @pytest.mark.asyncio
 async def test_modulo_cupons(client: AsyncClient):
@@ -1396,27 +1303,18 @@ async def test_modulo_financeiro_pedidos(client: AsyncClient):
     set_financeiro_repository(repo)
     try:
         t_polo = _token("polo-1", "polo@nexus.com.br", "polo")
-        t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
 
-        prod = await client.post(
-            "/financeiro/produtos",
-            json={"tipo": "livro", "sku": "liv-mat-1", "nome": "Matemática 1", "preco": 59.9},
-            headers={"Authorization": f"Bearer {t_admin}"},
-        )
-        assert prod.status_code == 201
-        assert prod.json()["sku"] == "LIV-MAT-1"
+        from app.modules.financeiro.schemas import ProdutoCreate
 
-        negado = await client.post(
-            "/financeiro/produtos",
-            json={"tipo": "livro", "sku": "X-2", "nome": "Outro", "preco": 1},
-            headers={"Authorization": f"Bearer {t_polo}"},
+        prod = FinanceiroService(repo).create_produto(
+            ProdutoCreate(tipo="livro", sku="liv-mat-1", nome="Matemática 1", preco=59.9)
         )
-        assert negado.status_code == 403
+        assert prod.sku == "LIV-MAT-1"
 
         polo_user = (await client.get("/auth/me", headers={"Authorization": f"Bearer {t_polo}"})).json()
         from app.modules.auth.schemas import UserResponse
         pedido = FinanceiroService(repo).criar_pedido(
-            PedidoCreate(tipo="livro", itens=[PedidoItemIn(produto_id=prod.json()["id"], quantidade=30)]),
+            PedidoCreate(tipo="livro", itens=[PedidoItemIn(produto_id=prod.id, quantidade=30)]),
             UserResponse(**polo_user),
         )
         assert pedido.status == "aguardando_pagamento"

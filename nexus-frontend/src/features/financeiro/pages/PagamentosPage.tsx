@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, ExternalLink, Loader2, Package, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { PeriodoFiltros, useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
 import { BotoesExportar } from '@/features/financeiro/components/BotoesExportar';
@@ -56,9 +56,6 @@ export const PagamentosPage: React.FC = () => {
           <BotoesExportar recurso="pagamentos" />
           <Link to="/admin/gateways" className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:text-white">
             <ShieldCheck size={16} /> Gateways
-          </Link>
-          <Link to="/admin/produtos" className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:text-white">
-            <Package size={16} /> Produtos & Preços
           </Link>
         </div>
       </header>

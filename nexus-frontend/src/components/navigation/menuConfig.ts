@@ -10,7 +10,7 @@ import {
   UserRound,
   Laptop,
   Award,
-  FileCheck2,
+  Package,
   Clock,
   Key,
   CreditCard,
@@ -123,20 +123,9 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'Notas & Histórico Unificado',
-          path: '/admin/notas-historico',
-          icon: Award,
-        },
-        {
           title: 'Presenças & Frequência',
           path: '/admin/presencas',
           icon: Clock,
-        },
-        {
-          title: 'Certificados & Diplomas',
-          path: '/admin/certificados',
-          icon: FileCheck2,
-          isPlaceholder: true,
         },
       ],
     },
@@ -200,6 +189,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Histórico de pedidos',
           path: '/admin/logistica/historico',
           icon: History,
+        },
+        {
+          title: 'Estoque',
+          path: '/admin/estoque',
+          icon: Package,
         },
       ],
     },
@@ -318,12 +312,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Turmas & Horários',
           path: '/polo/turmas',
           icon: CalendarDays,
-          isPlaceholder: true,
-        },
-        {
-          title: 'Certificados Emitidos',
-          path: '/polo/certificados',
-          icon: FileCheck2,
           isPlaceholder: true,
         },
         {
@@ -527,13 +515,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Frequência & Presença',
           path: '/aluno/presenca',
           icon: Clock,
-          isPlaceholder: true,
-        },
-        {
-          title: 'Meus Certificados',
-          path: '/aluno/certificados',
-          icon: FileCheck2,
-          isPlaceholder: true,
         },
         {
           title: 'Material Didático & Livros',

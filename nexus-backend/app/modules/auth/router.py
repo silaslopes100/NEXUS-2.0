@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.responses import Response
 
@@ -184,4 +184,35 @@ async def get_my_photo(
         content=content,
         media_type=perfil_aluno._photo_media_type(filename),
         headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.get(
+    "/usuarios/{usuario_id}/foto",
+    summary="Retorna a foto de perfil de um usuário (avatar em Chat, listas etc.)",
+)
+async def get_usuario_foto(
+    usuario_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+) -> Response:
+    """Disponível a qualquer usuário logado; 404 quando o usuário não tem foto."""
+    import uuid
+
+    from app.modules.alunos import perfil as perfil_aluno
+
+    try:
+        uuid.UUID(usuario_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Foto de perfil não encontrada")
+
+    with perfil_aluno.get_db_cursor() as cur:
+        cur.execute("SELECT foto_url FROM usuarios WHERE id = %s", (usuario_id,))
+        row = cur.fetchone()
+
+    filename = row.get("foto_url") if row else None
+    content = await perfil_aluno._read_photo(filename)
+    return Response(
+        content=content,
+        media_type=perfil_aluno._photo_media_type(filename),
+        headers={"Cache-Control": "private, max-age=300"},
     )

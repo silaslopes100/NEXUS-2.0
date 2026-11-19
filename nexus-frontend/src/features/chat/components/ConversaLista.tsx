@@ -67,7 +67,7 @@ export const ConversaLista: React.FC<Props> = ({ conversas, selecionadaId, meuId
             return (
               <button key={c.id} type="button" onClick={() => onSelecionar(c.id)}
                 className={`flex w-full items-center gap-3 border-b border-slate-800/60 px-3 py-3 text-left transition-colors ${ativa ? 'bg-slate-800/80' : 'hover:bg-slate-800/40'}`}>
-                <Avatar nome={c.titulo} fotoUrl={c.outro?.foto_url} grupo={c.tipo === 'grupo'} />
+                <Avatar nome={c.titulo} usuarioId={c.outro?.id} fotoUrl={c.outro?.foto_url} grupo={c.tipo === 'grupo'} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className={`truncate text-sm ${c.nao_lidas ? 'font-semibold text-white' : 'font-medium text-slate-200'}`}>

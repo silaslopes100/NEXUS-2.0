@@ -405,7 +405,7 @@ export const AlunosPage: React.FC = () => {
           }}
         />
       )}
-      {boletimId && <BoletimModal alunoId={boletimId} onClose={() => setBoletimId(null)} />}
+      {boletimId && <BoletimModal alunoId={boletimId} podeEditar={isAdmin} onClose={() => setBoletimId(null)} />}
       {gerandoMatricula && (
         <GerarMatriculaModal
           aluno={gerandoMatricula}

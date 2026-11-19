@@ -5,8 +5,8 @@ import { Pedido, erroApi, formatData, tipoComEnvio } from '@/features/financeiro
 import { abrirPdf, erroDeBlob, nomeDoArquivo } from '@/lib/download';
 
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500';
-const STATUS_FINAIS = ['enviado', 'entregue', 'concluido', 'cancelado'];
-const STATUS_ETIQUETA = ['pago_aguardando_envio', 'enviado', 'entregue'];
+const STATUS_FINAIS = ['enviado', 'entregue', 'concluido', 'cancelado', 'troca'];
+const STATUS_ETIQUETA = ['pago_aguardando_envio', 'enviado', 'entregue', 'troca_solicitada', 'troca'];
 
 interface Props {
   pedido: Pedido;

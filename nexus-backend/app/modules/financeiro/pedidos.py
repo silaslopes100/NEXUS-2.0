@@ -14,6 +14,9 @@ TRANSICOES: Dict[str, FrozenSet[str]] = {
     "entregue": frozenset(),
     "concluido": frozenset(),
     "cancelado": frozenset(),
+    # Troca de licença/livro: o Admin efetua (troca) ou recusa (cancelado).
+    "troca_solicitada": frozenset({"troca", "cancelado"}),
+    "troca": frozenset(),
 }
 
 # Timestamp preenchido ao entrar em cada status.
@@ -23,6 +26,7 @@ TIMESTAMP_DO_STATUS: Dict[str, str] = {
     "enviado": "enviado_em",
     "entregue": "entregue_em",
     "cancelado": "cancelado_em",
+    "troca": "entregue_em",
 }
 
 CENTAVOS = Decimal("0.01")
@@ -43,7 +47,7 @@ def validar_transicao(de: str, para: str) -> None:
 
 # "kit" = Disciplina (1 livro físico + 1 licença por unidade). É o produto vendido a partir da
 # migração 021; "livro" e "licenca" ficam para o histórico.
-TIPOS_COM_ENVIO: FrozenSet[str] = frozenset({"livro", "kit"})        # passam pela logística
+TIPOS_COM_ENVIO: FrozenSet[str] = frozenset({"livro", "kit", "troca"})  # passam pela logística
 TIPOS_COM_LICENCA: FrozenSet[str] = frozenset({"licenca", "kit"})    # creditam licenças ao pagar
 
 # Status que não fazem sentido para cada tipo de pedido.
@@ -51,7 +55,16 @@ STATUS_INVALIDOS_POR_TIPO: Dict[str, FrozenSet[str]] = {
     "livro": frozenset({"concluido"}),  # livro termina em 'entregue'
     "kit": frozenset({"concluido"}),    # kit também termina na entrega do livro
     "licenca": frozenset({"pago_aguardando_envio", "enviado", "entregue"}),  # sem logística
+    # Troca: só troca_solicitada -> troca | cancelado (endpoints próprios).
+    "troca": frozenset({"pago_aguardando_envio", "enviado", "entregue", "concluido"}),
 }
+
+# Status de quem aguarda a logística ("Pendentes de envio"): venda paga ou troca solicitada.
+STATUS_FILA_ENVIO: FrozenSet[str] = frozenset({"pago_aguardando_envio", "troca_solicitada"})
+
+
+def eh_troca(tipo: str) -> bool:
+    return tipo == "troca"
 
 
 def tem_envio(tipo: str) -> bool:

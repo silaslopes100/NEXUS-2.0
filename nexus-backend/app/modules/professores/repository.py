@@ -12,7 +12,7 @@ from psycopg2 import sql
 from app.core.database import get_db_cursor
 
 _SELECT_BASE = """
-    SELECT prof.*, u.nome, u.email,
+    SELECT prof.*, u.nome, u.email, u.foto_url,
            p.nome AS polo_nome, e.nome AS escola_nome,
            COALESCE(vinculos.disciplina_ids, ARRAY[]::text[]) AS disciplina_ids,
            COALESCE(vinculos.disciplina_nomes, ARRAY[]::text[]) AS disciplina_nomes,

@@ -85,6 +85,7 @@ class DisciplinaSchema(BaseModel):
     preco: Optional[float] = Field(default=None, ge=0)  # preço do kit (livro + licença), R$
     peso_livro_g: Optional[int] = Field(default=None, ge=0)
     ativo: bool = True  # inativa: fora do catálogo de compra e do preço do Curso
+    sku: Optional[str] = None
 
 
 class DisciplinaWriteSchema(BaseModel):
@@ -101,6 +102,14 @@ class DisciplinaWriteSchema(BaseModel):
     preco: Optional[float] = Field(default=None, ge=0, le=9_999_999_999.99)
     peso_livro_g: Optional[int] = Field(default=None, ge=0, le=100000)  # etiqueta/frete
     ativo: bool = True
+    # SKU do kit. Vazio: gerado automaticamente (KIT-<id da disciplina>).
+    sku: Optional[str] = Field(default=None, max_length=64)
+
+    @field_validator("sku")
+    @classmethod
+    def _normalizar_sku(cls, valor: Optional[str]) -> Optional[str]:
+        valor = (valor or "").strip().upper()
+        return valor or None
 
     @field_validator("preco")
     @classmethod
@@ -418,7 +427,7 @@ async def list_disciplinas(
         return discs
 
     sql = ("SELECT id, curso_id, semestre, nome, ordem, carga_horaria, qtd_aulas_prevista, tipo, eh_extra_grade, "
-           "preco, peso_livro_g, ativo FROM disciplinas")
+           "preco, peso_livro_g, ativo, sku FROM disciplinas")
     conds = []
     params = []
     if ativo is not None:
@@ -504,18 +513,20 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
     new_id = str(uuid.uuid4())
     d_dict = dados.model_dump()
     d_dict["id"] = new_id
+    d_dict["sku"] = dados.sku or sku_padrao(new_id)
     if not settings.PG_DSN:
+        _exigir_sku_livre_memoria(d_dict["sku"], new_id)
         _disciplinas_db[new_id] = d_dict
         return d_dict
 
     sql = """
         INSERT INTO disciplinas (
             id, curso_id, semestre, nome, ordem, carga_horaria,
-            qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, criado_em, atualizado_em
+            qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku, criado_em, atualizado_em
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku
     """
     params = (
         new_id,
@@ -530,8 +541,10 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
         dados.preco,
         dados.peso_livro_g,
         dados.ativo,
+        d_dict["sku"],
     )
     with get_db_cursor() as cur:
+        _exigir_sku_livre(cur, d_dict["sku"], new_id)
         cur.execute(sql, params)
         row = cur.fetchone()
         if row is None:
@@ -552,6 +565,8 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         current = _disciplinas_db.get(uid)
         if current is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
+        updated["sku"] = dados.sku or current.get("sku") or sku_padrao(uid)
+        _exigir_sku_livre_memoria(updated["sku"], uid)
         current.update(updated)
         return current
 
@@ -559,10 +574,11 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         UPDATE disciplinas
         SET curso_id = %s, semestre = %s, nome = %s, ordem = %s,
             carga_horaria = %s, qtd_aulas_prevista = %s, tipo = %s,
-            eh_extra_grade = %s, preco = %s, peso_livro_g = %s, ativo = %s, atualizado_em = now()
+            eh_extra_grade = %s, preco = %s, peso_livro_g = %s, ativo = %s,
+            sku = COALESCE(%s, sku), atualizado_em = now()
         WHERE id = %s
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku
     """
     params = (
         dados.curso_id,
@@ -576,9 +592,12 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         dados.preco,
         dados.peso_livro_g,
         dados.ativo,
+        dados.sku,
         uid,
     )
     with get_db_cursor() as cur:
+        if dados.sku:
+            _exigir_sku_livre(cur, dados.sku, uid)
         cur.execute(sql, params)
         row = cur.fetchone()
         if row is None:
@@ -639,6 +658,37 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def sku_padrao(disciplina_id: str) -> str:
+    """SKU gerado quando o admin não informa um (mesmo formato usado desde a criação dos kits)."""
+    return f"KIT-{str(disciplina_id).replace('-', '').upper()}"
+
+
+SKU_EM_USO_DETAIL = "SKU já usado por outra disciplina ou produto."
+
+
+def _exigir_sku_livre(cur: Any, sku: str, disciplina_id: str) -> None:
+    """O SKU é único entre as Disciplinas e no catálogo interno de produtos (o kit é espelhado lá)."""
+    cur.execute(
+        """
+        SELECT
+            EXISTS (SELECT 1 FROM disciplinas WHERE sku = %s AND id <> %s)
+            OR EXISTS (
+                SELECT 1 FROM produtos
+                WHERE sku = %s AND NOT (tipo = 'kit' AND disciplina_id = %s)
+            ) AS em_uso
+        """,
+        (sku, disciplina_id, sku, disciplina_id),
+    )
+    row = cur.fetchone()
+    if row and row["em_uso"]:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=SKU_EM_USO_DETAIL)
+
+
+def _exigir_sku_livre_memoria(sku: str, disciplina_id: str) -> None:
+    if any(d.get("sku") == sku and did != disciplina_id for did, d in _disciplinas_db.items()):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=SKU_EM_USO_DETAIL)
+
+
 def _sincronizar_kit(cur: Any, disciplina: Dict[str, Any]) -> None:
     """Mantém o produto "kit" (1 livro + 1 licença) espelhando a Disciplina: fonte única do preço.
 
@@ -652,10 +702,10 @@ def _sincronizar_kit(cur: Any, disciplina: Dict[str, Any]) -> None:
         INSERT INTO produtos (tipo, sku, nome, disciplina_id, preco, peso_g, ativo)
         VALUES ('kit', %s, %s, %s, %s, %s, %s)
         ON CONFLICT (disciplina_id) WHERE tipo = 'kit'
-        DO UPDATE SET nome = EXCLUDED.nome, preco = EXCLUDED.preco, peso_g = EXCLUDED.peso_g,
-                      ativo = EXCLUDED.ativo, atualizado_em = now()
+        DO UPDATE SET sku = EXCLUDED.sku, nome = EXCLUDED.nome, preco = EXCLUDED.preco,
+                      peso_g = EXCLUDED.peso_g, ativo = EXCLUDED.ativo, atualizado_em = now()
         """,
-        (f"KIT-{disciplina_id.replace('-', '').upper()}", nome, disciplina_id, preco or 0, disciplina.get("peso_livro_g"),
+        (disciplina.get("sku") or sku_padrao(disciplina_id), nome, disciplina_id, preco or 0, disciplina.get("peso_livro_g"),
          preco is not None and float(preco) > 0 and bool(disciplina.get("ativo", True))),
     )
 

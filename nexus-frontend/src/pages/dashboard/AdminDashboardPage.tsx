@@ -250,7 +250,7 @@ const AtividadeDocentePainel: React.FC<{
           {atividade.top_disciplinas.map((d) => (
             <li key={d.id}>
               <Link
-                to={`/admin/disciplinas/${d.id}/aulas?de=${inicioPeriodo}`}
+                to={`/admin/aulas?disciplina=${d.id}&de=${inicioPeriodo}`}
                 className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-300 hover:text-white"
               >
                 <span className="truncate">{d.nome}</span>
