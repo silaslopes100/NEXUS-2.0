@@ -725,9 +725,9 @@ class PostgresProfessoresRepository:
         params: List[Any] = []
 
         if search and search.strip():
-            conds.append("(lower(u.nome) LIKE %s OR lower(u.sobrenome) LIKE %s OR lower(u.email) LIKE %s)")
+            conds.append("(lower(concat_ws(' ', u.nome, u.sobrenome)) LIKE %s OR lower(u.email) LIKE %s)")
             like = f"%{search.strip().lower()}%"
-            params.extend([like, like, like])
+            params.extend([like, like])
         if polo_id:
             conds.append(
                 "EXISTS (SELECT 1 FROM professor_lotacoes lotacao "
@@ -1627,7 +1627,7 @@ class InMemoryProfessoresRepository:
             items = [
                 p
                 for p in items
-                if termo in str(p.get("nome") or "").lower()
+                if termo in f"{p.get('nome') or ''} {p.get('sobrenome') or ''}".strip().lower()
                 or termo in str(p.get("email") or "").lower()
             ]
         if polo_id:

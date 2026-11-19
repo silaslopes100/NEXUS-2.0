@@ -1224,7 +1224,8 @@ class PostgresPolosEscolasRepository:
         params: List[Any] = [str(polo_id)]
         if q:
             conds.append(
-                "(lower(u.nome) LIKE %s OR lower(u.email) LIKE %s OR lower(a.numero_matricula) LIKE %s "
+                "(lower(concat_ws(' ', u.nome, u.sobrenome)) LIKE %s OR lower(u.email) LIKE %s "
+                "OR lower(a.numero_matricula) LIKE %s "
                 "OR regexp_replace(coalesce(u.cpf,''), '[^0-9]', '', 'g') LIKE %s)"
             )
             like = f"%{q.lower()}%"

@@ -138,8 +138,11 @@ class PostgresAdminRepository:
 
         if query:
             q = f"%{query.strip().lower()}%"
-            conditions.append("(lower(u.nome) LIKE %s OR lower(u.sobrenome) LIKE %s OR lower(u.email) LIKE %s OR u.cpf LIKE %s)")
-            params.extend([q, q, q, q])
+            # Nome completo: "Silas Lopes" casa com nome="Silas" + sobrenome="Lopes".
+            conditions.append(
+                "(lower(concat_ws(' ', u.nome, u.sobrenome)) LIKE %s OR lower(u.email) LIKE %s OR u.cpf LIKE %s)"
+            )
+            params.extend([q, q, q])
 
         if perfil_id:
             conditions.append("u.perfil_id = %s")
@@ -778,8 +781,7 @@ class InMemoryAdminRepository:
             q = query.strip().lower()
             filtered = [
                 u for u in filtered
-                if q in (u.get("nome") or "").lower()
-                or q in (u.get("sobrenome") or "").lower()
+                if q in f"{u.get('nome') or ''} {u.get('sobrenome') or ''}".strip().lower()
                 or q in (u.get("email") or "").lower()
                 or q in (u.get("cpf") or "").lower()
             ]
