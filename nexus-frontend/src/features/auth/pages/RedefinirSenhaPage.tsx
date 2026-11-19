@@ -85,7 +85,7 @@ export const RedefinirSenhaPage: React.FC = () => {
 
           <button
             onClick={() => navigate('/auth/login')}
-            className="w-full py-3 px-4 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full py-3 px-4 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <span>Ir para o Login</span>
             <ArrowRight className="w-4 h-4" />
@@ -199,7 +199,7 @@ export const RedefinirSenhaPage: React.FC = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3 px-4 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all duration-200 transform active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer mt-2"
+            className="w-full py-3 px-4 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-ink font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all duration-200 transform active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer mt-2"
           >
             {isSubmitting ? (
               <>

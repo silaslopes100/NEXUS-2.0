@@ -306,12 +306,11 @@ export const PolosEscolasPage: React.FC = () => {
   return <div className="max-w-7xl space-y-6">
     <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center">
       <div>
-        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-blue-400">Estrutura regional</p>
         <h1 className="text-3xl font-extrabold text-white">Polos e escolas</h1>
         <p className="mt-1 text-sm text-slate-400">Cadastros, responsáveis e visão operacional por unidade.</p>
       </div>
       <div className="flex gap-2">
-        {isAdmin && <button onClick={() => { setErroModal(''); setModal('polo'); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"><Plus size={16} /> Novo polo</button>}
+        {isAdmin && <button onClick={() => { setErroModal(''); setModal('polo'); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500"><Plus size={16} /> Novo polo</button>}
         <button onClick={() => {
           setErroModal('');
           setEscolaForm((form) => ({ ...form, polo_id: user?.polo_id || selectedPolo?.id || '', secretario_usuario_id: '' }));
@@ -322,7 +321,7 @@ export const PolosEscolasPage: React.FC = () => {
             void loadPolos('');
           }
           setModal('escola');
-        }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"><Plus size={16} /> Nova escola</button>
+        }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-indigo-500"><Plus size={16} /> Nova escola</button>
       </div>
     </header>
 
@@ -345,7 +344,7 @@ export const PolosEscolasPage: React.FC = () => {
                 }}
               />
             </div>
-            <button onClick={handleSearch} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-500">Buscar</button>
+            <button onClick={handleSearch} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-on-accent hover:bg-blue-500">Buscar</button>
             <button title="Recarregar" onClick={() => loadPolos(query)} className="rounded-xl border border-slate-800 bg-slate-900 px-3 text-slate-300 hover:text-white"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /></button>
           </div>
         </div>
@@ -482,7 +481,7 @@ export const PolosEscolasPage: React.FC = () => {
                       <td className="p-4">{escola.endereco?.cidade || '—'} / {escola.endereco?.estado || '--'}</td>
                       <td className="p-4">{escola.secretario_nome || 'Não informado'}</td>
                       <td className="p-4 text-right">
-                        <button type="button" onClick={(event) => { event.stopPropagation(); abrirEscola(escola); }} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500">Detalhes</button>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); abrirEscola(escola); }} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-blue-500">Detalhes</button>
                         <button type="button" onClick={(event) => { event.stopPropagation(); setEditEscola(escola); }} className="ml-2 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Escola"><Edit2 size={15} /></button>
                       </td>
                     </tr>)}
@@ -567,7 +566,7 @@ export const PolosEscolasPage: React.FC = () => {
           {/* Footer do drawer */}
           <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-800 bg-slate-900/95 p-4 backdrop-blur">
             <button onClick={fecharEscola} className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800">Fechar</button>
-            <button onClick={() => { setEditEscola(escolaSelecionada); fecharEscola(); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"><Edit2 size={14} /> Editar escola</button>
+            <button onClick={() => { setEditEscola(escolaSelecionada); fecharEscola(); }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500"><Edit2 size={14} /> Editar escola</button>
           </div>
         </div>
       </div>
@@ -622,7 +621,7 @@ export const PolosEscolasPage: React.FC = () => {
         )}
         <div className="flex justify-end gap-2 pt-4">
           <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800">Cancelar</button>
-          <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar'}</button>
+          <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar'}</button>
         </div>
       </form>
     </div>}

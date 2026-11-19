@@ -242,7 +242,7 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
           <button
             type="submit"
             disabled={salvando || carregando || !professores.length || !disciplinasDoCurso.length || jaVinculado}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2 text-xs font-bold text-slate-950 hover:bg-nexus-yellow-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2 text-xs font-bold text-ink hover:bg-nexus-yellow-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {salvando && <Loader2 className="h-4 w-4 animate-spin" />}
             Vincular

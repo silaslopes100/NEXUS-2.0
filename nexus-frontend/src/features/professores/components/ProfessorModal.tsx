@@ -656,7 +656,7 @@ export const ProfessorModal: React.FC<Props> = ({ polos, professor, onClose, onS
             <button
               type="submit"
               disabled={isSaving || carregandoDisciplinas || Boolean(erroDisciplinas)}
-              className="px-5 py-2.5 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="px-5 py-2.5 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>{professor ? 'Salvar Alterações' : 'Cadastrar Professor'}</span>

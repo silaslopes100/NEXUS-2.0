@@ -12,7 +12,6 @@ import {
   MapPin,
   Plus,
   Search,
-  School,
   UserCheck,
   Users,
   X,
@@ -268,9 +267,6 @@ export const EscolasPage: React.FC = () => {
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-indigo-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
-            <School size={16} /> Gestão de unidades
-          </p>
           <h1 className="text-3xl font-extrabold text-white">Escolas</h1>
           <p className="mt-1 text-sm text-slate-400">Cadastre, consulte e gerencie as escolas da rede.</p>
         </div>
@@ -281,7 +277,7 @@ export const EscolasPage: React.FC = () => {
             setCreateError('');
             setCreateOpen(true);
           }}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-indigo-500"
         >
           <Plus size={16} /> Cadastrar escola
         </button>
@@ -313,7 +309,7 @@ export const EscolasPage: React.FC = () => {
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 py-2 pl-9 pr-3 text-sm text-white outline-none focus:border-indigo-500"
               />
             </div>
-            <button type="submit" className="rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white">Buscar</button>
+            <button type="submit" className="rounded-xl bg-blue-600 px-4 text-sm font-semibold text-on-accent">Buscar</button>
           </form>
           <select
             value={statusFilter}
@@ -416,7 +412,7 @@ export const EscolasPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate(`${isAdmin ? '/admin' : '/polo'}/escolas/${selectedSchool.id}/licencas`)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-500"
+                  className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-amber-500"
                 >
                   <KeyRound size={16} /> Gestão de licenças da escola
                 </button>
@@ -458,7 +454,7 @@ export const EscolasPage: React.FC = () => {
             </div>
             {cepLookup.message && <p role={cepLookup.status === 'error' ? 'alert' : 'status'} className={`text-xs ${cepLookup.status === 'error' ? 'text-red-300' : 'text-slate-400'}`}>{cepLookup.message}</p>}
             <SecretarioEscolaFields poloId={form.polo_id} values={form} onChange={(update) => setForm((current) => ({ ...current, ...update }))} />
-            <div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateOpen(false)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving && <Loader2 className="animate-spin" size={15} />}Cadastrar</button></div>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateOpen(false)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-on-accent disabled:opacity-50">{saving && <Loader2 className="animate-spin" size={15} />}Cadastrar</button></div>
           </form>
         </div>
       )}

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowLeftRight,
   CheckCircle2,
   Clock,
   Loader2,
@@ -120,10 +119,6 @@ export const TransferenciasPage: React.FC<Props> = ({ modo }) => {
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-300">
-            <ArrowLeftRight size={16} />
-            Movimentação de alunos
-          </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
             {modoAluno ? 'Minhas Transferências' : 'Transferências'}
           </h1>
@@ -138,7 +133,7 @@ export const TransferenciasPage: React.FC<Props> = ({ modo }) => {
               setSucesso('');
               setSolicitando(true);
             }}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500"
           >
             <Plus size={17} />
             Nova solicitação

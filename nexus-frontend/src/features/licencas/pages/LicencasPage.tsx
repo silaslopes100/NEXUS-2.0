@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, ArrowUpFromLine, CheckCircle2, Gift, KeyRound, Loader2, Printer, RefreshCw, Shuffle, X,
+  AlertTriangle,
+  ArrowUpFromLine,
+  CheckCircle2,
+  Gift,
+  Loader2,
+  Printer,
+  RefreshCw,
+  Shuffle,
+  X,
 } from 'lucide-react';
 import { cursosApi, Curso, Disciplina } from '@/features/cursos/api';
 import {
@@ -107,7 +115,6 @@ const LicencasPolo: React.FC<{ isAdmin: boolean; poloDoUsuario: string }> = ({ i
     <div className="max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-amber-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-300"><KeyRound size={15} /> Licenças</p>
           <h1 className="text-3xl font-extrabold text-white">Minhas Licenças</h1>
           <p className="mt-1 text-sm text-slate-400">Saldo por disciplina e entrega de licenças para Escolas ou diretamente aos alunos de uma turma.</p>
           {isAdmin && (
@@ -122,11 +129,11 @@ const LicencasPolo: React.FC<{ isAdmin: boolean; poloDoUsuario: string }> = ({ i
         </div>
         <div className="flex flex-wrap gap-2">
           {isAdmin && (
-            <button onClick={() => setAction('liberar')} disabled={!poloId} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+            <button onClick={() => setAction('liberar')} disabled={!poloId} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-on-accent disabled:opacity-50">
               <Gift size={16} /> Liberar licenças (sem cobrança)
             </button>
           )}
-          <button onClick={() => setAction('distribuir')} disabled={!poloId} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+          <button onClick={() => setAction('distribuir')} disabled={!poloId} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-on-accent disabled:opacity-50">
             <ArrowUpFromLine size={16} /> Distribuir
           </button>
         </div>
@@ -146,7 +153,7 @@ const LicencasPolo: React.FC<{ isAdmin: boolean; poloDoUsuario: string }> = ({ i
               <h2 className="font-bold text-white">Licenças entregues aos alunos</h2>
               <p className="text-xs text-slate-400">Imprima os cartões e entregue a cada aluno: com o número ele entra direto na avaliação.</p>
             </div>
-            <button onClick={() => imprimirCartoes(ultimaDistribuicao.licencas.map((l) => l.licenca_id))} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+            <button onClick={() => imprimirCartoes(ultimaDistribuicao.licencas.map((l) => l.licenca_id))} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-on-accent">
               <Printer size={15} /> Imprimir cartões de acesso
             </button>
           </div>
@@ -450,7 +457,7 @@ const ModalDistribuir: React.FC<{
           </>
         )}
 
-        <button disabled={saving || !podeEnviar} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 font-semibold text-white disabled:opacity-50">
+        <button disabled={saving || !podeEnviar} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 font-semibold text-on-accent disabled:opacity-50">
           {saving && <Loader2 className="animate-spin" size={16} />} Confirmar distribuição
         </button>
       </form>
@@ -515,7 +522,7 @@ const ModalLiberar: React.FC<{
           <span>Observação (opcional)</span>
           <input className={inputClass} value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Ex.: bonificação do semestre" />
         </label>
-        <button disabled={saving || !disciplinaId || quantidade < 1} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5 font-semibold text-white disabled:opacity-50">
+        <button disabled={saving || !disciplinaId || quantidade < 1} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5 font-semibold text-on-accent disabled:opacity-50">
           {saving && <Loader2 className="animate-spin" size={16} />} Liberar licenças
         </button>
       </form>
@@ -572,7 +579,7 @@ const ModalReclassificar: React.FC<{
           <span>Quantidade</span>
           <input className={inputClass} type="number" min={1} required value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))} />
         </label>
-        <button disabled={saving || !destino} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 font-semibold text-white disabled:opacity-50">
+        <button disabled={saving || !destino} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 font-semibold text-on-accent disabled:opacity-50">
           {saving && <Loader2 className="animate-spin" size={16} />} Confirmar
         </button>
       </form>

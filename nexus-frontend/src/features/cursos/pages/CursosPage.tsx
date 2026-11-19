@@ -4,7 +4,6 @@ import {
   BookOpen,
   CalendarDays,
   CheckCircle2,
-  GraduationCap,
   Loader2,
   Pencil,
   Plus,
@@ -307,10 +306,6 @@ export const CursosPage: React.FC = () => {
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-300">
-            <GraduationCap size={16} />
-            Gestão curricular
-          </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Cursos</h1>
           <p className="mt-1 text-sm text-slate-400">
             Consulte os cursos, seus níveis acadêmicos, disciplinas e turmas vinculadas.
@@ -321,7 +316,7 @@ export const CursosPage: React.FC = () => {
             type="button"
             disabled={isLoading}
             onClick={abrirCadastro}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Plus size={17} />
             Cadastrar curso
@@ -728,7 +723,7 @@ export const CursosPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSaving}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving && <Loader2 size={16} className="animate-spin" />}
                 {isSaving ? 'Salvando...' : 'Salvar curso'}

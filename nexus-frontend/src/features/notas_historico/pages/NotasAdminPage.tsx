@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Award, ChevronLeft, ChevronRight, Download, FileText, Loader2, RefreshCw, Save, Search, X } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Download, FileText, Loader2, RefreshCw, Save, Search, X } from 'lucide-react';
 import { Academico, alunosGestaoApi } from '@/features/alunos/api';
 import {
   AdminAlunoNota,
@@ -149,9 +149,6 @@ export const NotasAdminPage: React.FC = () => {
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-nexus-yellow/30 bg-nexus-yellow/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-nexus-yellow">
-            <Award className="h-3.5 w-3.5" /> Gestão Acadêmica
-          </div>
           <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Notas &amp; Histórico Unificado</h1>
           <p className="mt-1 text-sm text-slate-400">
             Acompanhe lançamentos e corrija valores com registro de auditoria.
@@ -194,7 +191,7 @@ export const NotasAdminPage: React.FC = () => {
             className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
           />
         </label>
-        <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-slate-950">
+        <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-ink">
           <Search className="h-4 w-4" /> Filtrar
         </button>
       </form>
@@ -335,7 +332,7 @@ export const NotasAdminPage: React.FC = () => {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => void baixarHistorico()} disabled={baixandoHistorico} className="inline-flex items-center gap-2 rounded-lg bg-nexus-yellow px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">
+                <button type="button" onClick={() => void baixarHistorico()} disabled={baixandoHistorico} className="inline-flex items-center gap-2 rounded-lg bg-nexus-yellow px-3 py-2 text-xs font-bold text-ink disabled:opacity-50">
                   {baixandoHistorico ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} PDF
                 </button>
                 <button type="button" onClick={() => setHistoricoAluno(null)} className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800" aria-label="Fechar histórico">

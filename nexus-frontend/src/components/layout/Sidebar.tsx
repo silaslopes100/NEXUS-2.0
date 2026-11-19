@@ -9,14 +9,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  User as UserIcon,
-  ShieldCheck,
-  Building,
-  GraduationCap,
-  School,
   BookOpen,
-  Truck,
-  Wallet,
 } from 'lucide-react';
 import { authApi } from '@/features/auth/api';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
@@ -64,62 +57,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     logout();
     navigate('/auth/login', { replace: true });
   };
-
-  const getRoleBadgeInfo = (role: UserRole) => {
-    switch (role) {
-      case 'admin':
-        return {
-          label: 'Administrador Central',
-          icon: ShieldCheck,
-          bg: 'bg-amber-500/15 border-amber-500/30 text-nexus-yellow',
-        };
-      case 'polo':
-        return {
-          label: 'Gestor de Polo',
-          icon: Building,
-          bg: 'bg-blue-500/15 border-blue-500/30 text-blue-400',
-        };
-      case 'escola':
-        return {
-          label: 'Unidade Escolar',
-          icon: School,
-          bg: 'bg-purple-500/15 border-purple-500/30 text-purple-300',
-        };
-      case 'professor':
-        return {
-          label: 'Corpo Docente',
-          icon: GraduationCap,
-          bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400',
-        };
-      case 'aluno':
-        return {
-          label: 'Área do Aluno',
-          icon: BookOpen,
-          bg: 'bg-sky-500/15 border-sky-500/30 text-sky-400',
-        };
-      case 'financeiro':
-        return {
-          label: 'Financeiro',
-          icon: Wallet,
-          bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-        };
-      case 'logistica':
-        return {
-          label: 'Logística',
-          icon: Truck,
-          bg: 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300',
-        };
-      default:
-        return {
-          label: role,
-          icon: UserIcon,
-          bg: 'bg-slate-800 border-slate-700 text-slate-300',
-        };
-    }
-  };
-
-  const roleInfo = getRoleBadgeInfo(activeRole);
-  const RoleIcon = roleInfo.icon;
 
   const renderBadge = (item: MenuItem) => {
     if (!item.badge) return null;
@@ -190,7 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col bg-[#0B0F19] border-r border-slate-800/80 transition-all duration-300 ease-in-out ${
+        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col bg-nexus-page border-r border-slate-800/80 transition-all duration-300 ease-in-out ${
           collapsed ? 'w-20' : 'w-72'
         } ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -215,24 +152,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
-        </div>
-
-        {/* Role Banner */}
-        <div className="px-4 py-3 border-b border-slate-800/60 bg-slate-950/20">
-          <div
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border ${
-              roleInfo.bg
-            } ${collapsed ? 'justify-center px-2' : ''}`}
-          >
-            <RoleIcon className="w-4 h-4 shrink-0" />
-            {!collapsed && (
-              <div className="flex flex-col overflow-hidden">
-                <span className="text-xs font-bold uppercase tracking-wider truncate">
-                  {roleInfo.label}
-                </span>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Navigation Menu List */}
@@ -288,7 +207,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               usuarioId={user?.id}
               fotoUrl={user?.foto_url}
               nome={user?.nome}
-              className="w-9 h-9 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-md"
+              className="w-9 h-9 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center font-bold text-sm text-on-accent shrink-0 shadow-md"
             />
 
             {!collapsed && (

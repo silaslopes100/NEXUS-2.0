@@ -40,7 +40,7 @@ export const ComprasEadPage: React.FC = () => {
                 href={WHATSAPP_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
+                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-emerald-500"
               >
                 Abrir WhatsApp
               </a>

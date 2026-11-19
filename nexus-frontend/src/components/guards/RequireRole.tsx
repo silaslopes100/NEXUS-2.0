@@ -15,7 +15,7 @@ export const RequireRole: React.FC<RequireRoleProps> = ({ roles, children }) => 
 
   if (isLoading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-[#0B0F19]">
+      <div className="min-h-screen w-full flex items-center justify-center bg-nexus-page">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-4 border-nexus-yellow border-t-transparent rounded-full animate-spin" />
           <span className="text-xs font-semibold text-slate-400 tracking-wider uppercase">
@@ -38,7 +38,7 @@ export const RequireRole: React.FC<RequireRoleProps> = ({ roles, children }) => 
     const fallbackDashboard = getDashboardPath();
 
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-[#0B0F19] p-6">
+      <div className="min-h-screen w-full flex items-center justify-center bg-nexus-page p-6">
         <div className="max-w-md w-full bg-slate-900/90 border border-red-500/30 rounded-2xl p-8 text-center shadow-2xl backdrop-blur-xl">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 mb-5">
             <ShieldAlert className="w-8 h-8" />

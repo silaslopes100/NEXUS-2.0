@@ -60,7 +60,7 @@ const CartaoAvaliacao: React.FC<{ item: AvaliacaoAluno; destaque: boolean }> = (
         <button
           type="button"
           onClick={() => navigate(`/aluno/avaliacoes/${item.avaliacao_id}`)}
-          className="shrink-0 rounded-xl bg-nexus-yellow px-5 py-3 text-sm font-bold text-slate-950 hover:bg-nexus-yellow-hover"
+          className="shrink-0 rounded-xl bg-nexus-yellow px-5 py-3 text-sm font-bold text-ink hover:bg-nexus-yellow-hover"
         >
           {item.situacao === 'em_andamento' ? 'Continuar Avaliação' : 'Realizar Avaliação'}
         </button>

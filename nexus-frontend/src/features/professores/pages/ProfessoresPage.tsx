@@ -5,7 +5,6 @@ import {
   Edit2,
   Eye,
   Filter,
-  GraduationCap,
   Loader2,
   RefreshCw,
   Search,
@@ -159,10 +158,6 @@ export const ProfessoresPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-nexus-yellow/15 border border-nexus-yellow/30 text-nexus-yellow text-xs font-bold uppercase tracking-wider mb-2">
-            <GraduationCap className="w-3.5 h-3.5" />
-            Corpo Docente
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Professores & Docentes
           </h1>
@@ -173,7 +168,7 @@ export const ProfessoresPage: React.FC = () => {
 
         <button
           onClick={handleOpenCreate}
-          className="py-3 px-5 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer shrink-0"
+          className="py-3 px-5 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-ink font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer shrink-0"
         >
           <UserPlus className="w-4 h-4" />
           <span>Novo Professor</span>
@@ -284,7 +279,7 @@ export const ProfessoresPage: React.FC = () => {
 
           <button
             onClick={handleSearch}
-            className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0"
+            className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0"
             title="Buscar"
           >
             <Search className="w-3.5 h-3.5" />
@@ -342,7 +337,7 @@ export const ProfessoresPage: React.FC = () => {
                   <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center text-white font-bold text-xs shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue flex items-center justify-center text-on-accent font-bold text-xs shrink-0">
                           {(p.nome || '?').charAt(0).toUpperCase()}
                         </div>
                         <div>

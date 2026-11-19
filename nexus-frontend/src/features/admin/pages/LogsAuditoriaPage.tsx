@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ScrollText,
   Filter,
   Calendar,
   Activity,
@@ -96,10 +95,6 @@ export const LogsAuditoriaPage: React.FC = () => {
     <div className="space-y-6 max-w-7xl">
       {/* Top Banner */}
       <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-nexus-blue/20 border border-nexus-blue/40 text-nexus-yellow text-xs font-bold uppercase tracking-wider mb-2">
-          <ScrollText className="w-3.5 h-3.5 text-nexus-yellow" />
-          Governança & Rastreabilidade
-        </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
           Logs de Auditoria do Sistema
         </h1>

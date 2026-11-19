@@ -145,7 +145,7 @@ export const CompositorMensagem: React.FC<Props> = ({ desabilitado, motivoDesabi
           </span>
           <button type="button" onClick={() => pararGravacao(true)} className="text-xs text-slate-300 hover:text-white">Descartar</button>
           <button type="button" onClick={() => pararGravacao()} aria-label="Parar gravação"
-            className="rounded-full bg-red-500 p-2 text-white hover:bg-red-600"><Square size={14} /></button>
+            className="rounded-full bg-red-500 p-2 text-on-accent hover:bg-red-600"><Square size={14} /></button>
         </div>
       ) : (
         <div className="flex items-end gap-2">
@@ -170,7 +170,7 @@ export const CompositorMensagem: React.FC<Props> = ({ desabilitado, motivoDesabi
             className="max-h-40 min-h-[42px] flex-1 resize-none rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-nexus-yellow/50 focus:outline-none" />
           {texto.trim() || arquivo ? (
             <button type="button" onClick={() => void enviar()} disabled={enviando} aria-label="Enviar"
-              className="rounded-xl bg-nexus-yellow p-2.5 text-slate-950 hover:bg-nexus-yellow/90 disabled:opacity-60">
+              className="rounded-xl bg-nexus-yellow p-2.5 text-ink hover:bg-nexus-yellow/90 disabled:opacity-60">
               {enviando ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             </button>
           ) : (

@@ -250,7 +250,7 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:opacity-60"
           >
             {saving && <Loader2 size={16} className="animate-spin" />}
             Salvar

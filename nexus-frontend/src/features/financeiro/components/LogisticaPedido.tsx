@@ -82,7 +82,7 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
       {!modo && (
         <div className="flex flex-wrap gap-2">
           {podeEnviar && (
-            <button onClick={() => setModo('envio')} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">
+            <button onClick={() => setModo('envio')} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-on-accent">
               <Truck size={14} /> Marcar enviado
             </button>
           )}
@@ -92,7 +92,7 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
             </button>
           )}
           {podeEntregar && (
-            <button onClick={() => executar(() => financeiroApi.marcarEntregue(pedido.id))} disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+            <button onClick={() => executar(() => financeiroApi.marcarEntregue(pedido.id))} disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">
               {salvando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Confirmar entrega
             </button>
           )}
@@ -114,7 +114,7 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
             <input className={`${inputClass} col-span-2`} placeholder="Observação (opcional)" value={envio.observacao} onChange={(e) => setEnvio({ ...envio, observacao: e.target.value })} />
           </div>
           <div className="flex gap-2">
-            <button onClick={enviar} disabled={salvando || envio.transportadora.trim().length < 2} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+            <button onClick={enviar} disabled={salvando || envio.transportadora.trim().length < 2} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">
               {salvando && <Loader2 size={14} className="animate-spin" />} Confirmar envio
             </button>
             <button onClick={() => setModo(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300">Voltar</button>
@@ -129,7 +129,7 @@ export const LogisticaPedido: React.FC<Props> = ({ pedido, onAtualizado, podeEnv
           )}
           <textarea className={inputClass} rows={2} placeholder="Observação" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
           <div className="flex gap-2">
-            <button onClick={salvarEdicao} disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+            <button onClick={salvarEdicao} disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">
               {salvando && <Loader2 size={14} className="animate-spin" />} Salvar
             </button>
             <button onClick={() => setModo(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300">Voltar</button>

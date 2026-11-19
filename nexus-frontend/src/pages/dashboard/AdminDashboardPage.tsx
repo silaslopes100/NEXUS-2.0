@@ -8,7 +8,6 @@ import {
   Building2,
   GraduationCap,
   CreditCard,
-  ShieldCheck,
   Activity,
   KeyRound,
   ArrowUpRight,
@@ -116,10 +115,6 @@ export const AdminDashboardPage: React.FC = () => {
       <div className="p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-2xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-nexus-yellow/15 border border-nexus-yellow/30 text-nexus-yellow text-xs font-bold uppercase tracking-wider mb-3">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Painel Administrativo NEXUS 2.0
-            </div>
             <h1 className="text-3xl font-extrabold text-white tracking-tight">
               Bem-vindo, {user?.nome || 'Administrador'}!
             </h1>
@@ -131,7 +126,7 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <Link
               to="/admin/usuarios"
-              className="py-2.5 px-4 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-1.5"
+              className="py-2.5 px-4 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-1.5"
             >
               <Users className="w-4 h-4" />
               Gerenciar Usuários

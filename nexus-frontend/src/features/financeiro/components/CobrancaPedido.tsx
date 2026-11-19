@@ -105,10 +105,10 @@ export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAltera
 
       {podeGerar && (
         <div className="mb-3 flex flex-wrap gap-2">
-          <button onClick={() => gerar('BOLETO')} disabled={!!acao} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+          <button onClick={() => gerar('BOLETO')} disabled={!!acao} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">
             {acao === 'BOLETO' ? <Loader2 size={14} className="animate-spin" /> : <Barcode size={14} />} Gerar boleto
           </button>
-          <button onClick={() => gerar('PIX')} disabled={!!acao} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+          <button onClick={() => gerar('PIX')} disabled={!!acao} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">
             {acao === 'PIX' ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />} Gerar PIX
           </button>
         </div>
@@ -136,7 +136,7 @@ export const CobrancaPedido: React.FC<Props> = ({ pedido, podeCancelar, onAltera
                   <img
                     src={`data:image/png;base64,${pg.pix_qrcode_base64}`}
                     alt="QR Code PIX"
-                    className="h-40 w-40 rounded-lg bg-white p-2"
+                    className="h-40 w-40 rounded-lg bg-[#fff] p-2"
                   />
                 )}
                 {pg.pix_copia_cola && <CopiarTexto texto={pg.pix_copia_cola} rotulo="PIX copia e cola" />}

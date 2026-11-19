@@ -1,6 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, PlugZap, RefreshCw, Save, ShieldCheck, Webhook, XCircle,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Loader2,
+  PlugZap,
+  RefreshCw,
+  Save,
+  Webhook,
+  XCircle,
 } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
 import {
@@ -113,7 +123,7 @@ const GatewayCard: React.FC<{
             <button
               key={a}
               onClick={() => setAmbiente(a)}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold ${ambiente === a ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold ${ambiente === a ? 'bg-blue-600 text-on-accent' : 'text-slate-400 hover:text-white'}`}
             >
               {a === 'sandbox' ? 'Sandbox' : 'Produção'}
             </button>
@@ -192,7 +202,7 @@ const GatewayCard: React.FC<{
 
       <div className="flex flex-wrap gap-2">
         {podeEditar && (
-          <button onClick={salvar} disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          <button onClick={salvar} disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent disabled:opacity-50">
             {salvando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Salvar
           </button>
         )}
@@ -308,7 +318,6 @@ export const GatewaysPage: React.FC = () => {
   return (
     <div className="max-w-7xl space-y-6">
       <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl">
-        <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-300"><ShieldCheck size={15} /> Financeiro</p>
         <h1 className="text-3xl font-extrabold text-white">Gateways de Pagamento</h1>
         <p className="mt-1 text-sm text-slate-400">Credenciais por ambiente (criptografadas no banco), URL de webhook e teste de conexão.</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -319,7 +328,7 @@ export const GatewaysPage: React.FC = () => {
           )}
           <div className="inline-flex rounded-xl border border-slate-700 p-1">
             {(['config', 'eventos'] as const).map((a) => (
-              <button key={a} onClick={() => setAba(a)} className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${aba === a ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              <button key={a} onClick={() => setAba(a)} className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${aba === a ? 'bg-blue-600 text-on-accent' : 'text-slate-400 hover:text-white'}`}>
                 {a === 'config' ? 'Configuração' : 'Eventos de webhook'}
               </button>
             ))}

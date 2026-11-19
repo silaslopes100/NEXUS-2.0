@@ -149,7 +149,7 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
                     type="button"
                     disabled={processandoId !== null}
                     onClick={() => matricular(aluno.aluno_id)}
-                    className="flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+                    className="flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-blue-500 disabled:opacity-60"
                   >
                     {processandoId === aluno.aluno_id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                     Matricular
@@ -189,7 +189,7 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
                         type="button"
                         disabled={processandoId !== null}
                         onClick={() => remover(aluno.aluno_id)}
-                        className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+                        className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-red-500 disabled:opacity-60"
                       >
                         Confirmar
                       </button>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BarChart3, Loader2, RefreshCw, Table2, TrendingUp } from 'lucide-react';
+import { BarChart3, Loader2, RefreshCw, Table2 } from 'lucide-react';
 import { PeriodoFiltros, useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { financeiroApi } from '@/features/financeiro/api';
 import { BotoesExportar } from '@/features/financeiro/components/BotoesExportar';
@@ -122,7 +122,6 @@ export const VendasPage: React.FC = () => {
     <div className="max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-emerald-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-300"><TrendingUp size={15} /> Financeiro</p>
           <h1 className="text-3xl font-extrabold text-white">Vendas</h1>
           <p className="mt-1 text-sm text-slate-400">Licenças e livros vendidos aos Polos. A exportação usa os filtros aplicados abaixo.</p>
         </div>

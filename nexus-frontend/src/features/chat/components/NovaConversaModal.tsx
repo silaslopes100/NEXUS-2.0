@@ -149,7 +149,7 @@ const NovoGrupoForm: React.FC<{ ocupado: boolean; onCriar: (titulo: string, ids:
       </p>
       <button type="button" disabled={ocupado || !titulo.trim() || membros.length === 0}
         onClick={() => onCriar(titulo.trim(), membros.map((m) => m.id))}
-        className="w-full rounded-xl bg-nexus-yellow py-2.5 text-sm font-semibold text-slate-950 hover:bg-nexus-yellow/90 disabled:opacity-50">
+        className="w-full rounded-xl bg-nexus-yellow py-2.5 text-sm font-semibold text-ink hover:bg-nexus-yellow/90 disabled:opacity-50">
         Criar grupo
       </button>
     </div>

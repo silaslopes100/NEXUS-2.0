@@ -271,7 +271,7 @@ export const ConteudoMaterialForm: React.FC<ConteudoMaterialFormProps> = ({
             <button
               type="submit"
               disabled={salvando}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-ink hover:bg-emerald-400 disabled:opacity-50"
             >
               {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar

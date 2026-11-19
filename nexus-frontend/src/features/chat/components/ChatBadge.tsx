@@ -24,7 +24,7 @@ export const ChatBadge: React.FC = () => {
         : 'border-slate-700/60 bg-slate-800/60 text-slate-300 hover:border-nexus-yellow/30 hover:text-nexus-yellow'}`}>
       <MessageSquare className="h-4 w-4" />
       {naoLidas > 0 && (
-        <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-nexus-yellow px-1 text-center text-[10px] font-bold leading-[18px] text-slate-950">
+        <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-nexus-yellow px-1 text-center text-[10px] font-bold leading-[18px] text-ink">
           {naoLidas > 99 ? '99+' : naoLidas}
         </span>
       )}

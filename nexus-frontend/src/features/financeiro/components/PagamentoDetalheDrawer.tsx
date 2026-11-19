@@ -109,7 +109,7 @@ export const PagamentoDetalheDrawer: React.FC<Props> = ({ pagamento, podeOperar,
         {aberto && pg.linha_digitavel && <Copiar texto={pg.linha_digitavel} rotulo="Linha digitável" />}
         {aberto && pg.pix_copia_cola && <Copiar texto={pg.pix_copia_cola} rotulo="PIX copia e cola" />}
         {aberto && pg.pix_qrcode_base64 && pg.gateway !== 'fake' && (
-          <img src={`data:image/png;base64,${pg.pix_qrcode_base64}`} alt="QR Code PIX" className="h-40 w-40 rounded-lg bg-white p-2" />
+          <img src={`data:image/png;base64,${pg.pix_qrcode_base64}`} alt="QR Code PIX" className="h-40 w-40 rounded-lg bg-[#fff] p-2" />
         )}
 
         <div className="flex flex-wrap gap-2">
@@ -122,7 +122,7 @@ export const PagamentoDetalheDrawer: React.FC<Props> = ({ pagamento, podeOperar,
             <button
               disabled={!!acao}
               onClick={() => executar('segunda', () => financeiroApi.segundaVia(pg.id), 'Segunda via gerada: a cobrança antiga foi cancelada.')}
-              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-on-accent disabled:opacity-50"
             >
               {acao === 'segunda' ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Gerar segunda via
             </button>

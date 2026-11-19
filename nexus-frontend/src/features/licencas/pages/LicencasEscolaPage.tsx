@@ -5,7 +5,6 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   CheckCircle2,
-  KeyRound,
   Loader2,
   RefreshCw,
   Undo2,
@@ -150,15 +149,14 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
               <ArrowLeft size={14} /> Voltar
             </button>
           )}
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-300"><KeyRound size={15} /> Gestão de licenças</p>
           <h1 className="text-3xl font-extrabold text-white">{school?.nome || 'Escola'}</h1>
           <p className="mt-1 text-sm text-slate-400">Saldo por disciplina, vendas e devoluções de licenças desta unidade.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={semSaldo} onClick={() => abrir('venda')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" disabled={semSaldo} onClick={() => abrir('venda')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-on-accent disabled:cursor-not-allowed disabled:opacity-50">
             <ArrowDownToLine size={16} /> Vender licença
           </button>
-          <button type="button" disabled={semSaldo} onClick={() => abrir('devolucao')} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" disabled={semSaldo} onClick={() => abrir('devolucao')} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-on-accent disabled:cursor-not-allowed disabled:opacity-50">
             <ArrowUpFromLine size={16} /> Devolver ao polo
           </button>
           <button type="button" onClick={() => abrir('devolucao_aluno')} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200">
@@ -250,7 +248,7 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
               ) : <p className="text-xs text-amber-300">Este aluno não possui licença ativa.</p>
             )}
 
-            <div className="flex justify-end gap-2"><button type="button" onClick={() => setAction(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving && <Loader2 className="animate-spin" size={15} />}Confirmar</button></div>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setAction(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-on-accent disabled:opacity-50">{saving && <Loader2 className="animate-spin" size={15} />}Confirmar</button></div>
           </form>
         </div>
       )}

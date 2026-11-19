@@ -23,7 +23,6 @@ import {
   ClipboardCheck,
   Users as UsersIcon,
   RefreshCw,
-  Fingerprint,
   BarChart3,
   Shield,
   Camera,
@@ -338,7 +337,7 @@ export const UsuarioFichaPage: React.FC = () => {
               <label
                 htmlFor="usuario-foto-upload"
                 title="Alterar foto do usuário"
-                className="absolute -bottom-2 -right-2 p-1.5 rounded-full bg-nexus-yellow text-slate-950 cursor-pointer shadow-lg hover:bg-yellow-300"
+                className="absolute -bottom-2 -right-2 p-1.5 rounded-full bg-nexus-yellow text-ink cursor-pointer shadow-lg hover:bg-yellow-300"
               >
                 <Camera className="w-3.5 h-3.5" />
                 <span className="sr-only">Alterar foto do usuário</span>
@@ -352,10 +351,6 @@ export const UsuarioFichaPage: React.FC = () => {
               />
             </div>
             <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-nexus-yellow/15 border border-nexus-yellow/30 text-nexus-yellow text-[10px] font-bold uppercase tracking-wider mb-1.5">
-                <Fingerprint className="w-3 h-3" />
-                Ficha Cadastral
-              </div>
               <h1 className="text-2xl font-extrabold text-white tracking-tight">{nomeCompleto}</h1>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-nexus-blue/15 border border-nexus-blue/30 text-blue-400">
@@ -374,7 +369,7 @@ export const UsuarioFichaPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setIsFormOpen(true)}
-              className="px-4 py-2.5 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-1.5"
+              className="px-4 py-2.5 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-1.5"
             >
               <Edit2 className="w-3.5 h-3.5" />
               Editar
@@ -621,7 +616,7 @@ export const UsuarioFichaPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
                 >
                   Confirmar
                 </button>
@@ -653,7 +648,7 @@ export const UsuarioFichaPage: React.FC = () => {
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-on-accent text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
               >
                 Excluir Definitivamente
               </button>

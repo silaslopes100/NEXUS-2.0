@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { BookOpen, Laptop, Award, FileCheck2 } from 'lucide-react';
+import { BookOpen, Award, FileCheck2 } from 'lucide-react';
 
 export const AlunoDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -8,10 +8,6 @@ export const AlunoDashboardPage: React.FC = () => {
   return (
     <div className="space-y-8 max-w-7xl">
       <div className="p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-2xl">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-400 text-xs font-bold uppercase tracking-wider mb-3">
-          <Laptop className="w-3.5 h-3.5" />
-          Ambiente Virtual de Aprendizagem (AVA)
-        </div>
         <h1 className="text-3xl font-extrabold text-white tracking-tight">
           Olá, {user?.nome || 'Estudante'}!
         </h1>

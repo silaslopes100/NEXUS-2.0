@@ -65,7 +65,7 @@ export const NotificacoesSino: React.FC = () => {
         className="relative rounded-xl border border-slate-700/60 bg-slate-800/60 p-2 text-slate-300 transition-colors hover:border-nexus-yellow/30 hover:text-nexus-yellow">
         <Bell className="h-4 w-4" />
         {naoLidas > 0 && (
-          <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-nexus-yellow px-1 text-center text-[10px] font-bold leading-[18px] text-slate-950">
+          <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-nexus-yellow px-1 text-center text-[10px] font-bold leading-[18px] text-ink">
             {naoLidas > 9 ? '9+' : naoLidas}
           </span>
         )}

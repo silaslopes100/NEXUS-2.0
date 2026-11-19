@@ -5,7 +5,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   FileText,
   Loader2,
   Pencil,
@@ -101,10 +100,6 @@ export const DiarioAulasPage: React.FC = () => {
     <div className="max-w-7xl space-y-6">
       <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-300">
-            <ClipboardList className="h-3.5 w-3.5" />
-            Espaço do Docente
-          </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Diário de Aulas</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">
             Registre cada aula em um só lugar: a ata (o que foi ministrado), o material usado e a chamada.
@@ -117,7 +112,7 @@ export const DiarioAulasPage: React.FC = () => {
             setEditor({});
           }}
           disabled={vinculos.length === 0}
-          className="inline-flex items-center gap-2 self-start rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+          className="inline-flex items-center gap-2 self-start rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-ink hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
         >
           <Plus className="h-4 w-4" />
           Registrar aula
@@ -323,7 +318,7 @@ export const DiarioAulasPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => void confirmarExclusao()}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-red-500"
               >
                 Excluir aula
               </button>
@@ -579,7 +574,7 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
                   <button
                     type="submit"
                     disabled={salvandoAta}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-ink hover:bg-emerald-400 disabled:opacity-50"
                   >
                     {salvandoAta ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Salvar ata
@@ -706,7 +701,7 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
                   type="submit"
                   form="aula-form"
                   disabled={salvandoAta || !vinculoId}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-ink hover:bg-emerald-400 disabled:opacity-50"
                 >
                   {salvandoAta ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {salvandoAta ? 'Registrando...' : 'Registrar aula'}
@@ -899,7 +894,7 @@ const ChamadaEditor: React.FC<{
           type="button"
           onClick={() => void salvar()}
           disabled={!completa || salvando}
-          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-on-accent hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Salvar chamada

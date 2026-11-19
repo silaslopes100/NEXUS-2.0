@@ -491,7 +491,7 @@ export const UsuarioFormModal: React.FC<UsuarioFormModalProps> = ({
                           <div
                             className={`w-4 h-4 mt-0.5 rounded flex items-center justify-center shrink-0 border ${
                               isChecked
-                                ? 'bg-nexus-yellow border-nexus-yellow text-slate-950'
+                                ? 'bg-nexus-yellow border-nexus-yellow text-ink'
                                 : 'border-slate-700 bg-slate-900'
                             }`}
                           >
@@ -522,7 +522,7 @@ export const UsuarioFormModal: React.FC<UsuarioFormModalProps> = ({
             <button
               type="submit"
               disabled={isSaving}
-              className="px-5 py-2.5 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="px-5 py-2.5 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>

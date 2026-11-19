@@ -90,7 +90,7 @@ const ModalAtender: React.FC<{ poloId: string; s: Solicitacao; onFechar: () => v
           {recusando ? (
             <button type="button" disabled={enviando || motivo.trim().length < 3}
               onClick={() => void executar(() => solicitacoesApi.recusar(poloId, s.id, motivo.trim()), (r) => `${r.numero} recusada. A Escola foi avisada.`)}
-              className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+              className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-on-accent disabled:opacity-40">
               Confirmar recusa
             </button>
           ) : (
@@ -99,7 +99,7 @@ const ModalAtender: React.FC<{ poloId: string; s: Solicitacao; onFechar: () => v
                 () => solicitacoesApi.atender(poloId, s.id, s.itens.map((i) => ({ item_id: i.id, quantidade_atendida: qtd[i.id] || 0 }))),
                 (r) => `${r.numero} atendida. Licenças enviadas à Escola e Nota ${r.nota_numero} emitida.`
               )}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-on-accent disabled:opacity-40">
               {enviando ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Atender e emitir Nota
             </button>
           )}
@@ -183,7 +183,7 @@ export const SolicitacoesPoloPage: React.FC = () => {
             <button key={a.id} type="button" role="tab" aria-selected={aba === a.id} onClick={() => setAba(a.id)}
               className={`rounded-lg px-3 py-1.5 text-sm ${aba === a.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>
               {a.rotulo}
-              {a.n ? <span className="ml-1.5 rounded-full bg-nexus-yellow px-1.5 text-xs font-bold text-slate-950">{a.n}</span> : null}
+              {a.n ? <span className="ml-1.5 rounded-full bg-nexus-yellow px-1.5 text-xs font-bold text-ink">{a.n}</span> : null}
             </button>
           ))}
         </div>
@@ -213,7 +213,7 @@ export const SolicitacoesPoloPage: React.FC = () => {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {s.status === 'pendente' && (
                   <button type="button" onClick={() => setAberta(s)}
-                    className="rounded-xl bg-nexus-yellow px-4 py-2 text-sm font-bold text-slate-950">Analisar e atender</button>
+                    className="rounded-xl bg-nexus-yellow px-4 py-2 text-sm font-bold text-ink">Analisar e atender</button>
                 )}
                 {s.nota_id && (
                   <>

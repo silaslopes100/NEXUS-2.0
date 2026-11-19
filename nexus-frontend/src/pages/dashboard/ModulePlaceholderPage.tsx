@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Layers, Database, ShieldCheck, Sparkles } from 'lucide-react';
+import { Layers, Database, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 export const ModulePlaceholderPage: React.FC = () => {
@@ -151,11 +151,7 @@ export const ModulePlaceholderPage: React.FC = () => {
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
           <div>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-nexus-blue/20 border border-nexus-blue/40 text-nexus-yellow text-xs font-semibold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5 text-nexus-yellow" />
-              {details.category}
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
               {details.title}
             </h1>
             <p className="text-sm text-slate-400 mt-1 max-w-2xl leading-relaxed">

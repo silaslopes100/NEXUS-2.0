@@ -8,7 +8,6 @@ import {
   Edit2,
   Trash2,
   KeyRound,
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   X,
@@ -167,10 +166,6 @@ export const UsuariosInternosPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-nexus-yellow/15 border border-nexus-yellow/30 text-nexus-yellow text-xs font-bold uppercase tracking-wider mb-2">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Gestão de Contas & Permissões
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Consulta de Usuário
           </h1>
@@ -182,7 +177,7 @@ export const UsuariosInternosPage: React.FC = () => {
 
         <button
           onClick={handleOpenCreate}
-          className="py-3 px-5 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer shrink-0"
+          className="py-3 px-5 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-ink font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer shrink-0"
         >
           <UserPlus className="w-4 h-4" />
           <span>Novo Usuário</span>
@@ -268,7 +263,7 @@ export const UsuariosInternosPage: React.FC = () => {
 
           <button
             onClick={handleSearch}
-            className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0"
+            className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0"
             title="Buscar"
           >
             <Search className="w-3.5 h-3.5" />
@@ -529,7 +524,7 @@ export const UsuariosInternosPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-slate-950 text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
                 >
                   Confirmar Redefinição
                 </button>
@@ -563,7 +558,7 @@ export const UsuariosInternosPage: React.FC = () => {
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-on-accent text-xs font-bold rounded-xl shadow transition-colors cursor-pointer"
               >
                 Excluir Definitivamente
               </button>

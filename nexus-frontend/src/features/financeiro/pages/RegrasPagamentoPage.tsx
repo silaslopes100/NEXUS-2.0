@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Pencil, Plus, Power, RefreshCw, Scale, X } from 'lucide-react';
+import { Loader2, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
 import { NOME_GATEWAY, RegraPagamento, RegraPagamentoPayload, TIPO_PEDIDO, erroApi, formatBRL } from '@/features/financeiro/types';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
@@ -132,13 +132,12 @@ export const RegrasPagamentoPage: React.FC = () => {
     <div className="max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-300"><Scale size={15} /> Financeiro</p>
           <h1 className="text-3xl font-extrabold text-white">Regras de Pagamento</h1>
           <p className="mt-1 text-sm text-slate-400">
             Definem meios (boleto/PIX), vencimento e encargos do checkout. Vale a regra mais específica (Polo › tipo); no empate, a de menor prioridade.
           </p>
         </div>
-        <button onClick={() => abrir('nova')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} /> Nova regra</button>
+        <button onClick={() => abrir('nova')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent"><Plus size={16} /> Nova regra</button>
       </header>
 
       {feedback && (
@@ -248,7 +247,7 @@ export const RegrasPagamentoPage: React.FC = () => {
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input type="checkbox" checked={form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })} /> Ativa
             </label>
-            <button disabled={salvando} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 font-semibold text-white disabled:opacity-50">
+            <button disabled={salvando} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 font-semibold text-on-accent disabled:opacity-50">
               {salvando && <Loader2 className="animate-spin" size={16} />} Salvar
             </button>
           </form>

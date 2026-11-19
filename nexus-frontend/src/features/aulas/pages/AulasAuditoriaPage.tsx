@@ -12,7 +12,6 @@ import {
   FileText,
   Loader2,
   Search,
-  ShieldCheck,
   UserRound,
   X,
 } from 'lucide-react';
@@ -116,10 +115,6 @@ export const AulasAuditoriaPage: React.FC = () => {
             <ArrowLeft className="h-3.5 w-3.5" /> Disciplinas
           </Link>
         )}
-        <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-nexus-yellow/30 bg-nexus-yellow/15 px-3 py-1 text-xs font-bold uppercase tracking-wider text-nexus-yellow">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Auditoria de aulas
-        </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
           {disciplinaDaRota ? nomeDisciplina || 'Aulas da disciplina' : 'Aulas de todos os polos'}
         </h1>
@@ -176,7 +171,7 @@ export const AulasAuditoriaPage: React.FC = () => {
           <button
             type="button"
             onClick={() => definir('q', busca.trim())}
-            className="rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-nexus-yellow-hover"
+            className="rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-ink hover:bg-nexus-yellow-hover"
           >
             Buscar
           </button>

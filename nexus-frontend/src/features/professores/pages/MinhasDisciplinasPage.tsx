@@ -42,10 +42,6 @@ export const MinhasDisciplinasPage: React.FC = () => {
     <div className="space-y-6 max-w-7xl">
       <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-400">
-            <GraduationCap className="h-3.5 w-3.5" />
-            Espaço do Docente
-          </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
             Minhas Disciplinas &amp; Turmas
           </h1>

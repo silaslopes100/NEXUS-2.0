@@ -4,11 +4,21 @@
 
 @layer base {
   body {
-    @apply bg-[#0B0F19] text-slate-100 font-sans antialiased;
+    @apply bg-nexus-page text-slate-100 font-sans antialiased;
   }
 }
 
-/* Custom modern dark scrollbar */
+/* Tema claro: o amarelo da marca como texto/ícone fica ilegível sobre branco;
+   usa um âmbar escuro. Fundos amarelos (botões) continuam iguais. */
+html[data-theme='light'] .text-nexus-yellow,
+html[data-theme='light'] .text-nexus-yellow-hover,
+html[data-theme='light'] .hover\:text-nexus-yellow:hover,
+html[data-theme='light'] .hover\:text-nexus-yellow-hover:hover,
+html[data-theme='light'] .group:hover .group-hover\:text-nexus-yellow {
+  color: #b45309;
+}
+
+/* Custom modern scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
@@ -18,12 +28,12 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: rgb(var(--c-slate-800));
   border-radius: 9999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgb(var(--c-slate-700));
 }
 
 @keyframes fadeIn {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, CalendarDays, Check, Loader2, RefreshCw, Save, Users, X } from 'lucide-react';
+import { AlertCircle, Check, Loader2, RefreshCw, Save, Users, X } from 'lucide-react';
 import { apiErrorMessage } from '@/features/professores/api';
 import { AlunoChamada, presencasApi, PresencaVinculo } from '@/features/presencas/api';
 
@@ -118,10 +118,6 @@ export const PresencasPage: React.FC = () => {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:p-8">
-        <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-300">
-          <CalendarDays className="h-3.5 w-3.5" />
-          Área acadêmica
-        </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
           Diário de presença
         </h1>
@@ -292,7 +288,7 @@ export const PresencasPage: React.FC = () => {
             type="button"
             onClick={() => void salvar()}
             disabled={!todosMarcados || salvando || carregandoAlunos}
-            className="inline-flex items-center justify-center gap-2 self-end rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 self-end rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-on-accent transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Salvar chamada

@@ -108,7 +108,7 @@ export const CalendariosTab: React.FC<{ cursos: Curso[] }> = ({ cursos }) => {
         <button
           type="button"
           onClick={() => abrirForm(null)}
-          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500"
         >
           <Plus size={16} /> Cadastrar calendário
         </button>
@@ -160,7 +160,7 @@ export const CalendariosTab: React.FC<{ cursos: Curso[] }> = ({ cursos }) => {
                           type="button"
                           disabled={excluindoId !== null}
                           onClick={() => void excluir(calendario.id)}
-                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-red-500 disabled:opacity-60"
                         >
                           Confirmar
                         </button>
@@ -299,7 +299,7 @@ export const CalendariosTab: React.FC<{ cursos: Curso[] }> = ({ cursos }) => {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:opacity-60"
               >
                 {saving && <Loader2 size={16} className="animate-spin" />}
                 Salvar

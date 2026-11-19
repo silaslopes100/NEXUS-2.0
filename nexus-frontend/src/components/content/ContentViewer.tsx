@@ -186,7 +186,7 @@ export const ContentViewer: React.FC<ContentViewerProps> = ({ title, url, file, 
                   <iframe
                     title={title}
                     src={fileUrl}
-                    className="h-[75vh] w-full rounded-lg bg-white"
+                    className="h-[75vh] w-full rounded-lg bg-[#fff]"
                   />
                 ) : isImage ? (
                   <img src={fileUrl} alt={title} className="max-h-[78vh] max-w-full object-contain" />
@@ -206,7 +206,7 @@ export const ContentViewer: React.FC<ContentViewerProps> = ({ title, url, file, 
                 <button
                   type="button"
                   onClick={baixarArquivo}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400"
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-400"
                 >
                   <Download size={16} />
                   Baixar {file.name}

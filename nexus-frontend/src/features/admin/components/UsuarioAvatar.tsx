@@ -79,7 +79,7 @@ export const UsuarioAvatar: React.FC<UsuarioAvatarProps> = ({
   return (
     <div
       aria-label={nome}
-      className={`${className} flex items-center justify-center bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue font-bold text-white`}
+      className={`${className} flex items-center justify-center bg-gradient-to-tr from-nexus-blue-deep to-nexus-blue font-bold text-on-accent`}
     >
       {nome.trim().charAt(0).toUpperCase()}
     </div>

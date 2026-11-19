@@ -354,9 +354,6 @@ export const AdminDashboardPreview: React.FC = () => {
           <h2 className="text-lg font-bold text-white">Visualizadores da Dashboard</h2>
           <p className="mt-1 text-xs text-slate-400">Prévia para apresentação aos stakeholders. Consulte listas, filtros e detalhes demonstrativos.</p>
         </div>
-        <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300">
-          <span className="h-2 w-2 rounded-full bg-amber-300" /> Dados demonstrativos
-        </span>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -424,14 +421,14 @@ export const AdminDashboardPreview: React.FC = () => {
               {activeWidget === 'enrollments' && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
                   <div><p className="text-sm font-bold text-white">{filteredEnrollments.length} matrículas no filtro demonstrativo</p><p className="mt-1 text-xs text-slate-400">Ranking de licenças/livros adquiridos · {periodLabel}</p></div>
-                  <button type="button" onClick={printRanking} className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-nexus-yellow-hover"><ArrowDownToLine className="h-4 w-4" />Gerar PDF do ranking</button>
+                  <button type="button" onClick={printRanking} className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-xs font-bold text-ink hover:bg-nexus-yellow-hover"><ArrowDownToLine className="h-4 w-4" />Gerar PDF do ranking</button>
                 </div>
               )}
 
               {activeWidget === 'ranking' && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
                   <div><p className="text-sm font-bold text-white">Ranking decrescente por novas licenças/livros</p><p className="mt-1 text-xs text-slate-400">Período demonstrativo: {periodLabel}</p></div>
-                  <button type="button" onClick={printRanking} className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-nexus-yellow-hover"><ArrowDownToLine className="h-4 w-4" />Baixar PDF</button>
+                  <button type="button" onClick={printRanking} className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-xs font-bold text-ink hover:bg-nexus-yellow-hover"><ArrowDownToLine className="h-4 w-4" />Baixar PDF</button>
                 </div>
               )}
 
@@ -483,7 +480,7 @@ export const AdminDashboardPreview: React.FC = () => {
                             <p className="text-xs text-amber-200">Formulário de edição demonstrativo; não grava alterações.</p>
                             <label className="block text-xs text-slate-400">Nome<input className={`${inputClass} mt-1 w-full`} defaultValue={selectedItem.title} /></label>
                             <label className="block text-xs text-slate-400">E-mail<input className={`${inputClass} mt-1 w-full`} defaultValue={selectedItem.fields[0]?.[1]} /></label>
-                            <div className="flex gap-2"><button className="rounded-lg bg-nexus-yellow px-3 py-2 text-xs font-bold text-slate-950" type="submit">Salvar prévia</button><button className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300" type="button" onClick={() => setEditPreview(false)}>Cancelar</button></div>
+                            <div className="flex gap-2"><button className="rounded-lg bg-nexus-yellow px-3 py-2 text-xs font-bold text-ink" type="submit">Salvar prévia</button><button className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300" type="button" onClick={() => setEditPreview(false)}>Cancelar</button></div>
                           </form>
                         ) : <button type="button" onClick={() => setEditPreview(true)} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">Editar dados (prévia)</button>
                       )}

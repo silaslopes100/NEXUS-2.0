@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
-  BookOpen,
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
@@ -284,10 +283,6 @@ export const DisciplinasPage: React.FC = () => {
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-300">
-            <BookOpen size={16} />
-            Gestão curricular
-          </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
             Disciplinas
           </h1>
@@ -299,7 +294,7 @@ export const DisciplinasPage: React.FC = () => {
           type="button"
           disabled={isLoading}
           onClick={abrirCadastro}
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus size={17} />
           Cadastrar disciplina
@@ -826,7 +821,7 @@ export const DisciplinasPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSaving}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving && <Loader2 size={16} className="animate-spin" />}
                 {isSaving ? 'Salvando...' : 'Salvar disciplina'}

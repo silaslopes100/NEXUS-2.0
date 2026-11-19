@@ -377,7 +377,7 @@ export const SolicitarTransferenciaModal: React.FC<Props> = ({ modoAluno, onClos
           <button
             type="submit"
             disabled={salvando || !aluno || !tipo}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {salvando && <Loader2 size={16} className="animate-spin" />}
             {salvando ? 'Enviando...' : 'Enviar solicitação'}

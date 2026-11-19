@@ -72,8 +72,8 @@ export const AlunoFormModal: React.FC<Props> = ({ poloId, escolas, escolaFixaId,
         )}
 
         <div className="mb-4 flex gap-2">
-          <button type="button" onClick={() => { setExistente(false); setErro(''); }} className={`rounded-lg px-3 py-2 text-sm ${!existente ? 'bg-blue-600 text-white' : 'text-slate-300'}`}>Novo usuário</button>
-          <button type="button" onClick={() => { setExistente(true); setErro(''); }} className={`rounded-lg px-3 py-2 text-sm ${existente ? 'bg-blue-600 text-white' : 'text-slate-300'}`}>Usuário existente</button>
+          <button type="button" onClick={() => { setExistente(false); setErro(''); }} className={`rounded-lg px-3 py-2 text-sm ${!existente ? 'bg-blue-600 text-on-accent' : 'text-slate-300'}`}>Novo usuário</button>
+          <button type="button" onClick={() => { setExistente(true); setErro(''); }} className={`rounded-lg px-3 py-2 text-sm ${existente ? 'bg-blue-600 text-on-accent' : 'text-slate-300'}`}>Usuário existente</button>
         </div>
         {existente ? (
           <VincularUsuarioForm poloId={poloId} escolas={escolas} escolaFixaId={escolaFixaId} onClose={onClose} onSuccess={onSuccess} />
@@ -124,7 +124,7 @@ export const AlunoFormModal: React.FC<Props> = ({ poloId, escolas, escolaFixaId,
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:opacity-60"
             >
               {isSubmitting && <Loader2 size={16} className="animate-spin" />}
               Cadastrar
@@ -227,7 +227,7 @@ const VincularUsuarioForm: React.FC<Props> = ({ poloId, escolas, escolaFixaId, o
       </div>
       <div className="flex justify-end gap-3">
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm text-slate-300">Cancelar</button>
-        <button type="submit" disabled={salvando} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{salvando ? 'Vinculando...' : 'Vincular aluno'}</button>
+        <button type="submit" disabled={salvando} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent disabled:opacity-60">{salvando ? 'Vinculando...' : 'Vincular aluno'}</button>
       </div>
     </form>
   );

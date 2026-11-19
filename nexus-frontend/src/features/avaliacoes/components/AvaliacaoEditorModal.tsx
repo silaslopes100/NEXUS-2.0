@@ -324,7 +324,7 @@ export const AvaliacaoEditorModal: React.FC<Props> = ({ disciplinaId, disciplina
               {ativo ? 'Salvar e desativar' : 'Salvar rascunho'}
             </button>
             <button type="button" disabled={salvando || carregando} onClick={() => void salvar(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-emerald-500 disabled:opacity-50">
               {salvando ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
               {ativo ? 'Salvar (ativa)' : 'Salvar e ativar'}
             </button>

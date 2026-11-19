@@ -116,7 +116,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
         </div>
         <Link
           to="/aluno/disciplinas"
-          className="inline-block rounded-xl bg-nexus-yellow px-6 py-3 font-bold text-slate-950 hover:bg-nexus-yellow-hover"
+          className="inline-block rounded-xl bg-nexus-yellow px-6 py-3 font-bold text-ink hover:bg-nexus-yellow-hover"
         >
           Voltar às disciplinas
         </Link>
@@ -239,7 +239,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
                   >
                     <span
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                        marcada ? 'bg-nexus-yellow text-slate-950' : 'bg-slate-800 text-slate-300'
+                        marcada ? 'bg-nexus-yellow text-ink' : 'bg-slate-800 text-slate-300'
                       }`}
                     >
                       {LETRAS[n]}
@@ -280,7 +280,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
           )}
           {(revisando || atual === total - 1) && (
             <button type="button" disabled={enviando} onClick={() => setConfirmando(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-5 py-3 text-sm font-bold text-slate-950 hover:bg-nexus-yellow-hover disabled:opacity-50">
+              className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-5 py-3 text-sm font-bold text-ink hover:bg-nexus-yellow-hover disabled:opacity-50">
               <Send size={16} /> Enviar avaliação
             </button>
           )}
@@ -302,7 +302,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
                 Continuar respondendo
               </button>
               <button type="button" disabled={enviando} onClick={() => void finalizar(respostas)}
-                className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50">
+                className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-ink disabled:opacity-50">
                 {enviando && <Loader2 size={16} className="animate-spin" />} Enviar
               </button>
             </div>

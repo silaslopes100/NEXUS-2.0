@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { GraduationCap, BookOpen, Award, Clock } from 'lucide-react';
+import { BookOpen, Award, Clock } from 'lucide-react';
 
 export const ProfessorDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -8,10 +8,6 @@ export const ProfessorDashboardPage: React.FC = () => {
   return (
     <div className="space-y-8 max-w-7xl">
       <div className="p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 border border-slate-800 shadow-2xl">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">
-          <GraduationCap className="w-3.5 h-3.5" />
-          Corpo Docente
-        </div>
         <h1 className="text-3xl font-extrabold text-white tracking-tight">
           Olá, Professor(a) {user?.nome}!
         </h1>

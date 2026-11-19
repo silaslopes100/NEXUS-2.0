@@ -31,7 +31,7 @@ export const PendenciasSino: React.FC = () => {
       >
         <Bell className="w-4 h-4" />
         {total > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-slate-900">
+          <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-on-accent ring-2 ring-slate-900">
             {total > 99 ? '99+' : total}
           </span>
         )}

@@ -111,7 +111,6 @@ export const ComprarLicencasPage: React.FC = () => {
   return (
     <div className="max-w-7xl space-y-6">
       <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-amber-950/30 p-6 shadow-xl">
-        <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-300"><GraduationCap size={15} /> Comprar Disciplinas</p>
         <h1 className="text-3xl font-extrabold text-white">{curso ? curso.nome : 'Escolha o curso'}</h1>
         <p className="mt-1 text-sm text-slate-400">
           Cada unidade comprada inclui <strong className="text-slate-200">1 livro</strong> (enviado ao endereço do Polo) e
@@ -170,7 +169,7 @@ export const ComprarLicencasPage: React.FC = () => {
                   <strong className="text-amber-200">{formatBRL(totalCurso)}</strong> por aluno
                 </p>
                 <button type="button" disabled={!aVenda.length} onClick={adicionarCursoCompleto}
-                  className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-40">
+                  className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-ink hover:bg-amber-400 disabled:opacity-40">
                   Adicionar curso completo
                 </button>
               </div>
@@ -235,7 +234,7 @@ export const ComprarLicencasPage: React.FC = () => {
               <span>{formatBRL(total)}</span>
             </p>
             {itens.length > 0 && <MeioPagamentoCheckout opcoes={opcoes} meio={meio} onChange={setMeio} />}
-            <button onClick={finalizar} disabled={enviando || !itens.length || !meio} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 font-semibold text-white disabled:opacity-50">
+            <button onClick={finalizar} disabled={enviando || !itens.length || !meio} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 font-semibold text-on-accent disabled:opacity-50">
               {enviando && <Loader2 className="animate-spin" size={16} />} Finalizar e gerar pagamento
             </button>
             <p className="text-[11px] text-slate-500">Após o pagamento, as licenças entram no seu estoque e os livros seguem para envio.</p>

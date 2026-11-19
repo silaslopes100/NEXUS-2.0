@@ -33,7 +33,7 @@ export const ConversaLista: React.FC<Props> = ({ conversas, selecionadaId, meuId
       <div className="flex items-center justify-between gap-2 border-b border-slate-800 p-3">
         <h2 className="text-base font-semibold text-white">Conversas</h2>
         <button type="button" onClick={onNova}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-nexus-yellow px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-nexus-yellow/90">
+          className="inline-flex items-center gap-1.5 rounded-xl bg-nexus-yellow px-3 py-1.5 text-xs font-semibold text-ink hover:bg-nexus-yellow/90">
           <Plus size={14} /> Nova
         </button>
       </div>
@@ -85,7 +85,7 @@ export const ConversaLista: React.FC<Props> = ({ conversas, selecionadaId, meuId
                         : c.tipo === 'individual' ? rotuloPerfil(c.outro?.perfil) : `${c.total_membros} participantes`}
                     </p>
                     {c.nao_lidas > 0 && (
-                      <span className="min-w-[20px] shrink-0 rounded-full bg-nexus-yellow px-1.5 text-center text-[10px] font-bold leading-5 text-slate-950">
+                      <span className="min-w-[20px] shrink-0 rounded-full bg-nexus-yellow px-1.5 text-center text-[10px] font-bold leading-5 text-ink">
                         {c.nao_lidas > 99 ? '99+' : c.nao_lidas}
                       </span>
                     )}

@@ -93,7 +93,7 @@ export const RemetenteEtiquetaCard: React.FC<{ valorAtual?: unknown; onSalvo: (m
             O destinatário é sempre o endereço cadastrado no Polo.
           </p>
         </div>
-        <button disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+        <button disabled={salvando} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-on-accent disabled:opacity-50">
           {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar
         </button>
       </div>

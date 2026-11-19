@@ -172,7 +172,7 @@ const NovaSolicitacao: React.FC<{ escolaId: string; onCriada: (s: Solicitacao) =
           Sem pagamento agora. Quando o Polo atender, você recebe a Nota de Prestação de Contas para repassar o valor.
         </p>
         <button type="button" disabled={!itens.length || enviando} onClick={() => void enviar()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-nexus-yellow py-3 font-bold text-slate-950 disabled:opacity-40">
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-nexus-yellow py-3 font-bold text-ink disabled:opacity-40">
           {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Enviar ao Polo
         </button>
       </aside>
@@ -227,7 +227,7 @@ export const SolicitacoesEscolaPage: React.FC = () => {
         </div>
         {!nova && (
           <button type="button" onClick={() => setNova(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 font-bold text-slate-950">
+            className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 font-bold text-ink">
             <Plus size={16} /> Nova solicitação
           </button>
         )}

@@ -53,7 +53,7 @@ export const MensagemItem: React.FC<Props> = ({ mensagem: m, minha, mostrarRemet
   return (
     <div className={`flex ${minha ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm sm:max-w-[70%] ${minha
-        ? 'rounded-br-md bg-nexus-yellow/90 text-slate-950'
+        ? 'rounded-br-md bg-nexus-yellow/90 text-ink'
         : 'rounded-bl-md bg-slate-800 text-slate-100'}`}>
         {mostrarRemetente && !minha && (
           <p className="mb-0.5 text-xs font-semibold text-blue-300">{m.remetente_nome || 'Usuário'}</p>

@@ -349,7 +349,7 @@ export const EscolaEditModal: React.FC<EscolaEditModalProps> = ({
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:opacity-50"
             >
               {saving ? <Loader2 className="animate-spin" size={16} /> : 'Salvar Alterações'}
             </button>

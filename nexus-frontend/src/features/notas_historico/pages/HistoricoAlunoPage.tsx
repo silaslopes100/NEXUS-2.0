@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Award, CheckCircle2, Download, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, Loader2, RefreshCw } from 'lucide-react';
 import {
   HistoricoItem,
   mensagemErroNotas,
@@ -52,9 +52,6 @@ export const HistoricoAlunoPage: React.FC = () => {
     <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-nexus-yellow/30 bg-nexus-yellow/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-nexus-yellow">
-            <Award className="h-3.5 w-3.5" /> Ambiente do Aluno
-          </div>
           <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Notas &amp; Histórico</h1>
           <p className="mt-1 text-sm text-slate-400">Consulte suas notas finais e emita seu histórico acadêmico.</p>
         </div>
@@ -62,7 +59,7 @@ export const HistoricoAlunoPage: React.FC = () => {
           <button type="button" onClick={() => void carregar()} disabled={carregando} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} /> Atualizar
           </button>
-          <button type="button" onClick={() => void baixarPdf()} disabled={baixando} className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-3 py-2 text-sm font-bold text-slate-950 disabled:opacity-50">
+          <button type="button" onClick={() => void baixarPdf()} disabled={baixando} className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-3 py-2 text-sm font-bold text-ink disabled:opacity-50">
             {baixando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Baixar PDF
           </button>
         </div>

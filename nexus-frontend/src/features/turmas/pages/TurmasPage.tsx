@@ -122,7 +122,7 @@ export const TurmasPage: React.FC = () => {
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const abaCls = (ativa: boolean) =>
     `rounded-lg px-4 py-2 text-sm font-semibold ${
-      ativa ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+      ativa ? 'bg-blue-600 text-on-accent' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
     }`;
 
   return (
@@ -133,7 +133,7 @@ export const TurmasPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setForm({ aberto: true, turma: null })}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500"
           >
             <Plus size={16} /> Cadastrar turma
           </button>
@@ -252,7 +252,7 @@ export const TurmasPage: React.FC = () => {
                               type="button"
                               disabled={excluindoId !== null}
                               onClick={() => void excluir(turma)}
-                              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+                              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-red-500 disabled:opacity-60"
                             >
                               Confirmar
                             </button>

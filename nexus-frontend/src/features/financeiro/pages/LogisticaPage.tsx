@@ -1,5 +1,4 @@
 import React from 'react';
-import { History, PackageCheck, Truck } from 'lucide-react';
 import { PeriodoFiltros } from '@/components/filters/PeriodoFiltros';
 import { PedidosTabela } from '@/features/financeiro/components/PedidosTabela';
 import { useAcessoModulo } from '@/features/financeiro/acesso';
@@ -21,9 +20,8 @@ export const LogisticaPage: React.FC<{ modo: 'pendentes' | 'historico' }> = ({ m
     <div className="max-w-7xl space-y-6">
       <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-indigo-950/30 p-6 shadow-xl sm:flex-row sm:items-start">
         <div>
-        <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300"><Truck size={15} /> Logística & Livros</p>
-        <h1 className="flex items-center gap-3 text-3xl font-extrabold text-white">
-          {pendentes ? <><PackageCheck size={28} /> Pendentes de envio</> : <><History size={28} /> Histórico de pedidos</>}
+        <h1 className="text-3xl font-extrabold text-white">
+          {pendentes ? 'Pendentes de envio' : 'Histórico de pedidos'}
         </h1>
         <p className="mt-1 text-sm text-slate-400">
           {pendentes

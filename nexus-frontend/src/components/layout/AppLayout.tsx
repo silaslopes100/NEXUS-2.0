@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Menu, Search } from 'lucide-react';
-import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
-import { PendenciasSino } from '@/features/transferencias/components/PendenciasSino';
+import { useAuthStore } from '@/stores/authStore';
 import { NotificacoesSino } from '@/features/solicitacoes/components/NotificacoesSino';
 import { ChatBadge } from '@/features/chat/components/ChatBadge';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
 
 export const AppLayout: React.FC = () => {
@@ -15,7 +15,7 @@ export const AppLayout: React.FC = () => {
   const roleName = perfil?.nome || user?.perfil?.nome || 'aluno';
 
   return (
-    <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex">
+    <div className="min-h-screen bg-nexus-page text-slate-100 flex">
       {/* Dynamic Role-Based Sidebar */}
       <Sidebar
         isMobileOpen={mobileMenuOpen}
@@ -53,8 +53,7 @@ export const AppLayout: React.FC = () => {
               />
             </div>
 
-            {/* Notifications Pill */}
-            {normalizeUserRole(roleName) === 'admin' && <PendenciasSino />}
+            <ThemeToggle />
             <ChatBadge />
             <NotificacoesSino />
 

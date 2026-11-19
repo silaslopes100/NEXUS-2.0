@@ -84,7 +84,7 @@ const LoginLicenca: React.FC<{ onVoltar: () => void }> = ({ onVoltar }) => {
       <button
         type="submit"
         disabled={enviando}
-        className="w-full py-3.5 px-4 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 text-slate-950 font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
+        className="w-full py-3.5 px-4 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 text-ink font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
       >
         {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
         {enviando ? 'Entrando...' : 'Entrar'}
@@ -293,7 +293,7 @@ const LoginEmailSenha: React.FC<{ onLicenca: () => void }> = ({ onLicenca }) => 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full py-3 px-4 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all duration-200 transform active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          className="w-full py-3 px-4 bg-gradient-to-r from-nexus-yellow via-amber-500 to-amber-600 hover:from-nexus-yellow-hover hover:to-amber-500 text-ink font-bold text-sm rounded-xl shadow-lg shadow-nexus-yellow/20 flex items-center justify-center gap-2 transition-all duration-200 transform active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
         >
           {isSubmitting ? (
             <>

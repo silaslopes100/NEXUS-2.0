@@ -217,7 +217,7 @@ export const GerarMatriculaModal: React.FC<Props> = ({ aluno, onClose, onSuccess
           <button
             type="submit"
             disabled={salvando}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {salvando && <Loader2 size={16} className="animate-spin" />}
             {salvando ? 'Gerando...' : 'Gerar matrícula'}

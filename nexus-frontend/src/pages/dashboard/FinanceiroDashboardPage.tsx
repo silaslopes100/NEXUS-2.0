@@ -37,7 +37,6 @@ export const FinanceiroDashboardPage: React.FC = () => {
     <div className="max-w-7xl space-y-8">
       <header className="flex items-center justify-between rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-emerald-950/40 p-8 shadow-2xl">
         <div>
-          <p className="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-300">Financeiro</p>
           <h1 className="text-3xl font-extrabold text-white">Painel financeiro{user?.nome ? `, ${user.nome}` : ''}</h1>
           <p className="mt-1 max-w-xl text-sm text-slate-400">Vendas aos Polos, cobranças e regras de pagamento.</p>
         </div>

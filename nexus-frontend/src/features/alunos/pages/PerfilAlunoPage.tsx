@@ -346,7 +346,7 @@ export const PerfilAlunoPage: React.FC = () => {
                 type="button"
                 onClick={() => void handlePhotoUpload()}
                 disabled={uploadingPhoto}
-                className="inline-flex items-center gap-2 rounded-lg bg-nexus-yellow px-3 py-2 text-xs font-bold text-slate-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-nexus-yellow px-3 py-2 text-xs font-bold text-ink hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 {uploadingPhoto ? 'Enviando...' : 'Enviar foto'}
@@ -416,7 +416,7 @@ export const PerfilAlunoPage: React.FC = () => {
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-slate-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-xl bg-nexus-yellow px-4 py-2.5 text-sm font-bold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {saving ? 'Salvando...' : 'Salvar alterações'}

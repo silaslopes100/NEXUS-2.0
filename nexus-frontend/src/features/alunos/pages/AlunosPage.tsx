@@ -154,7 +154,7 @@ export const AlunosPage: React.FC = () => {
           onClick={() => setShowForm(true)}
           disabled={!poloSelecionado}
           title={poloSelecionado ? undefined : 'Selecione um Polo para cadastrar'}
-          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500 disabled:opacity-60"
         >
           <Plus size={16} /> Novo aluno
         </button>
@@ -235,7 +235,7 @@ export const AlunosPage: React.FC = () => {
           </div>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-500"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-on-accent hover:bg-blue-500"
           >
             Buscar
           </button>
