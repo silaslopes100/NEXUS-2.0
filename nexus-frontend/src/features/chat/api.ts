@@ -1,5 +1,5 @@
-import { put } from '@vercel/blob/client';
 import { apiClient } from '@/api/client';
+import { enviarArquivoDireto, urlArquivo } from '@/lib/uploadDireto';
 
 export type TipoConversa = 'individual' | 'grupo';
 export type StatusConversa = 'ativa' | 'encerrada';
@@ -86,22 +86,8 @@ export interface ConversaAdmin {
   criado_em?: string | null;
 }
 
-interface UploadPreparado {
-  modo: 'blob' | 'local';
-  pathname: string;
-  content_type: string;
-  token?: string | null;
-  upload_url?: string | null;
-}
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-
 /** URLs locais (desenvolvimento) são relativas à API; as do Blob já são absolutas. */
-export const urlAnexo = (url?: string | null) =>
-  !url ? '' : url.startsWith('/') ? `${API_BASE_URL}${url}` : url;
-
-/** Tipo MIME aceito pelo backend (alguns navegadores anexam codecs: "audio/webm;codecs=opus"). */
-const mimeBase = (mime: string) => mime.split(';')[0].trim().toLowerCase();
+export const urlAnexo = urlArquivo;
 
 export const chatApi = {
   listar: (tipo?: TipoConversa) =>
@@ -130,29 +116,8 @@ export const chatApi = {
   ocultar: (id: string) => apiClient.delete(`/chat/conversas/${id}/minha`).then(() => undefined),
 
   /** Envia o arquivo direto ao armazenamento (Blob em produção, disco em dev) e devolve os metadados. */
-  async enviarArquivo(arquivo: File | Blob, nome: string, onProgresso?: (pct: number) => void): Promise<AnexoEnviado> {
-    const mime = mimeBase(arquivo.type || 'application/octet-stream');
-    const prep = await apiClient
-      .post<UploadPreparado>('/chat/anexos/upload', { nome, mime, tamanho: arquivo.size })
-      .then((r) => r.data);
-    if (prep.modo === 'blob' && prep.token) {
-      const res = await put(prep.pathname, arquivo, {
-        access: 'public',
-        token: prep.token,
-        contentType: prep.content_type,
-        multipart: arquivo.size > 8 * 1024 * 1024,
-        onUploadProgress: (e) => onProgresso?.(e.percentage),
-      });
-      return { url: res.url, pathname: prep.pathname, nome, mime, tamanho: arquivo.size };
-    }
-    const form = new FormData();
-    form.append('arquivo', new File([arquivo], nome, { type: mime }));
-    const res = await apiClient.post<{ url: string; pathname: string }>(prep.upload_url!, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120_000,
-      onUploadProgress: (e) => e.total && onProgresso?.(Math.round((e.loaded / e.total) * 100)),
-    });
-    return { url: res.data.url, pathname: prep.pathname, nome, mime, tamanho: arquivo.size };
+  enviarArquivo(arquivo: File | Blob, nome: string, onProgresso?: (pct: number) => void): Promise<AnexoEnviado> {
+    return enviarArquivoDireto('/chat/anexos/upload', arquivo, nome, onProgresso);
   },
 
   // Admin

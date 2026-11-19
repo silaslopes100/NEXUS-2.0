@@ -53,6 +53,8 @@ import { FinanceiroDashboardPage } from '@/pages/dashboard/FinanceiroDashboardPa
 import { LogisticaDashboardPage } from '@/pages/dashboard/LogisticaDashboardPage';
 import { ChatPage } from '@/features/chat/pages/ChatPage';
 import { ChatAdminPage } from '@/features/chat/pages/ChatAdminPage';
+import { CentralEstagioAdminPage } from '@/features/estagios/pages/CentralEstagioAdminPage';
+import { CentralEstagioAlunoPage } from '@/features/estagios/pages/CentralEstagioAlunoPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -103,6 +105,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/chat" element={<ChatAdminPage />} />
           <Route path="/admin/etl" element={<ExecucoesBatchPage />} />
           <Route path="/admin/estoque" element={<EstoquePage />} />
+          <Route path="/admin/estagios" element={<CentralEstagioAdminPage />} />
         </Route>
 
         {/* Módulo 2.4 — Financeiro (admin + perfil financeiro; o backend restringe por área) */}
@@ -137,6 +140,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/comprar-licencas" element={<ComprarLicencasPage />} />
           <Route path="/polo/livros" element={<MeusPedidosPage />} />
           <Route path="/polo/solicitacoes" element={<SolicitacoesPoloPage />} />
+          <Route path="/polo/estagios" element={<CentralEstagioAdminPage />} />
         </Route>
 
         {/* Módulo Escola */}
@@ -150,6 +154,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/escola/licencas" element={<LicencasPage />} />
           <Route path="/escola/livros" element={<MeusPedidosPage />} />
           <Route path="/escola/solicitacoes" element={<SolicitacoesEscolaPage />} />
+          <Route path="/escola/estagios" element={<CentralEstagioAdminPage />} />
         </Route>
 
         {/* Módulo Professor */}
@@ -174,6 +179,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/disciplinas" element={<MinhasDisciplinasPage />} />
             <Route path="/aluno/avaliacoes/:avaliacaoId" element={<RealizarAvaliacaoPage />} />
             <Route path="/aluno/presenca" element={<MinhasPresencasPage />} />
+            <Route path="/aluno/estagio" element={<CentralEstagioAlunoPage />} />
           </Route>
           <Route path="/aluno/ava" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />

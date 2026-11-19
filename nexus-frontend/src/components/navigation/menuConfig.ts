@@ -29,6 +29,7 @@ import {
   Scale,
   TrendingUp,
   Inbox,
+  Briefcase,
   LucideIcon,
 } from 'lucide-react';
 import { UserRole } from '@/types/auth';
@@ -41,6 +42,8 @@ export interface MenuItem {
   badgeColor?: 'yellow' | 'blue' | 'emerald' | 'purple' | 'slate';
   permission?: string;
   isPlaceholder?: boolean;
+  /** Contador numérico dinâmico (consultado pelo Sidebar). */
+  contador?: 'estagios';
 }
 
 export interface MenuGroup {
@@ -126,6 +129,12 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Presenças & Frequência',
           path: '/admin/presencas',
           icon: Clock,
+        },
+        {
+          title: 'Central de Estágio',
+          path: '/admin/estagios',
+          icon: Briefcase,
+          contador: 'estagios',
         },
       ],
     },
@@ -319,6 +328,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           path: '/polo/transferencias',
           icon: ArrowLeftRight,
         },
+        {
+          title: 'Central de Estágio',
+          path: '/polo/estagios',
+          icon: Briefcase,
+        },
       ],
     },
     {
@@ -394,6 +408,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Transferências',
           path: '/escola/transferencias',
           icon: ArrowLeftRight,
+        },
+        {
+          title: 'Central de Estágio',
+          path: '/escola/estagios',
+          icon: Briefcase,
         },
         {
           title: 'Presenças & Frequência',
@@ -515,6 +534,12 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Frequência & Presença',
           path: '/aluno/presenca',
           icon: Clock,
+        },
+        {
+          title: 'Central de Estágio',
+          path: '/aluno/estagio',
+          icon: Briefcase,
+          contador: 'estagios',
         },
         {
           title: 'Material Didático & Livros',

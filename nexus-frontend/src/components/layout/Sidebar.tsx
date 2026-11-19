@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 import { menuByRole, MenuItem, MenuGroup } from '@/components/navigation/menuConfig';
@@ -13,6 +13,44 @@ import {
 } from 'lucide-react';
 import { authApi } from '@/features/auth/api';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
+import { estagiosApi } from '@/features/estagios/api';
+
+const INTERVALO_CONTADORES_MS = 60_000;
+
+/**
+ * Contadores numéricos do menu (por caminho): solicitações de estágio em análise (Admin) e
+ * avaliações de estágio ainda não vistas (Aluno). Atualiza a cada 60 s e no evento
+ * `nexus:contadores-menu`, disparado pelas telas depois de uma ação.
+ */
+const useContadoresMenu = (perfil: UserRole, comAreaAluno: boolean, ativo: boolean) => {
+  const [contadores, setContadores] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!ativo) return;
+    let vivo = true;
+    const atualizar = () => {
+      if (document.hidden) return;
+      if (perfil === 'admin') {
+        estagiosApi.resumoAdmin()
+          .then((r) => vivo && setContadores((c) => ({ ...c, '/admin/estagios': r.pendentes })))
+          .catch(() => undefined);
+      }
+      if (perfil === 'aluno' || comAreaAluno) {
+        estagiosApi.resumoAluno()
+          .then((r) => vivo && setContadores((c) => ({ ...c, '/aluno/estagio': r.pendentes })))
+          .catch(() => undefined);
+      }
+    };
+    atualizar();
+    const id = window.setInterval(atualizar, INTERVALO_CONTADORES_MS);
+    window.addEventListener('nexus:contadores-menu', atualizar);
+    return () => {
+      vivo = false;
+      window.clearInterval(id);
+      window.removeEventListener('nexus:contadores-menu', atualizar);
+    };
+  }, [perfil, comAreaAluno, ativo]);
+  return contadores;
+};
 
 interface SidebarProps {
   isMobileOpen?: boolean;
@@ -48,6 +86,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ? menuByRole.aluno.flatMap((group) => group.items).filter((item) => item.path.startsWith('/aluno/'))
     : [];
 
+  const contadores = useContadoresMenu(activeRole, !!user?.tambem_aluno, !!user && !viaLicenca);
+
   const handleLogout = async () => {
     try {
       await authApi.logout(refreshToken);
@@ -59,6 +99,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const renderBadge = (item: MenuItem) => {
+    const total = item.contador ? contadores[item.path] || 0 : 0;
+    if (total > 0) {
+      return (
+        <span className="min-w-[20px] rounded-full bg-amber-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-950">
+          {total > 99 ? '99+' : total}
+        </span>
+      );
+    }
     if (!item.badge) return null;
     const colorClasses = {
       yellow: 'bg-nexus-yellow/20 text-nexus-yellow border-nexus-yellow/30',
@@ -95,6 +143,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <>
             {isActive && (
               <div className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-nexus-yellow rounded-r-full" />
+            )}
+            {collapsed && item.contador && (contadores[item.path] || 0) > 0 && (
+              <span className="absolute right-3 top-1.5 h-2 w-2 rounded-full bg-amber-400" />
             )}
             <Icon
               className={`w-4 h-4 shrink-0 transition-colors ${
