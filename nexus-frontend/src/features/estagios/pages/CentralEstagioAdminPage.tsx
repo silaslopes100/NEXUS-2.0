@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   BarChart3,
-  Briefcase,
   ClipboardList,
   FileSpreadsheet,
   FileText,
@@ -204,7 +203,6 @@ export const CentralEstagioAdminPage: React.FC = () => {
     <div className="max-w-7xl space-y-6">
       <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center">
         <div className="flex items-start gap-4">
-          <span className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-300 sm:flex"><Briefcase size={24} /></span>
           <div>
             <h1 className="text-3xl font-extrabold text-white">Central de Estágio</h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
