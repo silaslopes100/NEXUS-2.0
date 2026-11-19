@@ -1,9 +1,10 @@
 // Tipos do módulo 2.4 Financeiro & Logística (espelham app/modules/financeiro/schemas.py).
 
 /** 'kit' = Disciplina (1 livro + 1 licença), o produto vendido; 'livro' e 'licenca' ficam para o histórico. */
-export type TipoPedido = 'livro' | 'licenca' | 'kit';
+/** 'troca' = solicitação de troca de licença/livro feita pelo Polo/Escola. */
+export type TipoPedido = 'livro' | 'licenca' | 'kit' | 'troca';
 /** Tipos que passam pela logística (envio de livro). */
-export const tipoComEnvio = (tipo: TipoPedido) => tipo === 'livro' || tipo === 'kit';
+export const tipoComEnvio = (tipo: TipoPedido) => tipo === 'livro' || tipo === 'kit' || tipo === 'troca';
 
 export type StatusPedido =
   | 'aguardando_pagamento'
@@ -11,34 +12,62 @@ export type StatusPedido =
   | 'enviado'
   | 'entregue'
   | 'concluido'
-  | 'cancelado';
+  | 'cancelado'
+  | 'troca_solicitada'
+  | 'troca';
 
-export interface Produto {
-  id: string;
-  tipo: TipoPedido;
-  sku: string;
-  nome: string;
-  descricao?: string | null;
-  disciplina_id?: string | null;
-  preco: number;
-  peso_g?: number | null;
-  altura_cm?: number | null;
-  largura_cm?: number | null;
-  comprimento_cm?: number | null;
-  ativo: boolean;
-  criado_em?: string | null;
+export type MotivoTroca = 'disciplina_errada' | 'mudanca_turma' | 'livro_defeito' | 'outro';
+
+export const MOTIVO_TROCA: Record<MotivoTroca, string> = {
+  disciplina_errada: 'Disciplina comprada errada',
+  mudanca_turma: 'Mudança de turma ou grade',
+  livro_defeito: 'Livro com defeito',
+  outro: 'Outro',
+};
+
+export interface TrocaItem {
+  id?: string | null;
+  disciplina_devolver_id: string;
+  disciplina_devolver_nome?: string | null;
+  disciplina_receber_id: string;
+  disciplina_receber_nome?: string | null;
+  quantidade: number;
 }
 
-export interface ProdutoPayload {
-  tipo?: TipoPedido;
-  sku?: string;
-  nome?: string;
-  descricao?: string | null;
-  /** Obrigatória para licença (estoque por disciplina). */
-  disciplina_id?: string | null;
-  preco?: number;
-  peso_g?: number | null;
-  ativo?: boolean;
+export interface TrocaPayload {
+  itens: { disciplina_devolver_id: string; disciplina_receber_id: string; quantidade: number }[];
+  motivo: MotivoTroca;
+  descricao?: string;
+  endereco?: EnderecoEntrega;
+}
+
+/** Saldo de livros de uma Disciplina no Estoque Central (negativo = enviado sem estoque). */
+export interface EstoqueItem {
+  disciplina_id: string;
+  disciplina_nome: string;
+  sku?: string | null;
+  curso_id?: string | null;
+  curso_nome?: string | null;
+  semestre?: number | null;
+  disciplina_ativa: boolean;
+  quantidade: number;
+  atualizado_em?: string | null;
+}
+
+export type TipoMovimentacaoEstoque = 'entrada' | 'ajuste' | 'baixa_envio';
+
+export interface EstoqueMovimentacao {
+  id: string;
+  disciplina_id: string;
+  tipo: TipoMovimentacaoEstoque;
+  /** Variação com sinal. */
+  quantidade: number;
+  saldo_apos: number;
+  pedido_id?: string | null;
+  pedido_numero?: string | null;
+  usuario_nome?: string | null;
+  observacao?: string | null;
+  criado_em?: string | null;
 }
 
 export interface EnderecoEntrega {
@@ -97,6 +126,9 @@ export interface Pedido {
   itens: PedidoItem[];
   historico: PedidoHistorico[];
   envios?: Envio[];
+  troca_motivo?: MotivoTroca | null;
+  troca_descricao?: string | null;
+  troca_itens?: TrocaItem[];
 }
 
 export interface Envio {
@@ -281,10 +313,12 @@ export const STATUS_PEDIDO: Record<StatusPedido, { label: string; className: str
   entregue: { label: 'Entregue', className: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
   concluido: { label: 'Concluído', className: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
   cancelado: { label: 'Cancelado', className: 'bg-red-500/15 text-red-300 border-red-500/30' },
+  troca_solicitada: { label: 'Troca solicitada', className: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  troca: { label: 'Troca', className: 'bg-violet-500/15 text-violet-300 border-violet-500/30' },
 };
 
 export const TIPO_PEDIDO: Record<TipoPedido, string> = {
-  kit: 'Disciplina (livro + licença)', livro: 'Livro', licenca: 'Licença',
+  kit: 'Disciplina (livro + licença)', livro: 'Livro', licenca: 'Licença', troca: 'Troca de livro',
 };
 
 // Transições manuais permitidas pela API (POST /financeiro/pedidos/{id}/status).

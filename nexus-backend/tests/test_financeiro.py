@@ -287,25 +287,19 @@ def _hdr(uid: str) -> dict:
     return {"Authorization": f"Bearer {create_access_token({'sub': uid})}"}
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("uid,esperado", [
-    ("admin-1", 201), ("fin-1", 201), ("prof-fin", 201),
-    ("log-1", 403), ("prof-1", 403), ("polo-1", 403),
-])
-async def test_require_area_financeiro_para_cadastrar_produto(client, uid, esperado):
-    res = await client.post(
-        "/financeiro/produtos",
-        json={"tipo": "livro", "sku": f"SKU-{uid}", "nome": "Livro", "preco": 10},
-        headers=_hdr(uid),
-    )
-    assert res.status_code == esperado
+def test_sku_duplicado_gera_409(service):
+    _produto(service, sku="dup")
+    with pytest.raises(HTTPException) as exc:
+        _produto(service, sku="dup")
+    assert exc.value.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_sku_duplicado_gera_409(client):
-    body = {"tipo": "livro", "sku": "dup", "nome": "Livro", "preco": 10}
-    assert (await client.post("/financeiro/produtos", json=body, headers=_hdr("admin-1"))).status_code == 201
-    assert (await client.post("/financeiro/produtos", json=body, headers=_hdr("admin-1"))).status_code == 409
+async def test_crud_de_produtos_nao_e_exposto(client):
+    """Produtos e Preços saiu da plataforma: o kit é mantido pelas Disciplinas."""
+    assert (await client.get("/financeiro/produtos", headers=_hdr("admin-1"))).status_code == 404
+    body = {"tipo": "livro", "sku": "X", "nome": "Livro", "preco": 10}
+    assert (await client.post("/financeiro/produtos", json=body, headers=_hdr("admin-1"))).status_code in (404, 405)
 
 
 @pytest.mark.asyncio

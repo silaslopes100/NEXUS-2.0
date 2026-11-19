@@ -20,7 +20,7 @@ export const LogisticaDashboardPage: React.FC = () => {
     try {
       // Pedido pelo mês de criação: "entregues no mês" aproxima os pedidos do mês já entregues.
       const [pendentes, enviados, entreguesMes] = await Promise.all([
-        total('pago_aguardando_envio'),
+        total('fila_envio'), // venda paga ou troca solicitada
         total('enviado'),
         total('entregue', { ano: String(hoje.getFullYear()), mes: String(hoje.getMonth() + 1) }),
       ]);

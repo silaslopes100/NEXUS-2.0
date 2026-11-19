@@ -17,6 +17,11 @@ from app.modules.financeiro.schemas import (
     CheckoutRequest,
     CheckoutResponse,
     EnvioCreate,
+    EstoqueAjusteRequest,
+    EstoqueEntradaRequest,
+    EstoqueItemResponse,
+    EstoqueListResponse,
+    EstoqueMovimentacaoResponse,
     FiltrosPeriodo,
     PagamentoResponse,
     PedidoCreate,
@@ -36,6 +41,13 @@ from app.modules.financeiro.service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _bloquear_troca(pedido: PedidoResponse) -> None:
+    """A troca só muda de status por "Troca efetuada"/"Recusar" (que devolvem/creditam as licenças)."""
+    if regras_pedido.eh_troca(pedido.tipo):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="Use \"Troca efetuada\" ou \"Recusar\" para concluir uma troca")
 
 
 def _regra_response(regra: Dict[str, Any]) -> RegraPagamentoResponse:
@@ -103,6 +115,7 @@ class OperacaoService:
     def cancelar_pedido(self, pedido_id: str, motivo: str, user: UserResponse) -> PedidoResponse:
         """Cancela o pedido; cobrança pendente é cancelada no gateway antes."""
         pedido = self.pedidos.get_pedido(pedido_id, user)
+        _bloquear_troca(pedido)
         pendente = self.repo.get_pagamento_pendente_do_pedido(pedido.id)
         if pendente:
             self.cobranca.cancelar_pagamento(pendente["id"], user)
@@ -120,6 +133,7 @@ class OperacaoService:
         Cancela a cobrança pendente (evita pagamento em dobro) e, para licença, credita o estoque.
         """
         pedido = self.pedidos.get_pedido(pedido_id, user)
+        _bloquear_troca(pedido)
         regras_pedido.validar_transicao_para_tipo(pedido.tipo, pedido.status, para)
         pendente = self.repo.get_pagamento_pendente_do_pedido(pedido.id)
         if pendente and pedido.status == "aguardando_pagamento":
@@ -190,9 +204,40 @@ class OperacaoService:
             dados["peso_total_g"] = self.peso_sugerido(pedido)
         self.repo.registrar_envio(pedido.id, dados, user.id)
         rastreio = f" · rastreio {payload.codigo_rastreio}" if payload.codigo_rastreio else ""
-        return self.pedidos.alterar_status(
+        enviado = self.pedidos.alterar_status(
             pedido.id, "enviado", user.id, observacao=f"Enviado por {payload.transportadora}{rastreio}",
         )
+        # Baixa no Estoque Central. Estoque insuficiente não bloqueia o envio (o saldo fica negativo),
+        # e uma falha aqui não desfaz o envio já registrado: fica no log para o admin ajustar o estoque.
+        try:
+            self.repo.baixar_estoque_envio(pedido.id, user.id, f"Pedido {pedido.numero} enviado")
+        except Exception:  # noqa: BLE001
+            logger.exception("Falha ao dar baixa no estoque do pedido %s", pedido.id)
+        return enviado
+
+    # ------------------------------------------------------------------
+    # Estoque Central de livros (por Disciplina)
+    # ------------------------------------------------------------------
+
+    def listar_estoque(self, q: Optional[str], curso_id: Optional[str]) -> EstoqueListResponse:
+        itens = [EstoqueItemResponse(**i) for i in self.repo.list_estoque(q=q, curso_id=curso_id)]
+        return EstoqueListResponse(total=len(itens), items=itens)
+
+    def _movimentar(self, disciplina_id: str, tipo: str, quantidade: int, observacao: Optional[str],
+                    user: UserResponse) -> EstoqueItemResponse:
+        item = self.repo.movimentar_estoque(disciplina_id, tipo, quantidade, user.id, (observacao or "").strip() or None)
+        if item is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
+        return EstoqueItemResponse(**item)
+
+    def entrada_estoque(self, disciplina_id: str, payload: EstoqueEntradaRequest, user: UserResponse) -> EstoqueItemResponse:
+        return self._movimentar(disciplina_id, "entrada", payload.quantidade, payload.observacao, user)
+
+    def ajustar_estoque(self, disciplina_id: str, payload: EstoqueAjusteRequest, user: UserResponse) -> EstoqueItemResponse:
+        return self._movimentar(disciplina_id, "ajuste", payload.quantidade, payload.observacao, user)
+
+    def movimentacoes_estoque(self, disciplina_id: str) -> List[EstoqueMovimentacaoResponse]:
+        return [EstoqueMovimentacaoResponse(**m) for m in self.repo.list_movimentacoes_estoque(disciplina_id)]
 
     def marcar_entregue(self, pedido_id: str, observacao: Optional[str], user: UserResponse) -> PedidoResponse:
         pedido = self.pedidos.get_pedido(pedido_id, user)

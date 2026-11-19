@@ -50,7 +50,7 @@ export const BuscaContatos: React.FC<Props> = ({ onEscolher, onCancelar, excluir
           visiveis.map((c) => (
             <button key={c.id} type="button" onClick={() => onEscolher(c)}
               className="flex w-full items-center gap-3 border-b border-slate-800/60 px-3 py-2 text-left last:border-0 hover:bg-slate-800/60">
-              <Avatar nome={c.nome} fotoUrl={c.foto_url} tamanho="sm" />
+              <Avatar nome={c.nome} usuarioId={c.id} fotoUrl={c.foto_url} tamanho="sm" />
               <div className="min-w-0">
                 <p className="truncate text-sm text-white">{c.nome}</p>
                 <p className="truncate text-[11px] text-slate-400">

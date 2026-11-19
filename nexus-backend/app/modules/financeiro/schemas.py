@@ -7,9 +7,10 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # "kit" = Disciplina (livro + licença), produto vendido a partir da migração 021.
-TipoPedido = Literal["livro", "licenca", "kit"]
-# Filtro de listagem: além dos tipos, "com_envio" = livro + kit (telas de logística).
-TipoFiltro = Literal["livro", "licenca", "kit", "com_envio"]
+# "troca" = solicitação de troca de licença/livro feita pelo Polo/Escola (migração 026).
+TipoPedido = Literal["livro", "licenca", "kit", "troca"]
+# Filtro de listagem: além dos tipos, "com_envio" = livro + kit + troca (telas de logística).
+TipoFiltro = Literal["livro", "licenca", "kit", "troca", "com_envio"]
 StatusPedido = Literal[
     "aguardando_pagamento",
     "pago_aguardando_envio",
@@ -17,6 +18,8 @@ StatusPedido = Literal[
     "entregue",
     "concluido",
     "cancelado",
+    "troca_solicitada",
+    "troca",
 ]
 StatusPagamento = Literal["pendente", "pago", "vencido", "cancelado", "estornado", "falhou"]
 MeioPagamento = Literal["BOLETO", "PIX", "CREDIT_CARD"]
@@ -202,6 +205,10 @@ class PedidoResponse(BaseModel):
     itens: List[PedidoItemResponse] = Field(default_factory=list)
     historico: List[PedidoHistoricoResponse] = Field(default_factory=list)
     envios: List[EnvioResponse] = Field(default_factory=list)
+    # Troca de licença/livro (tipo "troca")
+    troca_motivo: Optional[str] = None
+    troca_descricao: Optional[str] = None
+    troca_itens: List["TrocaItemResponse"] = Field(default_factory=list)
 
 
 class PedidoListResponse(BaseModel):
@@ -377,6 +384,98 @@ class EnvioCreate(BaseModel):
     observacao: Optional[str] = Field(default=None, max_length=2000)
 
 
+# ---------------------------------------------------------------------------
+# Estoque Central de livros (por Disciplina)
+# ---------------------------------------------------------------------------
+
+class EstoqueItemResponse(BaseModel):
+    disciplina_id: str
+    disciplina_nome: str
+    sku: Optional[str] = None
+    curso_id: Optional[str] = None
+    curso_nome: Optional[str] = None
+    semestre: Optional[int] = None
+    disciplina_ativa: bool = True
+    quantidade: int = 0
+    atualizado_em: Optional[datetime] = None
+
+
+class EstoqueListResponse(BaseModel):
+    total: int
+    items: List[EstoqueItemResponse]
+
+
+class EstoqueEntradaRequest(BaseModel):
+    quantidade: int = Field(gt=0, le=1_000_000)
+    observacao: Optional[str] = Field(default=None, max_length=500)
+
+
+class EstoqueAjusteRequest(BaseModel):
+    """Define o saldo contado no inventário; o motivo fica no histórico."""
+
+    quantidade: int = Field(ge=0, le=1_000_000)
+    observacao: str = Field(min_length=3, max_length=500)
+
+
+class EstoqueMovimentacaoResponse(BaseModel):
+    id: str
+    disciplina_id: str
+    tipo: Literal["entrada", "ajuste", "baixa_envio"]
+    quantidade: int
+    saldo_apos: int
+    pedido_id: Optional[str] = None
+    pedido_numero: Optional[str] = None
+    usuario_id: Optional[str] = None
+    usuario_nome: Optional[str] = None
+    observacao: Optional[str] = None
+    criado_em: Optional[datetime] = None
+
+
+# ---------------------------------------------------------------------------
+# Troca de licença/livro (Polo e Escola)
+# ---------------------------------------------------------------------------
+
+MotivoTroca = Literal["disciplina_errada", "mudanca_turma", "livro_defeito", "outro"]
+
+
+class TrocaItemIn(BaseModel):
+    disciplina_devolver_id: str
+    disciplina_receber_id: str
+    quantidade: int = Field(ge=1, le=100000)
+
+    @model_validator(mode="after")
+    def _distintas(self) -> "TrocaItemIn":
+        if self.disciplina_devolver_id == self.disciplina_receber_id:
+            raise ValueError("A disciplina a receber deve ser diferente da disciplina a devolver")
+        return self
+
+
+class TrocaCreate(BaseModel):
+    itens: List[TrocaItemIn] = Field(min_length=1, max_length=50)
+    motivo: MotivoTroca
+    descricao: Optional[str] = Field(default=None, max_length=2000)
+    endereco: Optional["EnderecoEntrega"] = None  # padrão: endereço do Polo
+
+    @model_validator(mode="after")
+    def _descricao_quando_outro(self) -> "TrocaCreate":
+        if self.motivo == "outro" and not (self.descricao or "").strip():
+            raise ValueError("Descreva o motivo da troca")
+        return self
+
+
+class TrocaRecusa(BaseModel):
+    motivo: str = Field(min_length=3, max_length=2000)
+
+
+class TrocaItemResponse(BaseModel):
+    id: Optional[str] = None
+    disciplina_devolver_id: str
+    disciplina_devolver_nome: Optional[str] = None
+    disciplina_receber_id: str
+    disciplina_receber_nome: Optional[str] = None
+    quantidade: int
+
+
 class EntregaConfirmar(BaseModel):
     observacao: Optional[str] = Field(default=None, max_length=2000)
 
@@ -427,3 +526,7 @@ class VendasSerieItem(BaseModel):
     pedidos: int
     pedidos_pagos: int
     receita: float
+
+
+PedidoResponse.model_rebuild()
+TrocaCreate.model_rebuild()

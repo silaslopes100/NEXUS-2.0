@@ -3,6 +3,8 @@ import { Ban, CheckCircle2, Loader2, MapPin, Wallet, X } from 'lucide-react';
 import { financeiroApi } from '@/features/financeiro/api';
 import { CobrancaPedido } from '@/features/financeiro/components/CobrancaPedido';
 import { LogisticaPedido } from '@/features/financeiro/components/LogisticaPedido';
+import { TrocaPedido } from '@/features/financeiro/components/TrocaPedido';
+import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 import { SeloDemonstracao } from '@/features/financeiro/components/SimuladorPagamento';
 import { StatusPedidoBadge } from '@/features/financeiro/components/StatusPedidoBadge';
 import {
@@ -40,6 +42,8 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
   const [salvando, setSalvando] = useState(false);
   const [acao, setAcao] = useState<StatusManual | null>(null);
   const [texto, setTexto] = useState('');
+  const { user, perfil } = useAuthStore();
+  const ehAdmin = normalizeUserRole(perfil?.nome || user?.perfil?.nome) === 'admin';
 
   const load = useCallback(async () => {
     try {
@@ -72,7 +76,8 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
     }
   };
 
-  const acoes = pedido && podeAlterarStatus
+  const ehTroca = pedido?.tipo === 'troca';
+  const acoes = pedido && podeAlterarStatus && !ehTroca
     // Livro pago segue para a logística; licença paga é concluída na hora.
     ? (ACOES_MANUAIS[pedido.status] || []).filter((a) =>
       tipoComEnvio(pedido.tipo) ? a !== 'concluido' : a !== 'pago_aguardando_envio')
@@ -98,7 +103,11 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
             <div className="flex flex-wrap items-center gap-2">
               <StatusPedidoBadge status={pedido.status} />
               {ehDemo(pedido) && <SeloDemonstracao />}
-              <span className="rounded-full border border-slate-700 px-2.5 py-0.5 text-[11px] text-slate-300">{TIPO_PEDIDO[pedido.tipo]}</span>
+              {ehTroca ? (
+                <span className="rounded-full border border-violet-500/40 bg-violet-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-violet-300">Troca de livro</span>
+              ) : (
+                <span className="rounded-full border border-slate-700 px-2.5 py-0.5 text-[11px] text-slate-300">{TIPO_PEDIDO[pedido.tipo]}</span>
+              )}
               <span className="text-xs text-slate-500">Criado em {formatData(pedido.criado_em, true)}</span>
             </div>
 
@@ -112,7 +121,15 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
               )}
             </div>
 
-            <div>
+            {ehTroca && (
+              <TrocaPedido
+                pedido={pedido}
+                podeDecidir={ehAdmin}
+                onAtualizado={(p) => { setPedido(p); onAlterado(); }}
+              />
+            )}
+
+            {!ehTroca && <div>
               <h3 className="mb-2 text-xs font-bold uppercase text-slate-500">Itens</h3>
               <table className="w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-800">
@@ -129,14 +146,16 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
                 {Number(pedido.desconto) > 0 && <p>Desconto: −{formatBRL(pedido.desconto)}</p>}
                 <p className="text-base font-bold text-white">Total {formatBRL(pedido.valor_total)}</p>
               </div>
-            </div>
+            </div>}
 
-            <CobrancaPedido
-              pedido={pedido}
-              podeCancelar={podeAlterarStatus}
-              podeGerarCobranca={podeAlterarStatus || !podeLogistica}
-              onAlterado={() => { load(); onAlterado(); }}
-            />
+            {!ehTroca && (
+              <CobrancaPedido
+                pedido={pedido}
+                podeCancelar={podeAlterarStatus}
+                podeGerarCobranca={podeAlterarStatus || !podeLogistica}
+                onAlterado={() => { load(); onAlterado(); }}
+              />
+            )}
 
             {(podeLogistica || podeAlterarStatus) && (
               <LogisticaPedido

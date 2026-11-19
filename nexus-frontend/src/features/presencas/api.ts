@@ -53,3 +53,43 @@ export const presencasApi = {
     return data;
   },
 };
+
+// ---------------------------------------------------------------------------
+// Visão do aluno: presenças e frequência (chamadas e atas dos professores)
+// ---------------------------------------------------------------------------
+
+export interface AulaFrequencia {
+  data_aula?: string | null;
+  numero_aula?: number | null;
+  presente: boolean;
+  conteudo_ministrado?: string | null;
+}
+
+export interface DisciplinaFrequencia {
+  disciplina_id?: string | null;
+  disciplina_nome: string;
+  turma_nome?: string | null;
+  professor_nome?: string | null;
+  total_aulas: number;
+  presencas: number;
+  faltas: number;
+  percentual: number;
+  situacao: 'regular' | 'em_risco';
+  aulas: AulaFrequencia[];
+}
+
+export interface MinhaFrequencia {
+  total_aulas: number;
+  presencas: number;
+  faltas: number;
+  percentual: number | null;
+  frequencia_minima: number;
+  disciplinas: DisciplinaFrequencia[];
+}
+
+export const minhasPresencasApi = {
+  carregar: async (): Promise<MinhaFrequencia> => {
+    const { data } = await apiClient.get<MinhaFrequencia>('/presencas/me');
+    return data;
+  },
+};

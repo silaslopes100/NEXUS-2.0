@@ -183,6 +183,7 @@ export const ConversaJanela: React.FC<Props> = ({ conversaId, meuId, isAdmin, on
             <ArrowLeft size={18} />
           </button>
           <Avatar nome={detalhe?.titulo} grupo={detalhe?.tipo === 'grupo'}
+            usuarioId={detalhe?.tipo === 'individual' ? detalhe.membros.find((m) => m.id !== meuId)?.id : null}
             fotoUrl={detalhe?.tipo === 'individual' ? detalhe.membros.find((m) => m.id !== meuId)?.foto_url : null} />
           <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setPainelMembros((v) => !v)}>
             <p className="truncate font-semibold text-white">{detalhe?.titulo ?? '…'}</p>

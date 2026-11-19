@@ -27,6 +27,7 @@ import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { MinhasDisciplinasPage as MinhasDisciplinasProfessorPage } from '@/features/professores/pages/MinhasDisciplinasPage';
 import { MinhasConteudosPage as MinhasConteudosProfessorPage } from '@/features/professores/pages/MinhasConteudosPage';
 import { PresencasPage } from '@/features/presencas/pages/PresencasPage';
+import { MinhasPresencasPage } from '@/features/presencas/pages/MinhasPresencasPage';
 import { DiarioAulasPage } from '@/features/aulas/pages/DiarioAulasPage';
 import { AulasAuditoriaPage } from '@/features/aulas/pages/AulasAuditoriaPage';
 import { CursosPage } from '@/features/cursos/pages/CursosPage';
@@ -36,7 +37,6 @@ import { MinhasDisciplinasPage } from '@/features/alunos/pages/MinhasDisciplinas
 import { RealizarAvaliacaoPage } from '@/features/avaliacoes/pages/RealizarAvaliacaoPage';
 import { SolicitacoesEscolaPage } from '@/features/solicitacoes/pages/SolicitacoesEscolaPage';
 import { SolicitacoesPoloPage } from '@/features/solicitacoes/pages/SolicitacoesPoloPage';
-import { NotasAdminPage } from '@/features/notas_historico/pages/NotasAdminPage';
 import { NotasProfessorPage } from '@/features/notas_historico/pages/NotasProfessorPage';
 import { HistoricoAlunoPage } from '@/features/notas_historico/pages/HistoricoAlunoPage';
 import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
@@ -44,7 +44,7 @@ import { GatewaysPage } from '@/features/financeiro/pages/GatewaysPage';
 import { PagamentosPage } from '@/features/financeiro/pages/PagamentosPage';
 import { MeusPedidosPage } from '@/features/financeiro/pages/MeusPedidosPage';
 import { PedidosPage } from '@/features/financeiro/pages/PedidosPage';
-import { ProdutosPage } from '@/features/financeiro/pages/ProdutosPage';
+import { EstoquePage } from '@/features/financeiro/pages/EstoquePage';
 import { ComprarLicencasPage } from '@/features/financeiro/pages/ComprarLicencasPage';
 import { LogisticaPage } from '@/features/financeiro/pages/LogisticaPage';
 import { RegrasPagamentoPage } from '@/features/financeiro/pages/RegrasPagamentoPage';
@@ -89,14 +89,11 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/professores" element={<ProfessoresPage />} />
           <Route path="/admin/cursos" element={<CursosPage />} />
           <Route path="/admin/disciplinas" element={<DisciplinasPage />} />
-          <Route path="/admin/disciplinas/:disciplinaId/aulas" element={<AulasAuditoriaPage />} />
           <Route path="/admin/aulas" element={<AulasAuditoriaPage />} />
           <Route path="/admin/turmas-calendarios" element={<TurmasPage />} />
           <Route path="/admin/alunos" element={<AlunosPage />} />
           <Route path="/admin/ead" element={<ModulePlaceholderPage />} />
-          <Route path="/admin/notas-historico" element={<NotasAdminPage />} />
           <Route path="/admin/presencas" element={<PresencasPage />} />
-          <Route path="/admin/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/admin/licencas" element={<LicencasPage />} />
           <Route path="/admin/cupons" element={<ModulePlaceholderPage />} />
           <Route path="/admin/transferencias" element={<TransferenciasPage />} />
@@ -105,6 +102,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/execucoes-batch" element={<ExecucoesBatchPage />} />
           <Route path="/admin/chat" element={<ChatAdminPage />} />
           <Route path="/admin/etl" element={<ExecucoesBatchPage />} />
+          <Route path="/admin/estoque" element={<EstoquePage />} />
         </Route>
 
         {/* Módulo 2.4 — Financeiro (admin + perfil financeiro; o backend restringe por área) */}
@@ -114,7 +112,6 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/vendas" element={<VendasPage />} />
           <Route path="/admin/pedidos" element={<PedidosPage />} />
           <Route path="/admin/regras-pagamento" element={<RegrasPagamentoPage />} />
-          <Route path="/admin/produtos" element={<ProdutosPage />} />
           <Route path="/admin/gateways" element={<GatewaysPage />} />
         </Route>
 
@@ -135,7 +132,6 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/escolas/:escolaId/licencas" element={<LicencasEscolaPage />} />
           <Route path="/polo/alunos" element={<AlunosPage />} />
           <Route path="/polo/turmas" element={<TurmasPage />} />
-          <Route path="/polo/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/polo/transferencias" element={<TransferenciasPage />} />
           <Route path="/polo/licencas" element={<LicencasPage />} />
           <Route path="/polo/comprar-licencas" element={<ComprarLicencasPage />} />
@@ -177,11 +173,10 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/transferencias" element={<TransferenciasPage modo="aluno" />} />
             <Route path="/aluno/disciplinas" element={<MinhasDisciplinasPage />} />
             <Route path="/aluno/avaliacoes/:avaliacaoId" element={<RealizarAvaliacaoPage />} />
+            <Route path="/aluno/presenca" element={<MinhasPresencasPage />} />
           </Route>
           <Route path="/aluno/ava" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />
-          <Route path="/aluno/presenca" element={<ModulePlaceholderPage />} />
-          <Route path="/aluno/certificados" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/livros" element={<ModulePlaceholderPage />} />
           <Route path="/aluno/compras" element={<ComprasEadPage />} />
         </Route>

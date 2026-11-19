@@ -6,6 +6,9 @@ import {
   CursoCatalogo,
   CursoCatalogoDetalhe,
   EnvioPayload,
+  EstoqueItem,
+  EstoqueMovimentacao,
+  TrocaPayload,
   PedidoUpdatePayload,
   RegraPagamento,
   RegraPagamentoPayload,
@@ -22,8 +25,6 @@ import {
   Paginado,
   Pedido,
   PedidoCreatePayload,
-  Produto,
-  ProdutoPayload,
   StatusManual,
   StatusSimulado,
   TipoPedido,
@@ -34,15 +35,30 @@ const limpar = (filtros: FiltrosPeriodo = {}) =>
   Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '' && v !== undefined && v !== null));
 
 export const financeiroApi = {
-  // Produtos (catálogo)
-  async listProdutos(params?: { tipo?: TipoPedido; incluir_inativos?: boolean }) {
-    return (await apiClient.get<{ total: number; items: Produto[] }>('/financeiro/produtos', { params })).data;
+  // Troca de licença/livro: Polo/Escola solicita; Admin efetua ou recusa
+  async solicitarTroca(payload: TrocaPayload) {
+    return (await apiClient.post<Pedido>('/financeiro/trocas', payload)).data;
   },
-  async createProduto(payload: ProdutoPayload) {
-    return (await apiClient.post<Produto>('/financeiro/produtos', payload)).data;
+  async efetuarTroca(pedidoId: string) {
+    return (await apiClient.post<Pedido>(`/financeiro/pedidos/${pedidoId}/troca/efetuar`)).data;
   },
-  async updateProduto(id: string, payload: ProdutoPayload) {
-    return (await apiClient.put<Produto>(`/financeiro/produtos/${id}`, payload)).data;
+  async recusarTroca(pedidoId: string, motivo: string) {
+    return (await apiClient.post<Pedido>(`/financeiro/pedidos/${pedidoId}/troca/recusar`, { motivo })).data;
+  },
+
+  // Estoque Central de livros (por Disciplina)
+  async listEstoque(params?: { q?: string; curso_id?: string }) {
+    const limpos = Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v));
+    return (await apiClient.get<{ total: number; items: EstoqueItem[] }>('/financeiro/estoque', { params: limpos })).data;
+  },
+  async entradaEstoque(disciplinaId: string, payload: { quantidade: number; observacao?: string }) {
+    return (await apiClient.post<EstoqueItem>(`/financeiro/estoque/${disciplinaId}/entrada`, payload)).data;
+  },
+  async ajustarEstoque(disciplinaId: string, payload: { quantidade: number; observacao: string }) {
+    return (await apiClient.post<EstoqueItem>(`/financeiro/estoque/${disciplinaId}/ajuste`, payload)).data;
+  },
+  async movimentacoesEstoque(disciplinaId: string) {
+    return (await apiClient.get<EstoqueMovimentacao[]>(`/financeiro/estoque/${disciplinaId}/movimentacoes`)).data;
   },
 
   // Pedidos

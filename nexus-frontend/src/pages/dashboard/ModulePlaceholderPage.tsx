@@ -63,23 +63,11 @@ export const ModulePlaceholderPage: React.FC = () => {
         table: 'matriculas_ead / compras_disciplina_ead',
         category: 'Educação a Distância',
       },
-      '/admin/notas-historico': {
-        title: 'Notas & Histórico Unificado',
-        desc: 'Lançamento de notas do AVA, consolidação final e histórico escolar.',
-        table: 'notas / historico_unificado',
-        category: 'Desempenho & Avaliação',
-      },
       '/admin/presencas': {
         title: 'Presenças & Diário de Classe',
         desc: 'Controle de presença por aula ministrada e cálculo de frequência global.',
         table: 'presencas / atas_aula',
         category: 'Frequência Acadêmica',
-      },
-      '/admin/certificados': {
-        title: 'Certificados & Diplomas',
-        desc: 'Emissão de certificados digitais e validação de estágios supervisionados.',
-        table: 'certificados',
-        category: 'Certificação Digital',
       },
       '/admin/licencas': {
         title: 'Estoque & Atribuição de Licenças',

@@ -169,6 +169,28 @@ def notificar(*, titulo: str, mensagem: Optional[str] = None, link: Optional[str
         return None
 
 
+def notificar_perfil(perfil: str, *, titulo: str, mensagem: Optional[str] = None,
+                     link: Optional[str] = None) -> int:
+    """Uma notificação para cada usuário ativo do perfil (cada um marca a sua como lida)."""
+    from app.core.config import settings
+    from app.modules.auth.roles import nomes_equivalentes
+
+    if not settings.PG_DSN:
+        return 0
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """SELECT u.id FROM usuarios u JOIN perfis p ON p.id = u.perfil_id
+                    WHERE lower(p.nome) = ANY(%s) AND COALESCE(u.status, 'ativo') = 'ativo'""",
+                (list(nomes_equivalentes(perfil)),),
+            )
+            ids = [str(r["id"]) for r in cur.fetchall()]
+    except Exception:  # noqa: BLE001 — notificação é acessória
+        logger.exception("Falha ao listar usuários do perfil %s para notificar", perfil)
+        return 0
+    return sum(1 for uid in ids if notificar(titulo=titulo, mensagem=mensagem, link=link, destino_usuario_id=uid))
+
+
 router = APIRouter(prefix="/notificacoes", tags=["Notificações"])
 
 

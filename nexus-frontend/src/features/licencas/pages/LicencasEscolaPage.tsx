@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Loader2,
   RefreshCw,
+  Repeat,
   Undo2,
   X,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import {
 } from '@/features/licencas/api';
 import { DisciplinaSelect, paraDisciplinaId, TabelaEstoqueDisciplina } from '@/features/licencas/components/EstoqueDisciplina';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
+import { TrocaLicencaModal } from '@/features/licencas/components/TrocaLicencaModal';
 import { EscolaItem } from '@/types/polos';
 
 const cardStyle = 'rounded-2xl border border-slate-800 bg-slate-900/80 p-4';
@@ -32,6 +34,12 @@ const TITULO: Record<Acao, string> = {
   venda: 'Vender licença',
   devolucao: 'Devolver licenças ao polo',
   devolucao_aluno: 'Devolver licença do aluno',
+};
+
+const ROTULO_TROCA: Record<string, string> = {
+  troca_reserva: 'Reservada para troca',
+  troca_recebimento: 'Recebida na troca',
+  troca_estorno: 'Troca recusada (estorno)',
 };
 
 /** Licenças da escola: saldo por disciplina, venda ao aluno e devoluções. */
@@ -53,6 +61,7 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
   const [quantidade, setQuantidade] = useState(1);
   const [licencasAluno, setLicencasAluno] = useState<LicencaAlunoAtiva[]>([]);
   const [licencaId, setLicencaId] = useState('');
+  const [trocando, setTrocando] = useState(false);
 
   const load = useCallback(async () => {
     if (!escolaId) return;
@@ -162,6 +171,11 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
           <button type="button" onClick={() => abrir('devolucao_aluno')} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200">
             <Undo2 size={16} /> Devolução de aluno
           </button>
+          {escolaIdFixo && (
+            <button type="button" disabled={semSaldo} onClick={() => setTrocando(true)} className="inline-flex items-center gap-2 rounded-xl border border-blue-500/40 px-4 py-2.5 text-sm font-semibold text-blue-300 hover:bg-blue-500/10 disabled:cursor-not-allowed disabled:opacity-50">
+              <Repeat size={16} /> Trocar licença
+            </button>
+          )}
         </div>
       </header>
 
@@ -197,7 +211,7 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
                 <tbody className="divide-y divide-slate-800">
                   {items.map((item) => (
                     <tr key={item.id} className="text-slate-300">
-                      <td className="p-4 font-medium capitalize text-white">{item.tipo.replace(/_/g, ' ')}</td>
+                      <td className="p-4 font-medium capitalize text-white">{ROTULO_TROCA[item.tipo] || item.tipo.replace(/_/g, ' ')}</td>
                       <td className="p-4 text-xs">{nomeDisciplina(item)}</td>
                       <td className="p-4">{item.aluno_id ? nomeAluno(item.aluno_id) : '—'}</td>
                       <td className="p-4 text-center">{item.quantidade}</td>
@@ -251,6 +265,17 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
             <div className="flex justify-end gap-2"><button type="button" onClick={() => setAction(null)} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-on-accent disabled:opacity-50">{saving && <Loader2 className="animate-spin" size={15} />}Confirmar</button></div>
           </form>
         </div>
+      )}
+      {trocando && (
+        <TrocaLicencaModal
+          estoque={estoque}
+          onFechar={() => setTrocando(false)}
+          onConcluido={(pedido) => {
+            setTrocando(false);
+            setFeedback(`Solicitação de troca ${pedido.numero} enviada ao administrador.`);
+            void load();
+          }}
+        />
       )}
     </div>
   );

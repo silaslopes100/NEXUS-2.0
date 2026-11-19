@@ -21,6 +21,13 @@ from app.modules.financeiro.schemas import (
     CheckoutResponse,
     EntregaConfirmar,
     EnvioCreate,
+    TrocaCreate,
+    TrocaRecusa,
+    EstoqueAjusteRequest,
+    EstoqueEntradaRequest,
+    EstoqueItemResponse,
+    EstoqueListResponse,
+    EstoqueMovimentacaoResponse,
     PedidoUpdate,
     RegraPagamentoCreate,
     RegraPagamentoResponse,
@@ -37,16 +44,13 @@ from app.modules.financeiro.schemas import (
     PedidoListResponse,
     PedidoResponse,
     PedidoStatusUpdate,
-    ProdutoCreate,
-    ProdutoListResponse,
-    ProdutoResponse,
-    ProdutoUpdate,
     SimularPagamentoRequest,
     TipoFiltro,
     TipoPedido,
 )
 from app.modules.financeiro.cobranca_service import CobrancaService
 from app.modules.financeiro.service import FinanceiroService, escopo_do_usuario
+from app.modules.financeiro.troca_service import TrocaService
 
 router = APIRouter(prefix="/financeiro", tags=["Financeiro & Logística"])
 
@@ -163,46 +167,113 @@ async def etiqueta_pedido(
 
 
 # ---------------------------------------------------------------------------
-# Produtos (catálogo)
+# Troca de licença/livro (Polo e Escola solicitam; Admin efetua ou recusa)
 # ---------------------------------------------------------------------------
 
-@router.get(
-    "/produtos",
-    response_model=ProdutoListResponse,
-    dependencies=[Depends(require_role(_PERFIS_CONSULTA))],
-)
-async def list_produtos(
-    tipo: Optional[TipoPedido] = None,
-    incluir_inativos: bool = False,
-    service: FinanceiroService = Depends(get_financeiro_service),
-):
-    return service.list_produtos(tipo=tipo, ativo=None if incluir_inativos else True)
+def get_troca_service(
+    repo: FinanceiroRepositoryInterface = Depends(get_financeiro_repository),
+) -> TrocaService:
+    return TrocaService(repo=repo)
 
 
 @router.post(
-    "/produtos",
-    response_model=ProdutoResponse,
+    "/trocas",
+    response_model=PedidoResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_area("financeiro"))],
+    dependencies=[Depends(require_role(["polo", "escola"]))],
 )
-async def create_produto(
-    payload: ProdutoCreate,
-    service: FinanceiroService = Depends(get_financeiro_service),
+async def solicitar_troca(
+    payload: TrocaCreate,
+    current_user: UserResponse = Depends(get_current_user),
+    service: TrocaService = Depends(get_troca_service),
 ):
-    return service.create_produto(payload)
+    """Gera a solicitação de troca, reserva as licenças a devolver e avisa os admins."""
+    return service.solicitar(payload, current_user)
 
 
-@router.put(
-    "/produtos/{produto_id}",
-    response_model=ProdutoResponse,
-    dependencies=[Depends(require_area("financeiro"))],
+@router.post(
+    "/pedidos/{pedido_id}/troca/efetuar",
+    response_model=PedidoResponse,
+    dependencies=[Depends(require_role(["admin"]))],
 )
-async def update_produto(
-    produto_id: str,
-    payload: ProdutoUpdate,
-    service: FinanceiroService = Depends(get_financeiro_service),
+async def efetuar_troca(
+    pedido_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    service: TrocaService = Depends(get_troca_service),
 ):
-    return service.update_produto(produto_id, payload)
+    """Conclui a troca: credita as licenças novas e movimenta o Estoque Central."""
+    return service.efetuar(pedido_id, current_user)
+
+
+@router.post(
+    "/pedidos/{pedido_id}/troca/recusar",
+    response_model=PedidoResponse,
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def recusar_troca(
+    pedido_id: str,
+    payload: TrocaRecusa,
+    current_user: UserResponse = Depends(get_current_user),
+    service: TrocaService = Depends(get_troca_service),
+):
+    """Recusa a troca (motivo obrigatório) e devolve as licenças reservadas."""
+    return service.recusar(pedido_id, payload.motivo, current_user)
+
+
+# ---------------------------------------------------------------------------
+# Estoque Central de livros (controle interno do Admin)
+# ---------------------------------------------------------------------------
+
+@router.get("/estoque", response_model=EstoqueListResponse, dependencies=[Depends(require_role(["admin"]))])
+async def listar_estoque(
+    q: Optional[str] = Query(None, max_length=100),
+    curso_id: Optional[str] = None,
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Uma linha por Disciplina cadastrada (disciplina nova aparece com saldo 0)."""
+    return operacao.listar_estoque(q, curso_id)
+
+
+@router.post(
+    "/estoque/{disciplina_id}/entrada",
+    response_model=EstoqueItemResponse,
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def entrada_estoque(
+    disciplina_id: str,
+    payload: EstoqueEntradaRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Soma livros recebidos ao saldo da Disciplina."""
+    return operacao.entrada_estoque(disciplina_id, payload, current_user)
+
+
+@router.post(
+    "/estoque/{disciplina_id}/ajuste",
+    response_model=EstoqueItemResponse,
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def ajustar_estoque(
+    disciplina_id: str,
+    payload: EstoqueAjusteRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    """Define o saldo contado no inventário (motivo obrigatório, fica no histórico)."""
+    return operacao.ajustar_estoque(disciplina_id, payload, current_user)
+
+
+@router.get(
+    "/estoque/{disciplina_id}/movimentacoes",
+    response_model=list[EstoqueMovimentacaoResponse],
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def movimentacoes_estoque(
+    disciplina_id: str,
+    operacao: OperacaoService = Depends(get_operacao_service),
+):
+    return operacao.movimentacoes_estoque(disciplina_id)
 
 
 # ---------------------------------------------------------------------------

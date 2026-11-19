@@ -40,6 +40,7 @@ type DisciplinaForm = {
   ativo: boolean;
   preco: string;
   peso_livro_g: string;
+  sku: string;
 };
 
 const initialForm: DisciplinaForm = {
@@ -54,6 +55,7 @@ const initialForm: DisciplinaForm = {
   ativo: true,
   preco: '',
   peso_livro_g: '',
+  sku: '',
 };
 
 const formatBRL = (valor?: number | null) =>
@@ -181,7 +183,7 @@ export const DisciplinasPage: React.FC = () => {
       if (situacaoFilter === 'inativas' && ativa) return false;
       if (!termo) return true;
       const cursoNome = cursoPorId.get(disciplina.curso_id || '') || '';
-      return `${disciplina.nome} ${cursoNome}`.toLocaleLowerCase('pt-BR').includes(termo);
+      return `${disciplina.nome} ${cursoNome} ${disciplina.sku || ''}`.toLocaleLowerCase('pt-BR').includes(termo);
     });
   }, [cursoFilter, situacaoFilter, cursoPorId, disciplinas, search]);
 
@@ -208,6 +210,7 @@ export const DisciplinasPage: React.FC = () => {
       ativo: disciplina.ativo !== false,
       preco: disciplina.preco == null ? '' : Number(disciplina.preco).toFixed(2).replace('.', ','),
       peso_livro_g: disciplina.peso_livro_g == null ? '' : String(disciplina.peso_livro_g),
+      sku: disciplina.sku || '',
     });
     setFormError('');
     setIsFormOpen(true);
@@ -236,6 +239,7 @@ export const DisciplinasPage: React.FC = () => {
       tipo: form.tipo.trim(),
       eh_extra_grade: form.eh_extra_grade,
       ativo: form.ativo,
+      sku: form.sku.trim().toUpperCase() || null,
     };
 
     try {
@@ -382,6 +386,7 @@ export const DisciplinasPage: React.FC = () => {
               <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="p-4">Disciplina</th>
+                  <th className="p-4">SKU</th>
                   <th className="p-4">Curso / semestre</th>
                   <th className="p-4">Carga horária</th>
                   <th className="p-4">Aulas previstas</th>
@@ -406,6 +411,9 @@ export const DisciplinasPage: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4">
+                      <span className="whitespace-nowrap font-mono text-xs text-slate-400">{disciplina.sku || '—'}</span>
+                    </td>
+                    <td className="p-4">
                       <p>{cursoPorId.get(disciplina.curso_id || '') || 'Sem curso'}</p>
                       <p className="text-xs text-slate-500">
                         {disciplina.semestre == null ? 'Sem semestre' : `Semestre ${disciplina.semestre}`}
@@ -425,7 +433,7 @@ export const DisciplinasPage: React.FC = () => {
                         if (!resumo) return <span className="text-xs text-slate-500">Nenhuma</span>;
                         return (
                           <Link
-                            to={`/admin/disciplinas/${disciplina.id}/aulas`}
+                            to={`/admin/aulas?disciplina=${disciplina.id}`}
                             className="group inline-flex flex-col text-left"
                           >
                             <span className="font-semibold text-white group-hover:text-nexus-yellow">
@@ -442,7 +450,7 @@ export const DisciplinasPage: React.FC = () => {
                     <td className="p-4">
                       <div className="flex justify-end gap-2">
                         <Link
-                          to={`/admin/disciplinas/${disciplina.id}/aulas`}
+                          to={`/admin/aulas?disciplina=${disciplina.id}`}
                           aria-label={`Ver aulas de ${disciplina.nome}`}
                           title="Ver aulas dadas nos polos"
                           className="rounded-lg border border-nexus-yellow/30 p-2 text-nexus-yellow hover:bg-nexus-yellow/10"
@@ -511,7 +519,7 @@ export const DisciplinasPage: React.FC = () => {
                 ))}
                 {disciplinasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-500">
+                    <td colSpan={9} className="p-12 text-center text-slate-500">
                       {disciplinas.length
                         ? 'Nenhuma disciplina corresponde aos filtros.'
                         : 'Nenhuma disciplina cadastrada.'}
@@ -757,6 +765,17 @@ export const DisciplinasPage: React.FC = () => {
                   value={form.tipo}
                   onChange={(event) => setForm({ ...form, tipo: event.target.value })}
                 />
+              </label>
+              <label className="space-y-1.5 text-sm text-slate-300">
+                <span>SKU</span>
+                <input
+                  maxLength={64}
+                  placeholder="Gerado automaticamente se vazio"
+                  className={`${inputClass} font-mono uppercase`}
+                  value={form.sku}
+                  onChange={(event) => setForm({ ...form, sku: event.target.value })}
+                />
+                <span className="block text-xs text-slate-500">Código do kit (livro + licença) usado em pedidos e no estoque.</span>
               </label>
               <label className="space-y-1.5 text-sm text-slate-300">
                 <span>Preço da disciplina (R$)</span>

@@ -13,7 +13,6 @@ from app.modules.aulas.router import router as aulas_router
 from app.modules.alunos.perfil import router as aluno_perfil_router
 from app.modules.alunos_gestao import router as alunos_gestao_router
 from app.modules.alunos_gestao import router_aprendizado as aluno_aprendizado_router
-from app.modules.certificados import router as certificados_router
 from app.modules.chat import router as chat_router
 from app.modules.comunicacao import router as comunicacao_router
 from app.modules.cupons import router as cupons_router
@@ -77,7 +76,6 @@ app.include_router(cursos_disciplinas_router)
 app.include_router(turmas_router)
 app.include_router(ead_router)
 app.include_router(notas_historico_router)
-app.include_router(certificados_router)
 app.include_router(cupons_router)
 app.include_router(financeiro_router)
 app.include_router(avaliacoes_router)

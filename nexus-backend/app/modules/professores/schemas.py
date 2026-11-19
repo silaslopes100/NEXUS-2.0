@@ -70,6 +70,7 @@ class ProfessorResponse(BaseModel):
     usuario_id: Optional[str] = None
     nome: Optional[str] = None
     email: Optional[str] = None
+    foto_url: Optional[str] = None
     polo_id: Optional[str] = None
     polo_nome: Optional[str] = None
     escola_id: Optional[str] = None

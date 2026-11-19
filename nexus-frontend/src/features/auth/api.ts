@@ -67,4 +67,12 @@ export const authApi = {
     });
     return response.data;
   },
+
+  /** Foto de perfil de qualquer usuário (avatar no Chat, listas etc.). 404 quando não há foto. */
+  async getUsuarioFoto(usuarioId: string): Promise<Blob> {
+    const response = await apiClient.get<Blob>(`/auth/usuarios/${usuarioId}/foto`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };
