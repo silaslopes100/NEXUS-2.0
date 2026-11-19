@@ -102,7 +102,7 @@ export const ConfiguracoesPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
+      <div className="glass flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
         <div className="relative z-10">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Configurações Gerais (Chave / Valor JSONB)
@@ -156,7 +156,7 @@ export const ConfiguracoesPage: React.FC = () => {
       />
 
       {/* Search & Actions */}
-      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 shadow-md">
+      <div className="glass p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 shadow-md">
         <div className="w-full sm:w-96 relative">
           <input
             type="text"
@@ -183,7 +183,7 @@ export const ConfiguracoesPage: React.FC = () => {
           Carregando parâmetros...
         </div>
       ) : filteredConfigs.length === 0 ? (
-        <div className="p-12 text-center text-slate-500 rounded-2xl bg-slate-900/40 border border-slate-800">
+        <div className="glass p-12 text-center text-slate-500 rounded-2xl bg-slate-900/40 border border-slate-800">
           Nenhuma configuração cadastrada com este filtro.
         </div>
       ) : (
@@ -191,7 +191,7 @@ export const ConfiguracoesPage: React.FC = () => {
           {filteredConfigs.map((cfg) => (
             <div
               key={cfg.chave}
-              className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md flex flex-col justify-between hover:border-slate-700 transition-all"
+              className="glass p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md flex flex-col justify-between hover:border-slate-700 transition-all"
             >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
@@ -231,7 +231,7 @@ export const ConfiguracoesPage: React.FC = () => {
       {/* Modal de Criação / Edição de Configuração */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl p-6 sm:p-8 animate-fadeIn">
+          <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl p-6 sm:p-8 animate-fadeIn">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2 text-white font-bold text-base">
                 <Code2 className="w-5 h-5 text-nexus-yellow" />

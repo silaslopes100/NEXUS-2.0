@@ -58,7 +58,7 @@ export const DisciplinaSelect: React.FC<SelectProps> = ({
 
 /** Tabela de saldo por disciplina (Polo ou Escola). */
 export const TabelaEstoqueDisciplina: React.FC<{ estoque: EstoqueDisciplina | null; acao?: React.ReactNode }> = ({ estoque, acao }) => (
-  <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+  <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
       <div>
         <h2 className="flex items-center gap-2 font-bold text-white"><Layers size={16} /> Saldo por disciplina</h2>

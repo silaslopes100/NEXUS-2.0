@@ -71,7 +71,7 @@ export const MeioPagamentoCheckout: React.FC<{
 
 /** Resultado do checkout: pedido criado e cobrança (ou o motivo da falha). */
 export const ResultadoCheckout: React.FC<{ resultado: CheckoutResposta; onFechar: () => void }> = ({ resultado, onFechar }) => (
-  <section className="space-y-4 rounded-2xl border border-emerald-500/30 bg-slate-900/80 p-5">
+  <section className="glass space-y-4 rounded-2xl border border-emerald-500/30 bg-slate-900/80 p-5">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <p className="flex items-center gap-2 font-bold text-white">
         <CheckCircle2 size={18} className="text-emerald-400" />

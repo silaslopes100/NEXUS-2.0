@@ -112,7 +112,7 @@ export const AdminDashboardPage: React.FC = () => {
   return (
     <div className="space-y-8 max-w-7xl">
       {/* Welcome Banner */}
-      <div className="p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-2xl relative overflow-hidden">
+      <div className="glass p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-2xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <h1 className="text-3xl font-extrabold text-white tracking-tight">
@@ -150,7 +150,7 @@ export const AdminDashboardPage: React.FC = () => {
             <Link
               key={idx}
               to={s.to}
-              className="block p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md hover:border-nexus-yellow/40 hover:bg-slate-900 transition-all"
+              className="glass block p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md hover:border-nexus-yellow/40 hover:bg-slate-900 transition-all"
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -176,7 +176,7 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* Quick Security & Architecture Facts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
+        <div className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
           <div className="flex items-center gap-2 mb-4 text-nexus-yellow">
             <KeyRound className="w-5 h-5" />
             <h2 className="text-base font-bold text-white">Status da Autenticação</h2>
@@ -203,7 +203,7 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
+        <div className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
           <div className="flex items-center gap-2 mb-4 text-blue-400">
             <Activity className="w-5 h-5" />
             <h2 className="text-base font-bold text-white">Sessão em Memória</h2>
@@ -229,7 +229,7 @@ const AtividadeDocentePainel: React.FC<{
   inicioPeriodo: string;
 }> = ({ atividade, erro, inicioPeriodo }) => (
   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <section className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
+    <section className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
       <div className="flex items-center justify-between gap-2 mb-4">
         <h2 className="flex items-center gap-2 text-base font-bold text-white">
           <ClipboardList className="w-5 h-5 text-cyan-400" />
@@ -265,7 +265,7 @@ const AtividadeDocentePainel: React.FC<{
       )}
     </section>
 
-    <section className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
+    <section className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
       <h2 className="flex items-center gap-2 mb-1 text-base font-bold text-white">
         <AlertTriangle className="w-5 h-5 text-amber-400" />
         Polos sem aula registrada há {DIAS_SEM_REGISTRO} dias

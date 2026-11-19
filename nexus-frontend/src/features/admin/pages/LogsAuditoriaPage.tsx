@@ -94,7 +94,7 @@ export const LogsAuditoriaPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl">
       {/* Top Banner */}
-      <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
+      <div className="glass p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
           Logs de Auditoria do Sistema
         </h1>
@@ -104,7 +104,7 @@ export const LogsAuditoriaPage: React.FC = () => {
       </div>
 
       {/* Filters Card */}
-      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md space-y-3">
+      <div className="glass p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -174,7 +174,7 @@ export const LogsAuditoriaPage: React.FC = () => {
       </div>
 
       {/* Audit Logs Table */}
-      <div className="rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-xl">
+      <div className="glass rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
@@ -279,7 +279,7 @@ export const LogsAuditoriaPage: React.FC = () => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {/* Dados Antes */}
-                              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                              <div className="glass p-4 rounded-xl bg-slate-900 border border-slate-800">
                                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs font-semibold text-amber-300">
                                   <span>Estado Anterior (dados_antes)</span>
                                 </div>
@@ -287,7 +287,7 @@ export const LogsAuditoriaPage: React.FC = () => {
                               </div>
 
                               {/* Dados Depois */}
-                              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                              <div className="glass p-4 rounded-xl bg-slate-900 border border-slate-800">
                                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs font-semibold text-emerald-300">
                                   <span>Estado Novo (dados_depois)</span>
                                 </div>

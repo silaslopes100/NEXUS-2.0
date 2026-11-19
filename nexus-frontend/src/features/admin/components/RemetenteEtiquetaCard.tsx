@@ -84,7 +84,7 @@ export const RemetenteEtiquetaCard: React.FC<{ valorAtual?: unknown; onSalvo: (m
   );
 
   return (
-    <form onSubmit={salvar} className="space-y-4 rounded-2xl border border-indigo-500/30 bg-slate-900/80 p-5 shadow-md">
+    <form onSubmit={salvar} className="glass space-y-4 rounded-2xl border border-indigo-500/30 bg-slate-900/80 p-5 shadow-md">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-bold text-white"><Truck className="h-4 w-4 text-indigo-300" /> Remetente das etiquetas</h2>

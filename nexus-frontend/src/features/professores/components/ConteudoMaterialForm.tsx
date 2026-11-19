@@ -109,7 +109,7 @@ export const ConteudoMaterialForm: React.FC<ConteudoMaterialFormProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="conteudo-material-form-titulo"
-        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+        className="glass max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
       >
         <header className="mb-5 flex items-start justify-between gap-4">
           <div>

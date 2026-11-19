@@ -167,7 +167,7 @@ export const SolicitarTransferenciaModal: React.FC<Props> = ({ modoAluno, onClos
         aria-modal="true"
         aria-labelledby="solicitar-transferencia-titulo"
         onSubmit={salvar}
-        className="my-auto max-h-[90vh] w-full max-w-xl space-y-5 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+        className="glass my-auto max-h-[90vh] w-full max-w-xl space-y-5 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
       >
         <header className="flex items-start justify-between gap-4">
           <div>

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { NotificacoesSino } from '@/features/solicitacoes/components/NotificacoesSino';
 import { ChatBadge } from '@/features/chat/components/ChatBadge';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import { AppBackdrop } from '@/components/layout/AppBackdrop';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
 
 export const AppLayout: React.FC = () => {
@@ -15,7 +16,8 @@ export const AppLayout: React.FC = () => {
   const roleName = perfil?.nome || user?.perfil?.nome || 'aluno';
 
   return (
-    <div className="min-h-screen bg-nexus-page text-slate-100 flex">
+    <div className="relative isolate min-h-screen bg-nexus-page text-slate-100 flex">
+      <AppBackdrop />
       {/* Dynamic Role-Based Sidebar */}
       <Sidebar
         isMobileOpen={mobileMenuOpen}
@@ -26,7 +28,7 @@ export const AppLayout: React.FC = () => {
       <div className="flex-1 flex flex-col lg:pl-72 transition-all duration-300 min-w-0">
         
         {/* Top Navbar */}
-        <header className="h-16 px-6 bg-slate-900/60 border-b border-slate-800/80 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between">
+        <header className="glass-panel h-16 px-6 border-b border-slate-800/80 sticky top-0 z-30 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setMobileMenuOpen(true)}

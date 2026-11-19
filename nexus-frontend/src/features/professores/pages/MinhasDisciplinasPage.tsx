@@ -40,7 +40,7 @@ export const MinhasDisciplinasPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
+      <header className="glass flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
             Minhas Disciplinas &amp; Turmas
@@ -90,12 +90,12 @@ export const MinhasDisciplinasPage: React.FC = () => {
 
       <section className="space-y-4" aria-label="Disciplinas vinculadas">
         {isLoading ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-center text-sm text-slate-400">
+          <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-center text-sm text-slate-400">
             <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-nexus-yellow" />
             Carregando suas disciplinas...
           </div>
         ) : erro ? null : disciplinas.length === 0 ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 px-6 py-16 text-center">
+          <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 px-6 py-16 text-center">
             <BookOpen className="mx-auto mb-3 h-8 w-8 text-slate-500" />
             <h2 className="font-semibold text-white">Nenhuma disciplina vinculada</h2>
             <p className="mt-1 text-sm text-slate-400">
@@ -106,7 +106,7 @@ export const MinhasDisciplinasPage: React.FC = () => {
           disciplinas.map((disciplina) => (
             <article
               key={disciplina.id}
-              className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-md"
+              className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-md"
             >
               <div className="flex flex-col gap-3 border-b border-slate-800 p-5 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-3">

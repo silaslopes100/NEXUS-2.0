@@ -163,7 +163,7 @@ export const AvaliacaoEditorModal: React.FC<Props> = ({ disciplinaId, disciplina
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4"
       onMouseDown={(e) => e.target === e.currentTarget && !salvando && onClose()}
     >
-      <div className="my-6 w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div className="glass my-6 w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-slate-800 p-5">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">Avaliação da disciplina</p>

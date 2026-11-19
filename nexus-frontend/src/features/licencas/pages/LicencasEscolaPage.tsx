@@ -142,7 +142,7 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-amber-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
+      <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-amber-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
           {!escolaIdFixo && (
             <button type="button" onClick={() => navigate(-1)} className="mb-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white">
@@ -186,7 +186,7 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
 
           <TabelaEstoqueDisciplina estoque={estoque} />
 
-          <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+          <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
             <div className="flex items-center justify-between border-b border-slate-800 p-4">
               <div><h2 className="font-bold text-white">Movimentações da escola</h2><p className="text-xs text-slate-500">{items.length} registros carregados</p></div>
               <button type="button" onClick={() => void load()} title="Recarregar" className="rounded-xl border border-slate-700 p-2 text-slate-400 hover:text-white"><RefreshCw size={16} /></button>
@@ -215,7 +215,7 @@ export const LicencasEscolaPage: React.FC<{ escolaIdFixo?: string }> = ({ escola
 
       {action && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+          <form onSubmit={submit} className="glass w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between"><h2 className="text-xl font-bold text-white">{TITULO[action]}</h2><button type="button" onClick={() => setAction(null)} aria-label="Fechar"><X /></button></div>
 
             {(action === 'venda' || action === 'devolucao_aluno') && (

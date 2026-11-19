@@ -97,7 +97,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
           <h1 className="text-3xl font-bold text-white">{resultado.aprovado ? 'Aprovado!' : 'Não foi dessa vez'}</h1>
           <p className="mt-2 text-slate-400">{tentativa?.disciplina_nome}</p>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <div className="glass rounded-2xl border border-slate-800 bg-slate-900 p-6">
           <p className="text-sm text-slate-400">Sua nota</p>
           <p className={`text-6xl font-bold ${resultado.aprovado ? 'text-emerald-300' : 'text-amber-300'}`}>
             {formatarNota(resultado.nota)}
@@ -168,7 +168,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
           )}
         </div>
         {tentativa.instrucoes && atual === 0 && !revisando && (
-          <p className="whitespace-pre-line rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-slate-300">
+          <p className="glass whitespace-pre-line rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-slate-300">
             {tentativa.instrucoes}
           </p>
         )}
@@ -190,7 +190,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
       )}
 
       {revisando ? (
-        <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+        <section className="glass space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-5">
           <h2 className="font-semibold text-white">Revisar respostas</h2>
           <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
             {tentativa.questoes.map((q, i) => {
@@ -218,7 +218,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
         </section>
       ) : (
         questao && (
-          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <section className="glass rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <p className="text-xs uppercase tracking-wide text-slate-500">Questão {atual + 1} de {total}</p>
             <h2 className="mt-2 whitespace-pre-line text-lg font-medium text-white">{questao.enunciado}</h2>
             <div className="mt-4 grid gap-3" role="radiogroup">
@@ -289,7 +289,7 @@ export const RealizarAvaliacaoPage: React.FC = () => {
 
       {confirmando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div role="dialog" aria-modal="true" className="w-full max-w-sm space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
+          <div role="dialog" aria-modal="true" className="glass w-full max-w-sm space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
             <h2 className="text-lg font-bold text-white">Enviar a avaliação?</h2>
             <p className="text-sm text-slate-300">
               {respondidas < total

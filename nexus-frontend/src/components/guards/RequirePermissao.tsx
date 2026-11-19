@@ -25,7 +25,7 @@ export const RequirePermissao: React.FC<RequirePermissaoProps> = ({
 
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-nexus-page p-6">
-        <div className="max-w-md w-full bg-slate-900/90 border border-amber-500/30 rounded-2xl p-8 text-center shadow-2xl backdrop-blur-xl">
+        <div className="glass max-w-md w-full bg-slate-900/90 border border-amber-500/30 rounded-2xl p-8 text-center shadow-2xl backdrop-blur-xl">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5">
             <ShieldAlert className="w-8 h-8" />
           </div>

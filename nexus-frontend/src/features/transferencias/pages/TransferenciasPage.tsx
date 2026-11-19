@@ -117,7 +117,7 @@ export const TransferenciasPage: React.FC<Props> = ({ modo }) => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
+      <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
             {modoAluno ? 'Minhas Transferências' : 'Transferências'}
@@ -173,7 +173,7 @@ export const TransferenciasPage: React.FC<Props> = ({ modo }) => {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="grid gap-3 border-b border-slate-800 p-4 md:grid-cols-3">
           <label className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />

@@ -281,7 +281,7 @@ export const DisciplinasPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
+      <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
             Disciplinas
@@ -320,7 +320,7 @@ export const DisciplinasPage: React.FC = () => {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="flex flex-col gap-3 border-b border-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-bold text-white">Lista de disciplinas</h2>
@@ -551,7 +551,7 @@ export const DisciplinasPage: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="disciplina-professores-titulo"
-            className="my-auto w-full max-w-3xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+            className="glass my-auto w-full max-w-3xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
           >
             <header className="flex items-start justify-between gap-4">
               <div>
@@ -642,7 +642,7 @@ export const DisciplinasPage: React.FC = () => {
             aria-modal="true"
             aria-labelledby="disciplina-form-titulo"
             onSubmit={salvarDisciplina}
-            className="my-auto w-full max-w-2xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+            className="glass my-auto w-full max-w-2xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
           >
             <header className="flex items-start justify-between gap-4">
               <div>

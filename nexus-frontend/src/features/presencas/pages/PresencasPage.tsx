@@ -117,7 +117,7 @@ export const PresencasPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:p-8">
+      <header className="glass rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:p-8">
         <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
           Diário de presença
         </h1>
@@ -138,7 +138,7 @@ export const PresencasPage: React.FC = () => {
         </div>
       )}
 
-      <section className="space-y-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-md sm:p-6">
+      <section className="glass space-y-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-md sm:p-6">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_140px]">
           <label className="space-y-1.5 text-sm text-slate-300">
             <span>Disciplina e turma</span>

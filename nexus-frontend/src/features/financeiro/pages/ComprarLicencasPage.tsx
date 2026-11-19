@@ -110,7 +110,7 @@ export const ComprarLicencasPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-6">
-      <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-amber-950/30 p-6 shadow-xl">
+      <header className="glass rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-amber-950/30 p-6 shadow-xl">
         <h1 className="text-3xl font-extrabold text-white">{curso ? curso.nome : 'Escolha o curso'}</h1>
         <p className="mt-1 text-sm text-slate-400">
           Cada unidade comprada inclui <strong className="text-slate-200">1 livro</strong> (enviado ao endereço do Polo) e
@@ -137,7 +137,7 @@ export const ComprarLicencasPage: React.FC = () => {
                   <button
                     key={c.id}
                     onClick={() => abrirCurso(c.id)}
-                    className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 text-left transition hover:border-amber-500/50"
+                    className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5 text-left transition hover:border-amber-500/50"
                   >
                     <GraduationCap className="mb-3 text-amber-300" />
                     <p className="text-lg font-bold text-white">{c.nome}</p>
@@ -156,7 +156,7 @@ export const ComprarLicencasPage: React.FC = () => {
                   </button>
                 ))}
                 {!cursos.length && (
-                  <p className="rounded-2xl border border-slate-800 bg-slate-900/80 p-10 text-center text-sm text-slate-500 sm:col-span-2">
+                  <p className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-10 text-center text-sm text-slate-500 sm:col-span-2">
                     Nenhum curso com disciplinas ativas. O administrador cadastra as disciplinas e o preço de cada uma em Disciplinas.
                   </p>
                 )}
@@ -174,7 +174,7 @@ export const ComprarLicencasPage: React.FC = () => {
                 </button>
               </div>
               {porSemestre.map(([titulo, disciplinas]) => (
-                <div key={titulo} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+                <div key={titulo} className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
                   <h2 className="border-b border-slate-800 px-4 py-3 text-sm font-bold text-white">{titulo}</h2>
                   <ul className="divide-y divide-slate-800">
                     {disciplinas.map((d) => (
@@ -203,7 +203,7 @@ export const ComprarLicencasPage: React.FC = () => {
             )}
           </section>
 
-          <aside className="h-fit space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+          <aside className="glass h-fit space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
             <h2 className="flex items-center gap-2 font-bold text-white"><ShoppingCart size={16} /> Carrinho</h2>
             {isAdmin && (
               <label className="block space-y-1 text-xs text-slate-400">

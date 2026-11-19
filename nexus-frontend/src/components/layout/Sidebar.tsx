@@ -127,7 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col bg-nexus-page border-r border-slate-800/80 transition-all duration-300 ease-in-out ${
+        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col glass-panel border-r border-slate-800/80 transition-all duration-300 ease-in-out ${
           collapsed ? 'w-20' : 'w-72'
         } ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -199,7 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Bottom Profile & Logout Footer */}
         <div className="p-3 border-t border-slate-800/80 bg-slate-950/40">
           <div
-            className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 ${
+            className={`glass flex items-center gap-3 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 ${
               collapsed ? 'justify-center p-2' : ''
             }`}
           >

@@ -57,7 +57,7 @@ export const PedidosTabela: React.FC<Props> = ({
   const colunas = mostrarPolo ? 7 : 6;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+    <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
       <div className="flex items-center justify-between border-b border-slate-800 p-4">
         <div>
           <h2 className="font-bold text-white">{titulo}</h2>

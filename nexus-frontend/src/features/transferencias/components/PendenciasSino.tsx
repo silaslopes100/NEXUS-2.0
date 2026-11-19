@@ -40,7 +40,7 @@ export const PendenciasSino: React.FC = () => {
       {aberto && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setAberto(false)} />
-          <div className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+          <div className="glass absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
             <header className="border-b border-slate-800 px-4 py-3">
               <p className="text-sm font-semibold text-white">Transferências pendentes</p>
               <p className="text-xs text-slate-400">{total} aguardando análise</p>

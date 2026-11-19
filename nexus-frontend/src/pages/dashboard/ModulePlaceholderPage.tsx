@@ -146,7 +146,7 @@ export const ModulePlaceholderPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Header Banner */}
-      <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
+      <div className="glass p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-nexus-yellow/10 to-transparent pointer-events-none" />
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
@@ -168,7 +168,7 @@ export const ModulePlaceholderPage: React.FC = () => {
 
       {/* Info Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800">
+        <div className="glass p-5 rounded-2xl bg-slate-900/70 border border-slate-800">
           <div className="flex items-center gap-3 text-nexus-yellow mb-3">
             <Database className="w-5 h-5" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
@@ -181,7 +181,7 @@ export const ModulePlaceholderPage: React.FC = () => {
           </code>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800">
+        <div className="glass p-5 rounded-2xl bg-slate-900/70 border border-slate-800">
           <div className="flex items-center gap-3 text-blue-400 mb-3">
             <ShieldCheck className="w-5 h-5" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
@@ -193,7 +193,7 @@ export const ModulePlaceholderPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800">
+        <div className="glass p-5 rounded-2xl bg-slate-900/70 border border-slate-800">
           <div className="flex items-center gap-3 text-emerald-400 mb-3">
             <Layers className="w-5 h-5" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">

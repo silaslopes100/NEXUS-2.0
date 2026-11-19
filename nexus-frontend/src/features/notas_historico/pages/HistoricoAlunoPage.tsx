@@ -50,7 +50,7 @@ export const HistoricoAlunoPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
+      <header className="glass flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Notas &amp; Histórico</h1>
           <p className="mt-1 text-sm text-slate-400">Consulte suas notas finais e emita seu histórico acadêmico.</p>
@@ -72,17 +72,17 @@ export const HistoricoAlunoPage: React.FC = () => {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+        <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Disciplinas no histórico</p>
           <p className="mt-2 text-3xl font-black text-white">{historico.length}</p>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+        <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Aprovadas</p>
           <p className="mt-2 flex items-center gap-2 text-3xl font-black text-emerald-400"><CheckCircle2 className="h-6 w-6" />{aprovadas}</p>
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[650px] text-left text-sm text-slate-300">
             <thead className="border-b border-slate-800 bg-slate-950/60 text-xs uppercase text-slate-400">

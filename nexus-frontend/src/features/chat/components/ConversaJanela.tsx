@@ -199,7 +199,7 @@ export const ConversaJanela: React.FC<Props> = ({ conversaId, meuId, isAdmin, on
               <MoreVertical size={18} />
             </button>
             {menu && detalhe && (
-              <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-2xl"
+              <div className="glass absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-2xl"
                 onMouseLeave={() => setMenu(false)}>
                 <MenuItem icon={<Users size={15} />} onClick={() => { setMenu(false); setPainelMembros(true); }}>
                   Participantes

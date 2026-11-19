@@ -134,7 +134,7 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="turma-professores-titulo"
-        className="my-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl"
+        className="glass my-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl"
       >
         <header className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
           <div>

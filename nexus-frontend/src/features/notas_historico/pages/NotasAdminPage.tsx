@@ -147,7 +147,7 @@ export const NotasAdminPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
+      <header className="glass flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Notas &amp; Histórico Unificado</h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -170,7 +170,7 @@ export const NotasAdminPage: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={filtrar} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <form onSubmit={filtrar} className="glass grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <label className="text-xs font-semibold text-slate-400">
           Buscar por nome, e-mail, matrícula ou CPF
           <input
@@ -200,7 +200,7 @@ export const NotasAdminPage: React.FC = () => {
         ordenados pela atualização mais recente.
       </p>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-left text-sm text-slate-300">
             <thead className="border-b border-slate-800 bg-slate-950/60 text-xs uppercase text-slate-400">
@@ -239,7 +239,7 @@ export const NotasAdminPage: React.FC = () => {
           </table>
         </div>
       </section>
-      <nav className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3" aria-label="Paginação dos alunos">
+      <nav className="glass flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3" aria-label="Paginação dos alunos">
         <button
           type="button"
           onClick={() => setOffset((atual) => Math.max(0, atual - 30))}
@@ -264,7 +264,7 @@ export const NotasAdminPage: React.FC = () => {
 
       {alunoNotas && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="notas-aluno-titulo">
-          <section className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+          <section className="glass max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
             <header className="flex items-start justify-between gap-4 border-b border-slate-800 p-5">
               <div>
                 <h2 id="notas-aluno-titulo" className="text-xl font-bold text-white">Notas do aluno</h2>
@@ -316,14 +316,14 @@ export const NotasAdminPage: React.FC = () => {
       )}
 
       {carregandoHistorico && (
-        <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900 p-5 text-sm text-slate-300">
+        <div className="glass flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900 p-5 text-sm text-slate-300">
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando histórico do aluno...
         </div>
       )}
 
       {historicoAluno && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="historico-aluno-titulo">
-          <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+          <section className="glass max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
             <header className="flex items-start justify-between gap-4 border-b border-slate-800 p-5">
               <div>
                 <h2 id="historico-aluno-titulo" className="text-xl font-bold text-white">Histórico acadêmico</h2>

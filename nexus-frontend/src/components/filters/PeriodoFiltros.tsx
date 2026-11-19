@@ -92,7 +92,7 @@ export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusO
   );
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+    <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-bold text-white">
           <Filter size={15} className="text-blue-400" /> Filtros

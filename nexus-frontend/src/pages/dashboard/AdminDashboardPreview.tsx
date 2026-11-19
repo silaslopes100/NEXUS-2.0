@@ -383,7 +383,7 @@ export const AdminDashboardPreview: React.FC = () => {
 
       {activeWidget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWidget(); }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="dashboard-preview-title" className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+          <section role="dialog" aria-modal="true" aria-labelledby="dashboard-preview-title" className="glass max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
             <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-800 bg-slate-900/95 p-5 backdrop-blur">
               <div>
                 <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">Dados de demonstração</span>
@@ -471,9 +471,9 @@ export const AdminDashboardPreview: React.FC = () => {
                         <div><h3 className="font-bold text-white">{selectedItem.title}</h3><p className="mt-1 text-xs text-slate-400">{selectedItem.subtitle}</p></div>
                       </div>
                       <dl className="grid gap-2 sm:grid-cols-2">
-                        {selectedItem.fields.map(([label, value]) => <div key={label} className="rounded-lg border border-slate-800 bg-slate-900/80 p-3"><dt className="text-[10px] font-bold uppercase text-slate-500">{label}</dt><dd className="mt-1 text-xs text-slate-200">{value}</dd></div>)}
+                        {selectedItem.fields.map(([label, value]) => <div key={label} className="glass rounded-lg border border-slate-800 bg-slate-900/80 p-3"><dt className="text-[10px] font-bold uppercase text-slate-500">{label}</dt><dd className="mt-1 text-xs text-slate-200">{value}</dd></div>)}
                       </dl>
-                      {selectedItem.sections?.map((section) => <section key={section.title} className="rounded-lg border border-slate-800 bg-slate-900/80 p-3"><h4 className="mb-2 text-xs font-bold text-nexus-yellow">{section.title}</h4><ul className="space-y-1.5">{section.lines.map((line) => <li key={line} className="text-xs leading-relaxed text-slate-300">{line}</li>)}</ul></section>)}
+                      {selectedItem.sections?.map((section) => <section key={section.title} className="glass rounded-lg border border-slate-800 bg-slate-900/80 p-3"><h4 className="mb-2 text-xs font-bold text-nexus-yellow">{section.title}</h4><ul className="space-y-1.5">{section.lines.map((line) => <li key={line} className="text-xs leading-relaxed text-slate-300">{line}</li>)}</ul></section>)}
                       {activeWidget === 'students' && (
                         editPreview ? (
                           <form onSubmit={handleEditPreview} className="space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
@@ -488,7 +488,7 @@ export const AdminDashboardPreview: React.FC = () => {
                     </div>
                   ) : (
                     <div className="flex h-full min-h-56 flex-col items-center justify-center text-center">
-                      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3 text-slate-500">{activeWidget === 'units' ? <School className="h-6 w-6" /> : activeWidget === 'certificates' ? <Award className="h-6 w-6" /> : <CalendarDays className="h-6 w-6" />}</div>
+                      <div className="glass rounded-2xl border border-slate-800 bg-slate-900 p-3 text-slate-500">{activeWidget === 'units' ? <School className="h-6 w-6" /> : activeWidget === 'certificates' ? <Award className="h-6 w-6" /> : <CalendarDays className="h-6 w-6" />}</div>
                       <p className="mt-3 text-sm font-semibold text-slate-300">Selecione um registro</p>
                       <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-500">Os detalhes demonstrativos aparecerão aqui.</p>
                     </div>

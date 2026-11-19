@@ -7,7 +7,7 @@ export const AlunoDashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-8 max-w-7xl">
-      <div className="p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-2xl">
+      <div className="glass p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-2xl">
         <h1 className="text-3xl font-extrabold text-white tracking-tight">
           Olá, {user?.nome || 'Estudante'}!
         </h1>
@@ -17,7 +17,7 @@ export const AlunoDashboardPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
+        <div className="glass p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
           <div className="flex items-center justify-between text-sky-400">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Disciplinas Matriculadas</span>
             <BookOpen className="w-4 h-4" />
@@ -26,7 +26,7 @@ export const AlunoDashboardPage: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1">Neste semestre</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
+        <div className="glass p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
           <div className="flex items-center justify-between text-nexus-yellow">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Média Geral Acumulada</span>
             <Award className="w-4 h-4" />
@@ -35,7 +35,7 @@ export const AlunoDashboardPage: React.FC = () => {
           <p className="text-xs text-emerald-400 mt-1">Status: Regular / Aprovado</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
+        <div className="glass p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
           <div className="flex items-center justify-between text-emerald-400">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Certificados Disponíveis</span>
             <FileCheck2 className="w-4 h-4" />

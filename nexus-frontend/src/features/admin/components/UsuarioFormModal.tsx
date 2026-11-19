@@ -259,7 +259,7 @@ export const UsuarioFormModal: React.FC<UsuarioFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl animate-fadeIn my-auto">
+      <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl animate-fadeIn my-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-800 sticky top-0 bg-slate-900 rounded-t-2xl z-10">
           <div className="flex items-center gap-2 text-white font-bold text-lg">

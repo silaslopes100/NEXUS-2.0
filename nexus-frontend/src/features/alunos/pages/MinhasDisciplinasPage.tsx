@@ -43,7 +43,7 @@ const CartaoAvaliacao: React.FC<{ item: AvaliacaoAluno; destaque: boolean }> = (
   return (
     <article
       ref={ref}
-      className={`flex flex-col gap-3 rounded-2xl border bg-slate-900 p-4 sm:flex-row sm:items-center sm:justify-between ${
+      className={`glass flex flex-col gap-3 rounded-2xl border bg-slate-900 p-4 sm:flex-row sm:items-center sm:justify-between ${
         destaque ? 'border-nexus-yellow ring-2 ring-nexus-yellow/30' : 'border-slate-800'
       }`}
     >
@@ -156,7 +156,7 @@ export const MinhasDisciplinasPage: React.FC = () => {
       )}
 
       {cursos.length === 0 && avaliacoes.length === 0 && !erro && (
-        <p className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-sm text-slate-500">
+        <p className="glass rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-sm text-slate-500">
           Você ainda não tem disciplinas vinculadas.
         </p>
       )}
@@ -171,7 +171,7 @@ export const MinhasDisciplinasPage: React.FC = () => {
             const concluidos = disciplina.conteudos.filter((c) => c.concluido).length;
             const total = disciplina.conteudos.length;
             return (
-              <article key={disciplina.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+              <article key={disciplina.id} className="glass rounded-2xl border border-slate-800 bg-slate-900 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-semibold text-slate-100">{disciplina.nome}</h3>
                   <span className="shrink-0 text-xs text-slate-400">

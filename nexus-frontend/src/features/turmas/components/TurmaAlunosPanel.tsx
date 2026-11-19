@@ -94,7 +94,7 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
         role="dialog"
         aria-modal="true"
         aria-labelledby="turma-alunos-titulo"
-        className="my-auto w-full max-w-3xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+        className="glass my-auto w-full max-w-3xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
       >
         <header className="flex items-start justify-between gap-4">
           <div>

@@ -109,7 +109,7 @@ const GatewayCard: React.FC<{
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+    <section className="glass space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold text-white">{NOME_GATEWAY[gateway]}</h2>
@@ -243,7 +243,7 @@ const EventosWebhook: React.FC = () => {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+    <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
         <div>
           <h2 className="font-bold text-white">Eventos de webhook</h2>
@@ -317,7 +317,7 @@ export const GatewaysPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-6">
-      <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl">
+      <header className="glass rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl">
         <h1 className="text-3xl font-extrabold text-white">Gateways de Pagamento</h1>
         <p className="mt-1 text-sm text-slate-400">Credenciais por ambiente (criptografadas no banco), URL de webhook e teste de conexão.</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">

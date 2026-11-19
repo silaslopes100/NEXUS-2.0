@@ -37,7 +37,7 @@ const ModalAtender: React.FC<{ poloId: string; s: Solicitacao; onFechar: () => v
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4"
       onMouseDown={(e) => e.target === e.currentTarget && !enviando && onFechar()}>
-      <div role="dialog" aria-modal="true" className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900">
+      <div role="dialog" aria-modal="true" className="glass w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900">
         <header className="flex items-start justify-between border-b border-slate-800 p-5">
           <div>
             <h2 className="text-lg font-bold text-white">{s.numero} · {s.escola_nome}</h2>
@@ -178,7 +178,7 @@ export const SolicitacoesPoloPage: React.FC = () => {
       {erro && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{erro}</div>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" className="flex gap-1 rounded-xl border border-slate-800 bg-slate-900 p-1">
+        <div role="tablist" className="glass flex gap-1 rounded-xl border border-slate-800 bg-slate-900 p-1">
           {abas.map((a) => (
             <button key={a.id} type="button" role="tab" aria-selected={aba === a.id} onClick={() => setAba(a.id)}
               className={`rounded-lg px-3 py-1.5 text-sm ${aba === a.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>
@@ -195,7 +195,7 @@ export const SolicitacoesPoloPage: React.FC = () => {
       ) : (
         <div className="space-y-3">
           {itensAba.map((s) => (
-            <article key={s.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+            <article key={s.id} className="glass rounded-2xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-white">{s.escola_nome} · {s.numero}</p>
@@ -240,7 +240,7 @@ export const SolicitacoesPoloPage: React.FC = () => {
             </article>
           ))}
           {itensAba.length === 0 && (
-            <p className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-sm text-slate-500">
+            <p className="glass rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-sm text-slate-500">
               {aba === 'pendentes' ? 'Nenhuma solicitação aguardando.' : 'Nada por aqui ainda.'}
             </p>
           )}

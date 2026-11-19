@@ -130,7 +130,7 @@ export const RegrasPagamentoPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-6">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
+      <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
           <h1 className="text-3xl font-extrabold text-white">Regras de Pagamento</h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -146,7 +146,7 @@ export const RegrasPagamentoPage: React.FC = () => {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="flex items-center justify-between border-b border-slate-800 p-4">
           <p className="text-xs text-slate-500">{items.length} regra(s)</p>
           <button onClick={load} title="Recarregar" className="rounded-xl border border-slate-700 p-2 text-slate-400 hover:text-white"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /></button>
@@ -188,7 +188,7 @@ export const RegrasPagamentoPage: React.FC = () => {
 
       {editando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4">
-          <form onSubmit={salvar} className="my-auto w-full max-w-2xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+          <form onSubmit={salvar} className="glass my-auto w-full max-w-2xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-white">{editando === 'nova' ? 'Nova regra' : 'Editar regra'}</h2>
               <button type="button" onClick={() => setEditando(null)} className="text-slate-400"><X /></button>

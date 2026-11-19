@@ -109,7 +109,7 @@ export const AulasAuditoriaPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-6">
-      <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:p-8">
+      <header className="glass rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:p-8">
         {disciplinaDaRota && (
           <Link to="/admin/disciplinas" className="mb-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white">
             <ArrowLeft className="h-3.5 w-3.5" /> Disciplinas
@@ -124,7 +124,7 @@ export const AulasAuditoriaPage: React.FC = () => {
         </p>
       </header>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-md">
+      <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-md">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_150px_150px]">
           {!disciplinaDaRota && (
             <select aria-label="Disciplina" value={disciplinaId} onChange={(e) => definir('disciplina', e.target.value)} className={campo}>
@@ -198,12 +198,12 @@ export const AulasAuditoriaPage: React.FC = () => {
       )}
 
       {carregando ? (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-center text-sm text-slate-400">
+        <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-center text-sm text-slate-400">
           <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-nexus-yellow" />
           Carregando aulas...
         </div>
       ) : aulas.length === 0 ? (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 px-6 py-16 text-center">
+        <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 px-6 py-16 text-center">
           <BookOpen className="mx-auto mb-3 h-8 w-8 text-slate-500" />
           <h2 className="font-semibold text-white">Nenhuma aula encontrada</h2>
           <p className="mt-1 text-sm text-slate-400">
@@ -214,7 +214,7 @@ export const AulasAuditoriaPage: React.FC = () => {
         <div className="space-y-5">
           <p className="text-sm text-slate-400">{total} aula(s) encontrada(s)</p>
           {grupos.map(([poloId, grupo]) => (
-            <section key={poloId} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-md">
+            <section key={poloId} className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-md">
               <h2 className="flex items-center gap-2 border-b border-slate-800 px-5 py-3 font-bold text-white">
                 <Building2 className="h-4 w-4 text-nexus-yellow" />
                 {grupo.nome}

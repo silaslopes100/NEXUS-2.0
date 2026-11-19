@@ -70,7 +70,7 @@ export const ProfessorDetalheModal: React.FC<Props> = ({ professorId, onClose })
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <section role="dialog" aria-modal="true" aria-labelledby="detalhe-professor-titulo"
-        className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        className="glass w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
         <header className="flex items-start justify-between gap-4">
           <div>
             <h2 id="detalhe-professor-titulo" className="text-xl font-bold text-white">Detalhe do professor</h2>

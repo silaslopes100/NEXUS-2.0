@@ -122,7 +122,7 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
         aria-modal="true"
         aria-labelledby="turma-form-titulo"
         onSubmit={salvar}
-        className="my-auto w-full max-w-2xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+        className="glass my-auto w-full max-w-2xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
       >
         <header className="flex items-start justify-between gap-4">
           <h2 id="turma-form-titulo" className="text-xl font-bold text-white">

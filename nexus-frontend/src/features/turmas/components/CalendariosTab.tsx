@@ -120,7 +120,7 @@ export const CalendariosTab: React.FC<{ cursos: Curso[] }> = ({ cursos }) => {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
+      <div className="glass overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
         <table className="w-full text-left text-sm text-slate-300">
           <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
             <tr>
@@ -212,7 +212,7 @@ export const CalendariosTab: React.FC<{ cursos: Curso[] }> = ({ cursos }) => {
             aria-modal="true"
             aria-labelledby="calendario-form-titulo"
             onSubmit={salvar}
-            className="my-auto w-full max-w-xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+            className="glass my-auto w-full max-w-xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
           >
             <header className="flex items-start justify-between gap-4">
               <h2 id="calendario-form-titulo" className="text-xl font-bold text-white">

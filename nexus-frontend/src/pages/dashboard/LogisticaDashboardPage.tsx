@@ -41,7 +41,7 @@ export const LogisticaDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-8">
-      <header className="flex items-center justify-between rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-indigo-950/40 p-8 shadow-2xl">
+      <header className="glass flex items-center justify-between rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-indigo-950/40 p-8 shadow-2xl">
         <div>
           <h1 className="text-3xl font-extrabold text-white">Painel de logística{user?.nome ? `, ${user.nome}` : ''}</h1>
           <p className="mt-1 max-w-xl text-sm text-slate-400">Envio e entrega dos livros didáticos pagos pelos Polos.</p>
@@ -53,7 +53,7 @@ export const LogisticaDashboardPage: React.FC = () => {
           {dados ? (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
               {cards.map(({ label, value, Icon, color }) => (
-                <div key={label} className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <div key={label} className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                   <div className={`flex items-center justify-between ${color}`}><span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</span><Icon size={18} /></div>
                   <div className="mt-3 text-3xl font-black text-white">{value}</div>
                 </div>
@@ -61,10 +61,10 @@ export const LogisticaDashboardPage: React.FC = () => {
             </div>
           ) : <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">Não foi possível carregar os indicadores.</p>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Link to="/admin/logistica/pendentes" className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-sm font-semibold text-slate-200 hover:border-indigo-500/40 hover:text-white">
+            <Link to="/admin/logistica/pendentes" className="glass flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-sm font-semibold text-slate-200 hover:border-indigo-500/40 hover:text-white">
               <span className="flex items-center gap-2"><Truck size={16} /> Pendentes de envio</span><ArrowRight size={14} />
             </Link>
-            <Link to="/admin/logistica/historico" className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-sm font-semibold text-slate-200 hover:border-indigo-500/40 hover:text-white">
+            <Link to="/admin/logistica/historico" className="glass flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-sm font-semibold text-slate-200 hover:border-indigo-500/40 hover:text-white">
               <span className="flex items-center gap-2"><History size={16} /> Histórico de pedidos</span><ArrowRight size={14} />
             </Link>
           </div>

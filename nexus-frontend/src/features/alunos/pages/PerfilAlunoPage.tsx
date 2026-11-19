@@ -314,7 +314,7 @@ export const PerfilAlunoPage: React.FC = () => {
         <p className="mt-1 text-sm text-slate-400">Consulte seus dados e mantenha seus contatos atualizados.</p>
       </header>
 
-      <section className="flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+      <section className="glass flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-slate-950 text-sky-300">
           {selectedPhotoUrl || savedPhotoUrl ? (
             <img
@@ -364,7 +364,7 @@ export const PerfilAlunoPage: React.FC = () => {
         </div>
       </section>
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 sm:p-7">
+      <form onSubmit={handleSubmit} className="glass space-y-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 sm:p-7">
         <section className="space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Contato</h2>
           <div className="grid gap-4 sm:grid-cols-2">

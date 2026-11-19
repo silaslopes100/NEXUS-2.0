@@ -96,7 +96,7 @@ export const ExecucoesBatchPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl">
       {/* Top Banner */}
-      <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
+      <div className="glass p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl relative overflow-hidden">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
           Saúde do Batch de Sincronização Diária
         </h1>
@@ -107,7 +107,7 @@ export const ExecucoesBatchPage: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md">
+        <div className="glass p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">Total de Execuções</span>
             <Database className="w-4 h-4 text-nexus-yellow" />
@@ -116,7 +116,7 @@ export const ExecucoesBatchPage: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1">Cargas registradas no banco</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md">
+        <div className="glass p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">Taxa de Sucesso Geral</span>
             <Percent className="w-4 h-4 text-emerald-400" />
@@ -127,7 +127,7 @@ export const ExecucoesBatchPage: React.FC = () => {
           <p className="text-xs text-emerald-400 mt-1">Registros inseridos com integridade</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md">
+        <div className="glass p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">Rotina Diária Sugerida</span>
             <Clock className="w-4 h-4 text-blue-400" />
@@ -138,7 +138,7 @@ export const ExecucoesBatchPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 shadow-md">
+      <div className="glass p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 shadow-md">
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400">Filtrar por status:</span>
           <select
@@ -163,7 +163,7 @@ export const ExecucoesBatchPage: React.FC = () => {
       </div>
 
       {/* Executions Table */}
-      <div className="rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-xl">
+      <div className="glass rounded-2xl bg-slate-900/80 border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
@@ -275,7 +275,7 @@ export const ExecucoesBatchPage: React.FC = () => {
       {/* Modal de Detalhes dos Erros da Execução */}
       {isErrorsModalOpen && selectedRun && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col p-6 animate-fadeIn">
+          <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col p-6 animate-fadeIn">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2 text-white font-bold text-base">
                 <AlertCircle className="w-5 h-5 text-red-400" />
@@ -321,7 +321,7 @@ export const ExecucoesBatchPage: React.FC = () => {
                     <p className="text-red-300 font-medium">{err.erro}</p>
 
                     {err.linha_raw && (
-                      <pre className="text-[10px] font-mono text-slate-400 bg-slate-900 p-2.5 rounded-lg border border-slate-800 overflow-x-auto whitespace-pre-wrap">
+                      <pre className="glass text-[10px] font-mono text-slate-400 bg-slate-900 p-2.5 rounded-lg border border-slate-800 overflow-x-auto whitespace-pre-wrap">
                         {JSON.stringify(err.linha_raw, null, 2)}
                       </pre>
                     )}

@@ -145,7 +145,7 @@ export const NotasProfessorPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
+      <header className="glass flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Lançamento de Notas</h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -168,7 +168,7 @@ export const NotasProfessorPage: React.FC = () => {
         </div>
       )}
 
-      <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+      <section className="glass space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
         <label className="block max-w-xl text-xs font-semibold uppercase tracking-wide text-slate-400">
           Disciplina e turma
           <select
@@ -228,7 +228,7 @@ export const NotasProfessorPage: React.FC = () => {
         )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-sm text-slate-300">
             <thead className="border-b border-slate-800 bg-slate-950/60 text-xs uppercase text-slate-400">

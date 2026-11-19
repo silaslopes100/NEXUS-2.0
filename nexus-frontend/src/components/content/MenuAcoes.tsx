@@ -64,7 +64,7 @@ export const MenuAcoes: React.FC<{ acoes: AcaoMenu[]; rotulo: string }> = ({ aco
         <div
           role="menu"
           style={{ top: pos.top, right: pos.right }}
-          className="fixed z-50 min-w-[160px] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-xl"
+          className="glass fixed z-50 min-w-[160px] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-xl"
         >
           {acoes.map((acao) => (
             <button

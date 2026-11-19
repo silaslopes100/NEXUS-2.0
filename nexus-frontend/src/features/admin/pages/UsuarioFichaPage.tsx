@@ -100,7 +100,7 @@ const MetricaCard: React.FC<{
   accent?: string;
 }> = ({ icon, label, value, accent = 'text-nexus-yellow' }) => (
   <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center gap-3">
-    <div className={`p-2.5 rounded-lg bg-slate-900 border border-slate-800 ${accent}`}>{icon}</div>
+    <div className={`glass p-2.5 rounded-lg bg-slate-900 border border-slate-800 ${accent}`}>{icon}</div>
     <div>
       <p className="text-lg font-extrabold text-white leading-none">{value}</p>
       <p className="text-[11px] text-slate-400 mt-1">{label}</p>
@@ -309,7 +309,7 @@ export const UsuarioFichaPage: React.FC = () => {
       )}
 
       {/* Header da Ficha */}
-      <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl">
+      <div className="glass p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-xl">
         <button
           onClick={() => navigate('/admin/usuarios')}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-nexus-yellow transition-colors mb-4"
@@ -405,7 +405,7 @@ export const UsuarioFichaPage: React.FC = () => {
       </div>
 
       {/* Identificação & Dados Cadastrais */}
-      <div className="rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
+      <div className="glass rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
           <CreditCard className="w-4 h-4 text-nexus-yellow" />
           Identificação & Dados Cadastrais
@@ -441,7 +441,7 @@ export const UsuarioFichaPage: React.FC = () => {
       {/* Painéis por perfil */}
       {/* Aluno */}
       {ficha.aluno && (
-        <div className="rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
+        <div className="glass rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
             <GraduationCap className="w-4 h-4 text-nexus-yellow" />
             Vínculo de Aluno
@@ -505,7 +505,7 @@ export const UsuarioFichaPage: React.FC = () => {
 
       {/* Professor */}
       {ficha.professor && (
-        <div className="rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
+        <div className="glass rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
             <BookOpen className="w-4 h-4 text-nexus-yellow" />
             Vínculo de Professor
@@ -551,7 +551,7 @@ export const UsuarioFichaPage: React.FC = () => {
 
       {/* Unidade (Polo/Escola) */}
       {temVinculoUnidade && (
-        <div className="rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
+        <div className="glass rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl p-6">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
             <UsersIcon className="w-4 h-4 text-nexus-yellow" />
             Resumo da Unidade ({ficha.polo_nome || ficha.escola_nome || '—'})
@@ -580,7 +580,7 @@ export const UsuarioFichaPage: React.FC = () => {
       {/* Modal Redefinir Senha */}
       {isResetPasswordOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
+          <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <KeyRound className="w-4 h-4 text-nexus-yellow" />
@@ -629,7 +629,7 @@ export const UsuarioFichaPage: React.FC = () => {
       {/* Modal Confirmar Exclusão */}
       {isDeleteConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
+          <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
             <div className="flex items-center gap-2 text-white font-bold text-sm pb-3 border-b border-slate-800">
               <Trash2 className="w-4 h-4 text-red-400" />
               <span>Confirmar Exclusão</span>

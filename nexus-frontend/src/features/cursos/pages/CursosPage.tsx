@@ -304,7 +304,7 @@ export const CursosPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
+      <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/30 p-6 shadow-xl sm:flex-row sm:items-center sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Cursos</h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -343,7 +343,7 @@ export const CursosPage: React.FC = () => {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
         <div className="flex flex-col gap-3 border-b border-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
               <h2 className="font-bold text-white">Lista de cursos</h2>
@@ -495,7 +495,7 @@ export const CursosPage: React.FC = () => {
         >
           <form
             onSubmit={salvarCurso}
-            className="my-auto max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+            className="glass my-auto max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
           >
             <header className="flex items-start justify-between gap-4">
               <div>
@@ -744,7 +744,7 @@ export const CursosPage: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="curso-detalhes-titulo"
-            className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+            className="glass max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
           >
             <header className="flex items-start justify-between gap-4 border-b border-slate-800 p-5 sm:p-6">
               <div>

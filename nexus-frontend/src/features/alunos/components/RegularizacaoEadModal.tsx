@@ -18,7 +18,7 @@ export const ComprasEadPage: React.FC = () => {
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="regularizacao-titulo"
-            className="w-full max-w-md space-y-4 rounded-2xl border border-amber-500/30 bg-slate-900 p-6 text-center shadow-2xl"
+            className="glass w-full max-w-md space-y-4 rounded-2xl border border-amber-500/30 bg-slate-900 p-6 text-center shadow-2xl"
           >
             <AlertTriangle className="mx-auto text-amber-300" size={32} />
             <h2 id="regularizacao-titulo" className="text-lg font-bold text-white">

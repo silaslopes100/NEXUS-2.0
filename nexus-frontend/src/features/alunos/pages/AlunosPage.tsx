@@ -242,7 +242,7 @@ export const AlunosPage: React.FC = () => {
         </form>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
+      <div className="glass overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
         <table className="w-full min-w-[1280px] text-left text-sm text-slate-300">
           <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
             <tr>

@@ -88,7 +88,7 @@ export const ChatAdminPage: React.FC = () => {
 
       {erro && <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200">{erro}</p>}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+      <div className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
         {dados === null ? (
           <div className="flex justify-center p-10 text-slate-400"><Loader2 className="animate-spin" /></div>
         ) : dados.itens.length === 0 ? (

@@ -98,7 +98,7 @@ export const DiarioAulasPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-6">
-      <header className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
+      <header className="glass flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Diário de Aulas</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">
@@ -131,7 +131,7 @@ export const DiarioAulasPage: React.FC = () => {
         </div>
       )}
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/80 shadow-md">
+      <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 shadow-md">
         <div className="grid gap-3 border-b border-slate-800 p-4 md:grid-cols-[minmax(0,1.4fr)_150px_150px_minmax(0,1fr)_auto]">
           <select
             aria-label="Filtrar por disciplina e turma"
@@ -301,7 +301,7 @@ export const DiarioAulasPage: React.FC = () => {
 
       {excluindo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <section role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6">
+          <section role="alertdialog" aria-modal="true" className="glass w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6">
             <h2 className="text-lg font-bold text-white">Excluir esta aula?</h2>
             <p className="mt-2 text-sm text-slate-400">
               A aula de {formatarData(excluindo.data_aula)} (nº {excluindo.numero_aula}) será removida com a ata, a
@@ -476,7 +476,7 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
         role="dialog"
         aria-modal="true"
         aria-labelledby="aula-editor-titulo"
-        className="my-auto max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+        className="glass my-auto max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
       >
         <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-800 bg-slate-900 p-5">
           <div>

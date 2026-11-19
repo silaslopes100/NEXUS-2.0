@@ -93,7 +93,7 @@ const NovaSolicitacao: React.FC<{ escolaId: string; onCriada: (s: Solicitacao) =
             <div className="grid gap-3 sm:grid-cols-2">
               {cursos.map((c) => (
                 <button key={c.id} type="button" onClick={() => void abrirCurso(c.id)}
-                  className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-left hover:border-nexus-yellow/50">
+                  className="glass rounded-2xl border border-slate-800 bg-slate-900 p-4 text-left hover:border-nexus-yellow/50">
                   <p className="font-semibold text-white">{c.nome}</p>
                   <p className="mt-1 text-sm text-slate-400">
                     {c.disciplinas_a_venda} de {c.disciplinas} disciplina(s) disponíveis
@@ -120,7 +120,7 @@ const NovaSolicitacao: React.FC<{ escolaId: string; onCriada: (s: Solicitacao) =
               const qtd = carrinho[d.disciplina_id]?.quantidade || 0;
               const preco = Number(d.preco || 0);
               return (
-                <div key={d.disciplina_id} className={`flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 p-3 ${d.a_venda ? '' : 'opacity-60'}`}>
+                <div key={d.disciplina_id} className={`glass flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 p-3 ${d.a_venda ? '' : 'opacity-60'}`}>
                   <div className="min-w-0">
                     <p className="font-medium text-white">{d.nome}</p>
                     <p className="text-xs text-slate-500">
@@ -149,7 +149,7 @@ const NovaSolicitacao: React.FC<{ escolaId: string; onCriada: (s: Solicitacao) =
         )}
       </section>
 
-      <aside className="h-fit space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-4 lg:sticky lg:top-20">
+      <aside className="glass h-fit space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-4 lg:sticky lg:top-20">
         <h2 className="flex items-center gap-2 font-semibold text-white"><ShoppingBag size={17} /> Sua solicitação</h2>
         {itens.length === 0 ? (
           <p className="text-sm text-slate-500">Escolha um curso e as quantidades por disciplina.</p>
@@ -257,7 +257,7 @@ export const SolicitacoesEscolaPage: React.FC = () => {
           )}
           <div className="space-y-3">
             {lista.map((s) => (
-              <article key={s.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+              <article key={s.id} className="glass rounded-2xl border border-slate-800 bg-slate-900 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-white">{s.numero}</p>
@@ -295,7 +295,7 @@ export const SolicitacoesEscolaPage: React.FC = () => {
               </article>
             ))}
             {lista.length === 0 && (
-              <p className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-sm text-slate-500">
+              <p className="glass rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-sm text-slate-500">
                 Nenhuma solicitação ainda.
               </p>
             )}

@@ -87,7 +87,7 @@ const kpiAccent = {
 };
 
 const KpiCard: React.FC<KpiCardProps> = ({ label, value, icon, accent = 'blue' }) => (
-  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 transition-colors hover:bg-slate-900">
+  <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-4 transition-colors hover:bg-slate-900">
     <div className="flex items-center justify-between text-slate-500">
       <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
       <span className={kpiAccent[accent]}>{icon}</span>
@@ -304,7 +304,7 @@ export const PolosEscolasPage: React.FC = () => {
 
   // ---------- Render ----------
   return <div className="max-w-7xl space-y-6">
-    <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center">
+    <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-blue-950/40 p-6 shadow-xl sm:flex-row sm:items-center">
       <div>
         <h1 className="text-3xl font-extrabold text-white">Polos e escolas</h1>
         <p className="mt-1 text-sm text-slate-400">Cadastros, responsáveis e visão operacional por unidade.</p>
@@ -349,7 +349,7 @@ export const PolosEscolasPage: React.FC = () => {
           </div>
         </div>
 
-        <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+        <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
           {loading ? <div className="flex justify-center py-16 text-blue-400"><Loader2 className="animate-spin" /></div> : (
             <div className="grid gap-4 p-4 md:grid-cols-2">
               {polos.map((polo) => <article key={polo.id} className="relative rounded-2xl border border-slate-800 bg-slate-950/50 p-5 transition-colors hover:border-blue-500/40">
@@ -385,12 +385,12 @@ export const PolosEscolasPage: React.FC = () => {
           </button>}
         </div>
         {loadingDetalhe || !selectedPolo ? (
-          <div className="flex justify-center rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-blue-400"><Loader2 className="animate-spin" /></div>
+          <div className="glass flex justify-center rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-blue-400"><Loader2 className="animate-spin" /></div>
         ) : (
           <div className="space-y-6">
             {/* 1. Dados do polo + Coordenador */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 lg:col-span-2">
+              <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-6 lg:col-span-2">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Building2 className="text-blue-400" size={22} />
@@ -409,7 +409,7 @@ export const PolosEscolasPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+              <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
                 <div className="mb-4 flex items-center gap-2">
                   <UserCheck className="text-indigo-400" size={22} />
                   <h3 className="text-base font-bold text-white">Coordenador Responsável</h3>
@@ -442,12 +442,12 @@ export const PolosEscolasPage: React.FC = () => {
                   <KpiCard label="Pedidos de livros" value={resumoPolo.pedidos_livros} icon={<Library size={18} />} accent="amber" />
                 </div>
               ) : (
-                <div className="flex justify-center rounded-2xl border border-slate-800 bg-slate-900/80 py-10 text-blue-400"><Loader2 className="animate-spin" /></div>
+                <div className="glass flex justify-center rounded-2xl border border-slate-800 bg-slate-900/80 py-10 text-blue-400"><Loader2 className="animate-spin" /></div>
               )}
             </div>
 
             {/* 3. Escolas do polo */}
-            <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+            <div className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <div className="flex flex-col justify-between gap-3 border-b border-slate-800 p-4 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="text-base font-bold text-white">Escolas do polo ({escolas.length})</h3>
@@ -574,7 +574,7 @@ export const PolosEscolasPage: React.FC = () => {
 
     {/* Modal de criação (polo / escola) */}
     {modal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <form onSubmit={modal === 'polo' ? savePolo : saveEscola} className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+      <form onSubmit={modal === 'polo' ? savePolo : saveEscola} className="glass max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">{modal === 'polo' ? 'Novo polo' : 'Nova escola e secretário'}</h2>
           <button type="button" onClick={() => setModal(null)} className="text-slate-400"><X /></button>

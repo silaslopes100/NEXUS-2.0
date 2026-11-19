@@ -13,7 +13,7 @@ const rotuloMes = (mes: string) => {
 };
 
 const Tile: React.FC<{ label: string; valor: string; detalhe?: string }> = ({ label, valor, detalhe }) => (
-  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+  <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
     <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
     <strong className="mt-2 block text-2xl font-black text-white">{valor}</strong>
     {detalhe && <p className="mt-1 text-xs text-slate-400">{detalhe}</p>}
@@ -34,7 +34,7 @@ const GraficoReceita: React.FC<{ serie: VendasSerieItem[] }> = ({ serie }) => {
   const linhas = [0.25, 0.5, 0.75, 1].map((f) => margem.top + plotH * (1 - f));
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+    <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h2 className="font-bold text-white">Receita paga por mês</h2>
@@ -120,7 +120,7 @@ export const VendasPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-6">
-      <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-emerald-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
+      <header className="glass flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-emerald-950/30 p-6 shadow-xl sm:flex-row sm:items-center">
         <div>
           <h1 className="text-3xl font-extrabold text-white">Vendas</h1>
           <p className="mt-1 text-sm text-slate-400">Licenças e livros vendidos aos Polos. A exportação usa os filtros aplicados abaixo.</p>
@@ -146,7 +146,7 @@ export const VendasPage: React.FC = () => {
           <GraficoReceita serie={serie} />
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+            <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <h2 className="border-b border-slate-800 p-4 font-bold text-white">Top Polos (receita paga)</h2>
               <table className="w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-800 text-slate-300">
@@ -162,7 +162,7 @@ export const VendasPage: React.FC = () => {
                 </tbody>
               </table>
             </section>
-            <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+            <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <h2 className="border-b border-slate-800 p-4 font-bold text-white">Pedidos por status</h2>
               <table className="w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-800 text-slate-300">
