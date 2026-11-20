@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, CheckCheck, Download, FileText } from 'lucide-react';
 import { Mensagem, urlAnexo } from '../api';
 import { tamanhoLegivel } from '../utils';
+import { ReferenciaPostChat } from '@/features/comunicacao/components/ReferenciaPostChat';
 
 interface Props {
   mensagem: Mensagem;
@@ -58,6 +59,7 @@ export const MensagemItem: React.FC<Props> = ({ mensagem: m, minha, mostrarRemet
         {mostrarRemetente && !minha && (
           <p className="mb-0.5 text-xs font-semibold text-blue-300">{m.remetente_nome || 'Usuário'}</p>
         )}
+        {m.ref_tipo === 'feed_post' && m.ref_id && <ReferenciaPostChat postId={m.ref_id} minha={minha} />}
         {m.tipo === 'anexo' && <div className="mb-1"><AnexoPreview m={m} /></div>}
         {m.texto && <p className="whitespace-pre-wrap break-words text-sm">{m.texto}</p>}
         <p className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${minha ? 'text-slate-800/70' : 'text-slate-400'}`}>

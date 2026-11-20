@@ -56,6 +56,10 @@ import { ChatPage } from '@/features/chat/pages/ChatPage';
 import { ChatAdminPage } from '@/features/chat/pages/ChatAdminPage';
 import { CentralEstagioAdminPage } from '@/features/estagios/pages/CentralEstagioAdminPage';
 import { CentralEstagioAlunoPage } from '@/features/estagios/pages/CentralEstagioAlunoPage';
+import { FeedPage } from '@/features/comunicacao/pages/FeedPage';
+import { FeedPostPage } from '@/features/comunicacao/pages/FeedPostPage';
+import { ModeracaoFeedPage } from '@/features/comunicacao/pages/ModeracaoFeedPage';
+import { AvisosAdminPage } from '@/features/comunicacao/pages/AvisosAdminPage';
 import { useAuthStore } from '@/stores/authStore';
 
 const RootRedirect: React.FC = () => {
@@ -107,6 +111,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/etl" element={<ExecucoesBatchPage />} />
           <Route path="/admin/estoque" element={<EstoquePage />} />
           <Route path="/admin/estagios" element={<CentralEstagioAdminPage />} />
+          <Route path="/admin/feed/moderacao" element={<ModeracaoFeedPage />} />
+          <Route path="/admin/avisos" element={<AvisosAdminPage />} />
         </Route>
 
         {/* Módulo 2.4 — Financeiro (admin + perfil financeiro; o backend restringe por área) */}
@@ -196,11 +202,17 @@ export const AppRoutes: React.FC = () => {
           <Route path="/chat" element={<ChatPage />} />
         </Route>
 
-        {/* Feed */}
+        {/* Feed de Notícias (todos leem, curtem e comentam; a equipe publica e modera os próprios posts) */}
         <Route
-          element={<RequireRole roles={['admin', 'polo', 'escola', 'professor', 'aluno']} />}
+          element={<RequireRole roles={['admin', 'polo', 'escola', 'professor', 'aluno', 'financeiro', 'logistica']} />}
         >
-          <Route path="/feed" element={<ModulePlaceholderPage />} />
+          <Route path="/feed" element={<FeedPage />} />
+          <Route path="/feed/:postId" element={<FeedPostPage />} />
+        </Route>
+        <Route
+          element={<RequireRole roles={['admin', 'polo', 'escola', 'professor', 'financeiro', 'logistica']} />}
+        >
+          <Route path="/feed/moderacao" element={<ModeracaoFeedPage />} />
         </Route>
 
       </Route>

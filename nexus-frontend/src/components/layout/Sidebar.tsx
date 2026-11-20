@@ -14,12 +14,14 @@ import {
 import { authApi } from '@/features/auth/api';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
 import { estagiosApi } from '@/features/estagios/api';
+import { PERFIS_PUBLICAR, feedApi } from '@/features/comunicacao/api';
 
 const INTERVALO_CONTADORES_MS = 60_000;
 
 /**
- * Contadores numéricos do menu (por caminho): solicitações de estágio em análise (Admin) e
- * avaliações de estágio ainda não vistas (Aluno). Atualiza a cada 60 s e no evento
+ * Contadores numéricos do menu (por caminho): solicitações de estágio em análise (Admin),
+ * avaliações de estágio ainda não vistas (Aluno) e comentários do feed aguardando moderação
+ * (Admin: todos; demais publicadores: os das próprias publicações). Atualiza a cada 60 s e no evento
  * `nexus:contadores-menu`, disparado pelas telas depois de uma ação.
  */
 const useContadoresMenu = (perfil: UserRole, comAreaAluno: boolean, ativo: boolean) => {
@@ -32,6 +34,12 @@ const useContadoresMenu = (perfil: UserRole, comAreaAluno: boolean, ativo: boole
       if (perfil === 'admin') {
         estagiosApi.resumoAdmin()
           .then((r) => vivo && setContadores((c) => ({ ...c, '/admin/estagios': r.pendentes })))
+          .catch(() => undefined);
+      }
+      if (PERFIS_PUBLICAR.includes(perfil)) {
+        const rota = perfil === 'admin' ? '/admin/feed/moderacao' : '/feed/moderacao';
+        feedApi.resumoModeracao()
+          .then((r) => vivo && setContadores((c) => ({ ...c, [rota]: r.pendentes })))
           .catch(() => undefined);
       }
       if (perfil === 'aluno' || comAreaAluno) {

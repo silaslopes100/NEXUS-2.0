@@ -8,6 +8,7 @@ import { ChatBadge } from '@/features/chat/components/ChatBadge';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { AppBackdrop } from '@/components/layout/AppBackdrop';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
+import { AvisosPopupHost } from '@/features/comunicacao/components/AvisosPopupHost';
 
 export const AppLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -84,6 +85,7 @@ export const AppLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      <AvisosPopupHost />
     </div>
   );
 };

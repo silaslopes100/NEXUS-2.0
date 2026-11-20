@@ -14,7 +14,7 @@ from app.core.database import get_db_cursor
 from app.modules.chat.regras import DIAS_HISTORICO, HORAS_TABELA_ATIVA
 
 _COLS_MSG = ("id, conversa_id, remetente_id, tipo, texto, anexo_url, anexo_storage_key, "
-             "anexo_nome, anexo_mime, anexo_tamanho, criado_em")
+             "anexo_nome, anexo_mime, anexo_tamanho, ref_tipo, ref_id, criado_em")
 
 # Mensagens das duas tabelas (ativa + histórico) de uma conversa.
 _UNIAO_MSG = f"""
@@ -337,12 +337,14 @@ class PostgresChatRepository:
 
     def inserir_mensagem(self, dados: Dict[str, Any]) -> Dict[str, Any]:
         """Grava a mensagem, atualiza a conversa e a leitura do remetente e reexibe a conversa para todos."""
+        dados = {"ref_tipo": None, "ref_id": None, **dados}
         with get_db_cursor() as cur:
             cur.execute(
                 f"""INSERT INTO chat_mensagens (conversa_id, remetente_id, tipo, texto, anexo_url, anexo_storage_key,
-                                                anexo_nome, anexo_mime, anexo_tamanho)
+                                                anexo_nome, anexo_mime, anexo_tamanho, ref_tipo, ref_id)
                     VALUES (%(conversa_id)s, %(remetente_id)s, %(tipo)s, %(texto)s, %(anexo_url)s,
-                            %(anexo_storage_key)s, %(anexo_nome)s, %(anexo_mime)s, %(anexo_tamanho)s)
+                            %(anexo_storage_key)s, %(anexo_nome)s, %(anexo_mime)s, %(anexo_tamanho)s,
+                            %(ref_tipo)s, %(ref_id)s)
                     RETURNING {_COLS_MSG}""",
                 dados,
             )

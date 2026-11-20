@@ -54,6 +54,9 @@ export interface Mensagem {
   anexo_nome?: string | null;
   anexo_mime?: string | null;
   anexo_tamanho?: number | null;
+  /** Referência a outro recurso (ex.: resposta a um post do feed). */
+  ref_tipo?: string | null;
+  ref_id?: string | null;
   criado_em: string;
 }
 

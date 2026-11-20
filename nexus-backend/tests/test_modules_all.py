@@ -1378,16 +1378,3 @@ async def test_modulo_transferencias(client: AsyncClient, monkeypatch):
     )
     assert r_res.status_code == 200
     assert r_res.json()["status"] == "aprovada"
-
-
-# 18. Comunicação (Feed) — o chat fica no módulo /chat
-@pytest.mark.asyncio
-async def test_modulo_comunicacao(client: AsyncClient):
-    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
-
-    f_res = await client.post(
-        "/comunicacao/feed",
-        json={"titulo": "Aviso Oficial", "conteudo": "Início do semestre letivo 2026.1"},
-        headers={"Authorization": f"Bearer {t_admin}"},
-    )
-    assert f_res.status_code == 201

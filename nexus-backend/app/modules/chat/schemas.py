@@ -57,6 +57,9 @@ class MensagemOut(BaseModel):
     anexo_nome: Optional[str] = None
     anexo_mime: Optional[str] = None
     anexo_tamanho: Optional[int] = None
+    # Referência a outro recurso (ex.: resposta a um post do feed: ref_tipo='feed_post').
+    ref_tipo: Optional[str] = None
+    ref_id: Optional[str] = None
     criado_em: datetime
 
 

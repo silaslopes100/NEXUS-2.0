@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   ArrowLeftRight,
   MessageSquare,
-  BellRing,
   ScrollText,
   BookMarked,
   Sliders,
@@ -30,6 +29,9 @@ import {
   TrendingUp,
   Inbox,
   Briefcase,
+  Newspaper,
+  Megaphone,
+  MessageSquareWarning,
   LucideIcon,
 } from 'lucide-react';
 import { UserRole } from '@/types/auth';
@@ -43,7 +45,7 @@ export interface MenuItem {
   permission?: string;
   isPlaceholder?: boolean;
   /** Contador numérico dinâmico (consultado pelo Sidebar). */
-  contador?: 'estagios';
+  contador?: 'estagios' | 'feed_moderacao';
 }
 
 export interface MenuGroup {
@@ -237,10 +239,20 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: ShieldCheck,
         },
         {
-          title: 'Feed & Notificações',
+          title: 'Feed',
           path: '/feed',
-          icon: BellRing,
-          isPlaceholder: true,
+          icon: Newspaper,
+        },
+        {
+          title: 'Moderação do Feed',
+          path: '/admin/feed/moderacao',
+          icon: MessageSquareWarning,
+          contador: 'feed_moderacao',
+        },
+        {
+          title: 'Avisos (Pop-ups)',
+          path: '/admin/avisos',
+          icon: Megaphone,
         },
       ],
     },
@@ -262,7 +274,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
     },
     {
       groupTitle: 'Comunicação',
-      items: [{ title: 'Chat', path: '/chat', icon: MessageSquare }],
+      items: [
+        { title: 'Chat', path: '/chat', icon: MessageSquare },
+        { title: 'Feed', path: '/feed', icon: Newspaper },
+        { title: 'Moderar Comentários', path: '/feed/moderacao', icon: MessageSquareWarning, contador: 'feed_moderacao' },
+      ],
     },
   ],
 
@@ -277,7 +293,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
     },
     {
       groupTitle: 'Comunicação',
-      items: [{ title: 'Chat', path: '/chat', icon: MessageSquare }],
+      items: [
+        { title: 'Chat', path: '/chat', icon: MessageSquare },
+        { title: 'Feed', path: '/feed', icon: Newspaper },
+        { title: 'Moderar Comentários', path: '/feed/moderacao', icon: MessageSquareWarning, contador: 'feed_moderacao' },
+      ],
     },
   ],
 
@@ -374,10 +394,15 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: MessageSquare,
         },
         {
-          title: 'Mural de Avisos',
+          title: 'Feed',
           path: '/feed',
-          icon: BellRing,
-          isPlaceholder: true,
+          icon: Newspaper,
+        },
+        {
+          title: 'Moderar Comentários',
+          path: '/feed/moderacao',
+          icon: MessageSquareWarning,
+          contador: 'feed_moderacao',
         },
       ],
     },
@@ -446,10 +471,15 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: MessageSquare,
         },
         {
-          title: 'Mural de Notificações',
+          title: 'Feed',
           path: '/feed',
-          icon: BellRing,
-          isPlaceholder: true,
+          icon: Newspaper,
+        },
+        {
+          title: 'Moderar Comentários',
+          path: '/feed/moderacao',
+          icon: MessageSquareWarning,
+          contador: 'feed_moderacao',
         },
       ],
     },
@@ -493,10 +523,15 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: MessageSquare,
         },
         {
-          title: 'Avisos & Feed',
+          title: 'Feed',
           path: '/feed',
-          icon: BellRing,
-          isPlaceholder: true,
+          icon: Newspaper,
+        },
+        {
+          title: 'Moderar Comentários',
+          path: '/feed/moderacao',
+          icon: MessageSquareWarning,
+          contador: 'feed_moderacao',
         },
       ],
     },
@@ -568,10 +603,9 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: MessageSquare,
         },
         {
-          title: 'Notificações & Mural',
+          title: 'Feed',
           path: '/feed',
-          icon: BellRing,
-          isPlaceholder: true,
+          icon: Newspaper,
         },
       ],
     },

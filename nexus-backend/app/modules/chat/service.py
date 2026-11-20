@@ -305,7 +305,9 @@ class ChatService:
     # ------------------------------------------------------------------
     # Mensagens e estado
     # ------------------------------------------------------------------
-    def enviar(self, user: UserResponse, conversa_id: str, dados: EnviarMensagemIn) -> MensagemOut:
+    def enviar(self, user: UserResponse, conversa_id: str, dados: EnviarMensagemIn,
+               ref: Optional[Dict[str, str]] = None) -> MensagemOut:
+        """Envia a mensagem. `ref` ({'ref_tipo', 'ref_id'}) é uso interno de outros módulos (ex.: feed)."""
         conversa, _ = self._exigir_membro(conversa_id, user)
         if conversa["status"] != "ativa":
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Esta conversa foi encerrada.")
@@ -320,6 +322,7 @@ class ChatService:
             "anexo_url": anexo.url if anexo else None, "anexo_storage_key": anexo.storage_key if anexo else None,
             "anexo_nome": anexo.nome if anexo else None, "anexo_mime": anexo.mime if anexo else None,
             "anexo_tamanho": anexo.tamanho if anexo else None,
+            "ref_tipo": (ref or {}).get("ref_tipo"), "ref_id": (ref or {}).get("ref_id"),
         })
         return MensagemOut(**msg, remetente_nome=self._nome(user))
 
