@@ -59,6 +59,17 @@ export const dashboardDoPerfil = (role?: string | null): string => {
   return r ? `/${r}/dashboard` : '/auth/login';
 };
 
+/** Ids dos avisos "Todo acesso" já exibidos no login atual (ver AvisosPopupHost). */
+export const CHAVE_AVISOS_SESSAO = 'nexus:avisos-vistos-sessao';
+
+const limparAvisosDaSessao = () => {
+  try {
+    sessionStorage.removeItem(CHAVE_AVISOS_SESSAO);
+  } catch {
+    /* armazenamento indisponível */
+  }
+};
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   perfil: null,
@@ -73,6 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setSession: (accessToken, refreshToken, user, perfil, permissoes = []) => {
     const activePerfil = perfil || user.perfil || null;
     const activePermissoes = permissoes.length > 0 ? permissoes : user.permissoes || [];
+    limparAvisosDaSessao();
 
     set({
       accessToken,
@@ -114,6 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setInitialized: (isInitialized) => set({ isInitialized }),
 
   logout: () => {
+    limparAvisosDaSessao();
     set({
       user: null,
       perfil: null,

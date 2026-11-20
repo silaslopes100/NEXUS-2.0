@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useAuthStore } from '@/stores/authStore';
+import { CHAVE_AVISOS_SESSAO as CHAVE_SESSAO, useAuthStore } from '@/stores/authStore';
 import { AvisoPopup, avisosApi } from '../api';
 import { AvisoConteudo, LARGURAS } from './AvisoModal';
-
-const CHAVE_SESSAO = 'nexus:avisos-vistos-sessao';
 
 const vistosNaSessao = (): string[] => {
   try {
