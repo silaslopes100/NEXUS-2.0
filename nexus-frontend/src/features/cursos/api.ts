@@ -65,6 +65,8 @@ export interface Disciplina {
   ativo?: boolean;
   /** SKU do kit (livro + licença). */
   sku?: string | null;
+  /** Turma EAD: dias para concluir depois de liberada (vazio = padrão do calendário). */
+  ead_prazo_dias?: number | null;
 }
 
 export interface DisciplinaInput {
@@ -78,6 +80,7 @@ export interface DisciplinaInput {
   eh_extra_grade: boolean;
   preco?: number | null;
   peso_livro_g?: number | null;
+  ead_prazo_dias?: number | null;
   ativo?: boolean;
   /** Vazio: gerado automaticamente. */
   sku?: string | null;

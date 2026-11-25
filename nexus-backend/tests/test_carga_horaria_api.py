@@ -20,8 +20,8 @@ DISC = "disc-1"
 
 CALENDARIO = {
     "nome": "Calendário 2026",
-    "data_inicio": "2026-01-01",
-    "data_fim": "2026-12-31",
+    "data_inicio": "2026-02-01",
+    "data_fim": "2026-03-31",
     "dias_semana": [6],
     "meses_recesso": [7, 12],
 }
@@ -104,7 +104,7 @@ async def test_calendario_crud_permissoes_e_previa_de_datas(client, repos):
     invalido = await client.post("/calendarios-academicos", json={**CALENDARIO, "dias_semana": [9]}, headers=_h("admin-1"))
     assert invalido.status_code == 422
 
-    res = await client.post("/calendarios-academicos", json=CALENDARIO, headers=_h("admin-1"))
+    res = await client.post("/calendarios-academicos", json={**CALENDARIO, "data_inicio": "2026-01-01", "data_fim": "2026-12-31"}, headers=_h("admin-1"))
     assert res.status_code == 201
     cal = res.json()
     assert cal["regras"]["aulas_por_disciplina_mes"] == 2 and cal["regras"]["frequencia_minima_pct"] == 75

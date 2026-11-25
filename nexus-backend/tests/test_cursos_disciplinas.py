@@ -324,7 +324,9 @@ async def test_update_course_replaces_discipline_links(monkeypatch):
     course = await cursos_disciplinas.update_curso(COURSE_ID, _course_update_payload([discipline_id]))
 
     assert course["nome"] == "Curso editado"
-    assert len(cursor.executions) == 3
+    # +1: sincroniza as datas das turmas abertas com a vigência do calendário do curso.
+    assert len(cursor.executions) == 4
+    assert "turma_datas_sincronizadas" in cursor.executions[-1][0]
     assert "UPDATE cursos" in cursor.executions[0][0]
     assert "curso_id = NULL" in cursor.executions[1][0]
     assert cursor.executions[1][1] == (str(COURSE_ID), [str(discipline_id)])
@@ -338,7 +340,7 @@ async def test_update_course_without_discipline_ids_keeps_links(monkeypatch):
 
     await cursos_disciplinas.update_curso(COURSE_ID, _course_update_payload())
 
-    assert len(cursor.executions) == 1
+    assert len(cursor.executions) == 2  # UPDATE cursos + sincronização das turmas
 
 
 @pytest.mark.asyncio
@@ -348,7 +350,7 @@ async def test_update_course_with_empty_list_unlinks_all_disciplines(monkeypatch
 
     await cursos_disciplinas.update_curso(COURSE_ID, _course_update_payload([]))
 
-    assert len(cursor.executions) == 2
+    assert len(cursor.executions) == 3  # + sincronização das turmas
     assert "curso_id = NULL" in cursor.executions[1][0]
 
 

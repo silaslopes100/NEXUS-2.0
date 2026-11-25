@@ -50,7 +50,10 @@ class PostgresAvaAlunoRepository:
                       JOIN ava_progresso p ON p.aula_id = x.id AND p.usuario_id = %(u)s AND p.status = 'concluida'
                      WHERE x.obrigatoria) AS obrigatorias_concluidas,
                    (SELECT MAX(p.ultimo_acesso_em) FROM ({_AULAS_PUBLICADAS}) x
-                      JOIN ava_progresso p ON p.aula_id = x.id AND p.usuario_id = %(u)s) AS ultimo_acesso_em
+                      JOIN ava_progresso p ON p.aula_id = x.id AND p.usuario_id = %(u)s) AS ultimo_acesso_em,
+                   (SELECT MAX(p.concluido_em) FROM ({_AULAS_PUBLICADAS}) x
+                      JOIN ava_progresso p ON p.aula_id = x.id AND p.usuario_id = %(u)s AND p.status = 'concluida'
+                   ) AS ultima_conclusao_em
             FROM base
             JOIN disciplinas d ON d.id = base.id
             LEFT JOIN cursos cu ON cu.id = d.curso_id

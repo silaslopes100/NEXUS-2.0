@@ -208,7 +208,8 @@ class PostgresProfessoresRepository:
             cur.execute(
                 """
                 SELECT id::text AS id, curso_id::text AS curso_id,
-                       polo_id::text AS polo_id, escola_id::text AS escola_id
+                       polo_id::text AS polo_id, escola_id::text AS escola_id,
+                       data_inicio, concluida_em, cancelada_em
                 FROM turmas
                 WHERE id = %s
                 """,

@@ -18,6 +18,10 @@ export interface RegrasCalendario {
   perfis_alteram_tipo_aula: string[];
   saldo_ao_fim_turma: 'alertar' | 'bloquear_conclusao';
   bloquear_ata_fora_periodo: boolean;
+  ead_prazo_dias_padrao: number;
+  ead_liberacao: 'sequencial' | 'todas_no_inicio';
+  ead_proxima_libera: 'anterior_concluida_ou_vencida' | 'anterior_vencida' | 'anterior_concluida';
+  ead_ao_vencer: 'bloquear' | 'alertar';
 }
 
 export interface Feriado { data: string; descricao?: string | null }
@@ -155,6 +159,8 @@ export const cargaHorariaApi = {
   atualizarCalendario: async (id: string, dados: CalendarioInput) =>
     (await apiClient.put<Calendario>(`/calendarios-academicos/${id}`, dados)).data,
   excluirCalendario: async (id: string) => { await apiClient.delete(`/calendarios-academicos/${id}`); },
+  turmasAfetadas: async (id: string) =>
+    (await apiClient.get<{ total: number }>(`/calendarios-academicos/${id}/turmas-afetadas`)).data.total,
   datasLetivas: async (id: string, inicio?: string, fim?: string) =>
     (await apiClient.get<DatasLetivas>(`/calendarios-academicos/${id}/datas-letivas`, { params: { inicio, fim } })).data,
 

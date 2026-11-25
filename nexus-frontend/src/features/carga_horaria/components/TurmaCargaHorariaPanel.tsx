@@ -50,11 +50,16 @@ interface Props {
   turma: Turma;
   podeGerar: boolean;
   podeConcluir: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  embutido?: boolean;
+  /** Avisado depois de concluir a turma (para a página recarregar a situação). */
+  onAlterado?: () => void;
 }
 
 /** Cronograma, andamento (previsto × realizado) e frequência da turma — RN04 a RN07. */
-export const TurmaCargaHorariaPanel: React.FC<Props> = ({ turma, podeGerar, podeConcluir, onClose }) => {
+export const TurmaCargaHorariaPanel: React.FC<Props> = ({
+  turma, podeGerar, podeConcluir, onClose, embutido = false, onAlterado,
+}) => {
   const [aba, setAba] = useState<Aba>('cronograma');
   const [cronograma, setCronograma] = useState<Cronograma | null>(null);
   const [andamento, setAndamento] = useState<Andamento | null>(null);
@@ -86,10 +91,11 @@ export const TurmaCargaHorariaPanel: React.FC<Props> = ({ turma, podeGerar, pode
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => {
+    if (embutido || !onClose) return undefined;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, embutido]);
 
   const gerar = async () => {
     if (cronograma?.gerado && !window.confirm('Regerar o cronograma? As aulas já realizadas são mantidas; as pendentes são recriadas com as regras atuais do calendário.')) return;
@@ -120,6 +126,7 @@ export const TurmaCargaHorariaPanel: React.FC<Props> = ({ turma, podeGerar, pode
       const r = await cargaHorariaApi.concluir(turma.id);
       setAviso(r.message);
       await carregar();
+      onAlterado?.();
     } catch (error) {
       setErro(erroApi(error, 'Não foi possível concluir a turma.'));
     } finally {
@@ -130,9 +137,8 @@ export const TurmaCargaHorariaPanel: React.FC<Props> = ({ turma, podeGerar, pode
   const abaCls = (ativa: boolean) =>
     `rounded-xl px-4 py-2 text-sm font-semibold ${ativa ? 'bg-nexus-yellow/10 text-nexus-yellow' : 'text-slate-400 hover:bg-slate-800'}`;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="carga-titulo" className="glass flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+  const corpo = (
+    <>
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 p-5">
           <div>
             <h2 id="carga-titulo" className="flex items-center gap-2 text-xl font-extrabold text-white"><CalendarClock className="h-5 w-5 text-nexus-yellow" /> Carga horária · {turma.nome}</h2>
@@ -154,7 +160,9 @@ export const TurmaCargaHorariaPanel: React.FC<Props> = ({ turma, podeGerar, pode
                 <CheckCircle2 className="h-4 w-4" /> Concluir turma
               </button>
             )}
-            <button type="button" aria-label="Fechar" onClick={onClose} className="rounded-xl border border-slate-700 p-2 text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
+            {!embutido && onClose && (
+              <button type="button" aria-label="Fechar" onClick={onClose} className="rounded-xl border border-slate-700 p-2 text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
+            )}
           </div>
         </header>
 
@@ -283,6 +291,17 @@ export const TurmaCargaHorariaPanel: React.FC<Props> = ({ turma, podeGerar, pode
             </>
           ) : null}
         </div>
+    </>
+  );
+
+  if (embutido) {
+    return <section aria-labelledby="carga-titulo" className="flex flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">{corpo}</section>;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="carga-titulo" className="glass flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+        {corpo}
       </section>
     </div>
   );

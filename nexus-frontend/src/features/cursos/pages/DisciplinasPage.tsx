@@ -41,6 +41,7 @@ type DisciplinaForm = {
   preco: string;
   peso_livro_g: string;
   sku: string;
+  ead_prazo_dias: string;
 };
 
 const initialForm: DisciplinaForm = {
@@ -50,6 +51,7 @@ const initialForm: DisciplinaForm = {
   ordem: '0',
   carga_horaria: '40',
   qtd_aulas_prevista: '2',
+  ead_prazo_dias: '',
   tipo: 'presencial',
   eh_extra_grade: false,
   ativo: true,
@@ -211,6 +213,7 @@ export const DisciplinasPage: React.FC = () => {
       preco: disciplina.preco == null ? '' : Number(disciplina.preco).toFixed(2).replace('.', ','),
       peso_livro_g: disciplina.peso_livro_g == null ? '' : String(disciplina.peso_livro_g),
       sku: disciplina.sku || '',
+      ead_prazo_dias: disciplina.ead_prazo_dias == null ? '' : String(disciplina.ead_prazo_dias),
     });
     setFormError('');
     setIsFormOpen(true);
@@ -236,6 +239,7 @@ export const DisciplinasPage: React.FC = () => {
       ordem: Number(form.ordem),
       carga_horaria: optionalNumber(form.carga_horaria),
       qtd_aulas_prevista: optionalNumber(form.qtd_aulas_prevista),
+      ead_prazo_dias: optionalNumber(form.ead_prazo_dias),
       tipo: form.tipo.trim(),
       eh_extra_grade: form.eh_extra_grade,
       ativo: form.ativo,
@@ -758,6 +762,20 @@ export const DisciplinasPage: React.FC = () => {
                     setForm({ ...form, qtd_aulas_prevista: event.target.value })
                   }
                 />
+              </label>
+              <label className="space-y-1.5 text-sm text-slate-300">
+                <span>Prazo EAD (dias)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={730}
+                  step={1}
+                  placeholder="Padrão do calendário"
+                  className={inputClass}
+                  value={form.ead_prazo_dias}
+                  onChange={(event) => setForm({ ...form, ead_prazo_dias: event.target.value })}
+                />
+                <span className="block text-xs text-slate-500">Na turma EAD, dias para concluir depois de liberada.</span>
               </label>
               <label className="space-y-1.5 text-sm text-slate-300">
                 <span>Tipo</span>

@@ -93,6 +93,7 @@ class DisciplinaSchema(BaseModel):
     peso_livro_g: Optional[int] = Field(default=None, ge=0)
     ativo: bool = True  # inativa: fora do catálogo de compra e do preço do Curso
     sku: Optional[str] = None
+    ead_prazo_dias: Optional[int] = None  # turma EAD: dias para concluir (vazio = padrão do calendário)
 
 
 class DisciplinaWriteSchema(BaseModel):
@@ -112,6 +113,8 @@ class DisciplinaWriteSchema(BaseModel):
     ativo: bool = True
     # SKU do kit. Vazio: gerado automaticamente (KIT-<id da disciplina>).
     sku: Optional[str] = Field(default=None, max_length=64)
+    # Turma EAD: dias para concluir depois de liberada. Vazio: padrão do Calendário Acadêmico.
+    ead_prazo_dias: Optional[int] = Field(default=None, gt=0, le=730)
 
     @field_validator("sku")
     @classmethod
@@ -396,6 +399,28 @@ async def update_curso(curso_id: uuid.UUID, dados: CursoUpdateSchema):
                 vinculadas = _vincular_disciplinas(cur, uid, disciplina_ids) if disciplina_ids else []
                 # O trigger recalcula no banco; a resposta já reflete os novos vínculos.
                 resultado.update(_totais(vinculadas))
+            # Turmas abertas do curso seguem a vigência do calendário (que pode ter mudado agora).
+            cur.execute(
+                """
+                WITH alvo AS (
+                    SELECT t.id, t.data_inicio AS inicio_antes, t.data_fim AS fim_antes, ca.data_inicio, ca.data_fim
+                      FROM turmas t JOIN calendarios_academicos ca ON ca.id = %s
+                     WHERE t.curso_id = %s AND t.concluida_em IS NULL AND t.cancelada_em IS NULL
+                       AND (t.data_inicio IS DISTINCT FROM ca.data_inicio OR t.data_fim IS DISTINCT FROM ca.data_fim)
+                ), alteradas AS (
+                    UPDATE turmas t SET data_inicio = alvo.data_inicio, data_fim = alvo.data_fim, atualizado_em = now()
+                      FROM alvo WHERE t.id = alvo.id
+                    RETURNING t.id, alvo.inicio_antes, alvo.fim_antes, alvo.data_inicio, alvo.data_fim
+                )
+                INSERT INTO logs_auditoria (acao, entidade, entidade_id, dados_antes, dados_depois, criado_em, atualizado_em)
+                SELECT 'turma_datas_sincronizadas', 'turmas', a.id::text,
+                       jsonb_build_object('data_inicio', a.inicio_antes, 'data_fim', a.fim_antes),
+                       jsonb_build_object('data_inicio', a.data_inicio, 'data_fim', a.data_fim, 'origem', 'curso'),
+                       now(), now()
+                  FROM alteradas a
+                """,
+                (str(dados.calendario_id), uid),
+            )
             return resultado
     except ForeignKeyViolation as exc:
         raise _calendario_inexistente() from exc
@@ -464,7 +489,7 @@ async def list_disciplinas(
         return discs
 
     sql = ("SELECT id, curso_id, semestre, nome, ordem, carga_horaria, qtd_aulas_prevista, tipo, eh_extra_grade, "
-           "preco, peso_livro_g, ativo, sku FROM disciplinas")
+           "preco, peso_livro_g, ativo, sku, ead_prazo_dias FROM disciplinas")
     conds = []
     params = []
     if ativo is not None:
@@ -559,11 +584,12 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
     sql = """
         INSERT INTO disciplinas (
             id, curso_id, semestre, nome, ordem, carga_horaria,
-            qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku, criado_em, atualizado_em
+            qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku, ead_prazo_dias,
+            criado_em, atualizado_em
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku, ead_prazo_dias
     """
     params = (
         new_id,
@@ -579,6 +605,7 @@ async def create_disciplina(dados: DisciplinaWriteSchema):
         dados.peso_livro_g,
         dados.ativo,
         d_dict["sku"],
+        dados.ead_prazo_dias,
     )
     with get_db_cursor() as cur:
         _exigir_sku_livre(cur, d_dict["sku"], new_id)
@@ -612,10 +639,10 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         SET curso_id = %s, semestre = %s, nome = %s, ordem = %s,
             carga_horaria = %s, qtd_aulas_prevista = %s, tipo = %s,
             eh_extra_grade = %s, preco = %s, peso_livro_g = %s, ativo = %s,
-            sku = COALESCE(%s, sku), atualizado_em = now()
+            sku = COALESCE(%s, sku), ead_prazo_dias = %s, atualizado_em = now()
         WHERE id = %s
         RETURNING id, curso_id, semestre, nome, ordem, carga_horaria,
-                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku
+                  qtd_aulas_prevista, tipo, eh_extra_grade, preco, peso_livro_g, ativo, sku, ead_prazo_dias
     """
     params = (
         dados.curso_id,
@@ -630,6 +657,7 @@ async def update_disciplina(disciplina_id: uuid.UUID, dados: DisciplinaWriteSche
         dados.peso_livro_g,
         dados.ativo,
         dados.sku,
+        dados.ead_prazo_dias,
         uid,
     )
     with get_db_cursor() as cur:

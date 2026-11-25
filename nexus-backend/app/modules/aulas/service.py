@@ -45,6 +45,7 @@ from app.modules.carga_horaria.schemas import (
 )
 from app.modules.carga_horaria.service import regras_do_calendario
 from app.modules.professores.access import usuario_eh_professor
+from app.modules.turmas.regras import exigir_turma_editavel
 
 # Tipos que exigem aula prevista de referência (Extra é opcional).
 _REFERENCIA_OBRIGATORIA = ("prevista", "reposicao", "reforco", "complemento", "revisao")
@@ -112,8 +113,10 @@ class AulasService:
 
     # ---------- Contexto de carga horária (calendário da turma) ----------
 
-    def _contexto(self, turma_id: Optional[str], disciplina_id: Optional[str]) -> Dict[str, Any]:
+    def _contexto(self, turma_id: Optional[str], disciplina_id: Optional[str], escrita: bool = True) -> Dict[str, Any]:
         turma = self.carga.contexto_turma(turma_id) if turma_id else None
+        if escrita:
+            exigir_turma_editavel(turma)  # concluída ou cancelada: diário só leitura
         regras = regras_do_calendario(turma.get("calendario")) if turma else RegrasCalendario()
         previstas = self.carga.listar_aulas_previstas(turma_id) if turma else []
         return {
@@ -197,7 +200,7 @@ class AulasService:
 
     def pendentes(self, user: UserResponse, vinculo_id: str) -> AulasPendentesResponse:
         vinculo = self._vinculo_permitido(user, vinculo_id)
-        ctx = self._contexto(vinculo.get("turma_id"), vinculo.get("disciplina_id"))
+        ctx = self._contexto(vinculo.get("turma_id"), vinculo.get("disciplina_id"), escrita=False)
         pendentes = [a for a in ctx["previstas"] if a["status"] == "pendente"]
         if not ctx["cronograma"]:
             tipos = ["prevista", "extra", "reforco", "complemento", "revisao"]

@@ -7,10 +7,17 @@ import { inputCls } from '@/features/turmas/components/TurmaFormModal';
 
 interface TurmaAlunosPanelProps {
   turma: Turma;
-  onClose: (houveAlteracao: boolean) => void;
+  onClose?: (houveAlteracao: boolean) => void;
+  /** Dentro da página de detalhe (sem moldura de modal). */
+  embutido?: boolean;
+  /** Turma concluída/cancelada: só a lista. */
+  somenteLeitura?: boolean;
+  onAlterado?: () => void;
 }
 
-export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClose }) => {
+export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({
+  turma, onClose, embutido = false, somenteLeitura = false, onAlterado,
+}) => {
   const [alunos, setAlunos] = useState<AlunoTurma[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -66,13 +73,14 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
         setAlterado(true);
         setConfirmandoId(null);
         setVersao((atual) => atual + 1);
+        onAlterado?.();
       } catch (e) {
         setErro(apiErrorMessage(e, mensagemErro));
       } finally {
         setProcessandoId(null);
       }
     },
-    []
+    [onAlterado]
   );
 
   const matricular = (alunoId: string) =>
@@ -81,45 +89,24 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
   const remover = (alunoId: string) =>
     void executar(alunoId, () => turmasApi.removerAluno(turma.id, alunoId), 'Não foi possível remover o aluno.');
 
-  const fechar = () => onClose(alterado);
+  const fechar = () => onClose?.(alterado);
+  const vagas = (turma as Turma & { vagas?: number | null }).vagas;
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) fechar();
-      }}
-    >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="turma-alunos-titulo"
-        className="glass my-auto w-full max-w-3xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
-      >
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-blue-300">Alunos da turma</p>
-            <h2 id="turma-alunos-titulo" className="mt-1 text-xl font-bold text-white">
-              {turma.nome}
-            </h2>
-          </div>
-          <button
-            type="button"
-            aria-label="Fechar"
-            onClick={fechar}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
-          >
-            <X size={20} />
-          </button>
-        </header>
-
+  const conteudo = (
+    <>
         {erro && (
           <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
             {erro}
           </div>
         )}
 
+        {!somenteLeitura && (
         <div className="space-y-2">
+          {vagas ? (
+            <p className={`text-xs ${total >= vagas ? 'text-amber-300' : 'text-slate-500'}`}>
+              {total} de {vagas} vagas ocupadas{total >= vagas ? ' — turma lotada' : ''}.
+            </p>
+          ) : null}
           <label className="block space-y-1.5 text-sm text-slate-300">
             <span>Matricular aluno</span>
             <input
@@ -164,6 +151,7 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
           )}
           {turma.polo_id && <p className="text-xs text-slate-500">Após vincular a conta, selecione o aluno para matriculá-lo na turma.</p>}
         </div>
+        )}
 
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-slate-300">Matriculados ({total})</h3>
@@ -183,7 +171,7 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
                     <span className="block truncate font-semibold text-white">{aluno.nome || aluno.email || aluno.aluno_id}</span>
                     <span className="block truncate text-xs text-slate-500">{aluno.numero_matricula || 'Sem matrícula'}</span>
                   </span>
-                  {confirmandoId === aluno.aluno_id ? (
+                  {somenteLeitura ? null : confirmandoId === aluno.aluno_id ? (
                     <span className="flex shrink-0 gap-2">
                       <button
                         type="button"
@@ -219,8 +207,10 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
             <p className="text-xs text-slate-500">Exibindo os primeiros {alunos.length} alunos.</p>
           )}
         </div>
-      </section>
-      {cadastrandoAluno && turma.polo_id && (
+    </>
+  );
+
+  const cadastro = cadastrandoAluno && turma.polo_id && (
         <AlunoFormModal
           poloId={turma.polo_id}
           escolas={[]}
@@ -229,7 +219,49 @@ export const TurmaAlunosPanel: React.FC<TurmaAlunosPanelProps> = ({ turma, onClo
           onClose={() => setCadastrandoAluno(false)}
           onSuccess={() => { setCadastrandoAluno(false); setBusca(''); setVersao((atual) => atual + 1); }}
         />
-      )}
+  );
+
+  if (embutido) {
+    return (
+      <div className="space-y-5">
+        {conteudo}
+        {cadastro}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) fechar();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="turma-alunos-titulo"
+        className="glass my-auto w-full max-w-3xl space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7"
+      >
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-blue-300">Alunos da turma</p>
+            <h2 id="turma-alunos-titulo" className="mt-1 text-xl font-bold text-white">
+              {turma.nome}
+            </h2>
+          </div>
+          <button
+            type="button"
+            aria-label="Fechar"
+            onClick={fechar}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+          >
+            <X size={20} />
+          </button>
+        </header>
+        {conteudo}
+      </section>
+      {cadastro}
     </div>
   );
 };

@@ -1,53 +1,93 @@
-"""Módulo de Turmas do NEXUS 2.0 (o calendário vem do Calendário Acadêmico do curso)."""
+"""Módulo de Turmas do NEXUS 2.0.
+
+- Início e fim da turma = vigência do Calendário Acadêmico do curso (não se editam).
+- Situação derivada: planejada → em andamento → concluída / cancelada (ver `regras.py`).
+  Concluída e cancelada ficam só leitura até o admin reabrir.
+- Código automático {SIGLA}-{ANO}-{SEQ}; modalidade presencial/EAD; vagas; responsável da unidade.
+"""
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
-from typing import Annotated, Any, Dict, List, Optional, Tuple
+from datetime import date, datetime, time, timezone
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.core.config import settings
 from app.core.database import get_db_cursor
 from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
-from app.modules.auth.roles import perfil_do_usuario
+from app.modules.auth.roles import nomes_equivalentes, perfil_canonico, perfil_do_usuario
 from app.modules.auth.schemas import UserResponse
 from app.modules.polos_escolas.repository import get_polos_escolas_repository
 from app.modules.professores.access import listar_vinculos_academicos_docente, usuario_eh_professor
+from app.modules.turmas import regras
 
 router = APIRouter(prefix="/turmas", tags=["Turmas & Calendários"])
 
 _PERFIS_TURMA = ["admin", "polo", "escola"]
 
 NomeTurma = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=255)]
+Modalidade = Literal["presencial", "ead"]
+Turno = Literal["manha", "tarde", "noite", "integral"]
 
 
 class TurmaSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: Optional[str] = None
+    codigo: Optional[str] = None
     curso_id: Optional[str] = None
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
     nome: str
+    modalidade: str = "presencial"
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
+    situacao: str = "em_andamento"
 
 
 class TurmaDetalheSchema(TurmaSchema):
     curso_nome: Optional[str] = None
     polo_nome: Optional[str] = None
     escola_nome: Optional[str] = None
+    calendario_nome: Optional[str] = None
     total_alunos: int = 0
+    turno: Optional[str] = None
+    horario_inicio: Optional[time] = None
+    horario_fim: Optional[time] = None
+    vagas: Optional[int] = None
+    local_aulas: Optional[str] = None
+    responsavel_id: Optional[str] = None
+    responsavel_nome: Optional[str] = None
+    concluida_em: Optional[datetime] = None
+    cancelada_em: Optional[datetime] = None
+    motivo_cancelamento: Optional[str] = None
+    periodo_encerrado: bool = False
+    andamento_pct: Optional[float] = None
 
 
 class TurmaWriteSchema(BaseModel):
-    curso_id: Optional[uuid.UUID] = None
+    """Início e fim não são enviados: vêm da vigência do calendário do curso."""
+    curso_id: uuid.UUID
     polo_id: Optional[uuid.UUID] = None
     escola_id: Optional[uuid.UUID] = None
     nome: NomeTurma
-    data_inicio: Optional[date] = None
-    data_fim: Optional[date] = None
+    modalidade: Modalidade = "presencial"
+    turno: Optional[Turno] = None
+    horario_inicio: Optional[time] = None
+    horario_fim: Optional[time] = None
+    vagas: Optional[int] = Field(default=None, gt=0, le=10000)
+    local_aulas: Optional[str] = Field(default=None, max_length=500)
+    responsavel_id: Optional[uuid.UUID] = None
+
+    @model_validator(mode="after")
+    def _horario(self) -> "TurmaWriteSchema":
+        if self.horario_inicio and self.horario_fim and self.horario_fim <= self.horario_inicio:
+            raise ValueError("O horário de término deve ser depois do início")
+        if self.local_aulas is not None:
+            self.local_aulas = self.local_aulas.strip() or None
+        return self
 
 
 class TurmasPaginaSchema(BaseModel):
@@ -78,25 +118,85 @@ class CursoDetalhesSchema(BaseModel):
     turmas: List[TurmaSchema]
 
 
+class CancelarTurmaRequest(BaseModel):
+    motivo: str = Field(min_length=3, max_length=1000)
+
+
+class SugestaoTurmaSchema(BaseModel):
+    codigo: str
+    nome: str
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    calendario_nome: Optional[str] = None
+
+
+class ResponsavelSchema(BaseModel):
+    id: str
+    nome: str
+    perfil: str
+
+
 _turmas_db: Dict[str, Dict[str, Any]] = {}
 _turma_alunos_db: List[Dict[str, Any]] = []
 
-_TURMA_SELECT = """
-    SELECT t.id, t.curso_id, t.polo_id, t.escola_id, t.nome, t.data_inicio,
-           t.data_fim,
-           c.nome AS curso_nome, p.nome AS polo_nome, e.nome AS escola_nome,
-           (SELECT COUNT(*) FROM turma_alunos ta WHERE ta.turma_id = t.id) AS total_alunos
+_ALUNOS_ATIVOS_SQL = (
+    "(SELECT COUNT(*) FROM turma_alunos ta WHERE ta.turma_id = t.id AND COALESCE(ta.status, 'ativo') = 'ativo')"
+)
+
+# Andamento da lista: horas das aulas previstas já cumpridas (ata prevista/reposição) ÷ total previsto.
+_ANDAMENTO_SQL = """
+    (SELECT ROUND(100.0 * COALESCE(SUM(ap.horas_previstas) FILTER (WHERE EXISTS (
+                SELECT 1 FROM aulas_ministradas am
+                 WHERE am.aula_prevista_id = ap.id AND am.tipo IN ('prevista', 'reposicao'))), 0)
+            / NULLIF(SUM(ap.horas_previstas), 0), 1)
+       FROM aulas_previstas ap WHERE ap.turma_id = t.id)
+"""
+
+_TURMA_SELECT = f"""
+    SELECT t.id, t.codigo, t.curso_id, t.polo_id, t.escola_id, t.nome, t.modalidade, t.data_inicio, t.data_fim,
+           t.turno, t.horario_inicio, t.horario_fim, t.vagas, t.local_aulas, t.responsavel_id,
+           t.concluida_em, t.cancelada_em, t.motivo_cancelamento,
+           c.nome AS curso_nome, p.nome AS polo_nome, e.nome AS escola_nome, ca.nome AS calendario_nome,
+           NULLIF(TRIM(CONCAT_WS(' ', r.nome, r.sobrenome)), '') AS responsavel_nome,
+           {_ALUNOS_ATIVOS_SQL} AS total_alunos,
+           {_ANDAMENTO_SQL} AS andamento_pct
     FROM turmas t
     LEFT JOIN cursos c ON c.id = t.curso_id
+    LEFT JOIN calendarios_academicos ca ON ca.id = c.calendario_id
     LEFT JOIN polos p ON p.id = t.polo_id
     LEFT JOIN escolas e ON e.id = t.escola_id
+    LEFT JOIN usuarios r ON r.id = t.responsavel_id
 """
+
+_CAMPOS_ESCRITA = (
+    "curso_id", "polo_id", "escola_id", "nome", "modalidade", "data_inicio", "data_fim",
+    "turno", "horario_inicio", "horario_fim", "vagas", "local_aulas", "responsavel_id",
+)
 
 _ALUNO_NOME_SQL = "trim(concat(u.nome, ' ', u.sobrenome))"
 
 
 def _texto(valor: Any) -> Optional[str]:
     return str(valor) if valor else None
+
+
+def _carga_repo():
+    from app.modules.carga_horaria.repository import get_carga_horaria_repository
+
+    return get_carga_horaria_repository()
+
+
+def _enriquecer(turma: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if turma is None:
+        return None
+    for k in ("id", "curso_id", "polo_id", "escola_id", "responsavel_id"):
+        if turma.get(k) is not None:
+            turma[k] = str(turma[k])
+    if turma.get("andamento_pct") is not None:
+        turma["andamento_pct"] = float(turma["andamento_pct"])
+    turma["situacao"] = regras.situacao(turma)
+    turma["periodo_encerrado"] = regras.periodo_encerrado(turma)
+    return turma
 
 
 def _escopo_usuario(user: UserResponse) -> Tuple[Optional[str], Optional[str]]:
@@ -124,26 +224,23 @@ def _exigir_no_escopo(turma: Optional[Dict[str, Any]], user: UserResponse) -> Di
     return turma
 
 
-def _resolver_vinculo(user: UserResponse, dados: TurmaWriteSchema) -> Tuple[Optional[str], Optional[str]]:
+def _resolver_vinculo(
+    user: UserResponse, polo: Optional[Any], escola: Optional[Any]
+) -> Tuple[Optional[str], Optional[str]]:
     """Define polo e escola da turma: a escola determina o polo, e o perfil limita ambos."""
     polo_escopo, escola_escopo = _escopo_usuario(user)
-    polo_id = _texto(dados.polo_id)
-    escola_id = escola_escopo or _texto(dados.escola_id)
+    polo_id = _texto(polo)
+    escola_id = escola_escopo or _texto(escola)
     if escola_id:
-        escola = get_polos_escolas_repository().get_escola(escola_id)
-        if not escola:
+        escola_row = get_polos_escolas_repository().get_escola(escola_id)
+        if not escola_row:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Escola não encontrada")
-        polo_id = _texto(escola.get("polo_id")) or polo_id
+        polo_id = _texto(escola_row.get("polo_id")) or polo_id
     if polo_escopo:
         if polo_id and polo_id != polo_escopo:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Acesso negado a este Polo")
         polo_id = polo_escopo
     return polo_id, escola_id
-
-
-def _validar_periodo(inicio: Optional[date], fim: Optional[date], mensagem: str) -> None:
-    if inicio and fim and fim < inicio:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=mensagem)
 
 
 def _validar_existencia(cur: Any, referencias: List[Tuple[str, Optional[str], str]]) -> None:
@@ -187,7 +284,7 @@ def _turma_ja_iniciada(turma: Dict[str, Any]) -> bool:
 def _buscar_turma(cur: Any, turma_id: str, bloquear: bool = False) -> Optional[Dict[str, Any]]:
     cur.execute(_TURMA_SELECT + " WHERE t.id = %s" + (" FOR UPDATE OF t" if bloquear else ""), (turma_id,))
     row = cur.fetchone()
-    return dict(row) if row else None
+    return _enriquecer(dict(row)) if row else None
 
 
 def _turma_memoria(turma_id: str) -> Optional[Dict[str, Any]]:
@@ -195,7 +292,7 @@ def _turma_memoria(turma_id: str) -> Optional[Dict[str, Any]]:
     if turma is None:
         return None
     total = sum(1 for vinculo in _turma_alunos_db if vinculo["turma_id"] == turma_id)
-    return {**turma, "total_alunos": total}
+    return _enriquecer({**turma, "total_alunos": total})
 
 
 def _filtrar_turmas_memoria(
@@ -203,6 +300,9 @@ def _filtrar_turmas_memoria(
     escola_id: Optional[str],
     curso_id: Optional[str],
     termo: Optional[str] = None,
+    situacao: Optional[str] = None,
+    modalidade: Optional[str] = None,
+    ano: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     turmas = [_turma_memoria(turma_id) for turma_id in _turmas_db]
     return [
@@ -212,7 +312,10 @@ def _filtrar_turmas_memoria(
         and (not polo_id or turma.get("polo_id") == polo_id)
         and (not escola_id or turma.get("escola_id") == escola_id)
         and (not curso_id or turma.get("curso_id") == curso_id)
-        and (not termo or termo in (turma.get("nome") or "").lower())
+        and (not situacao or turma["situacao"] == situacao)
+        and (not modalidade or turma.get("modalidade", "presencial") == modalidade)
+        and (not ano or (turma.get("data_inicio") and turma["data_inicio"].year == ano))
+        and (not termo or termo in f"{turma.get('nome') or ''} {turma.get('codigo') or ''}".lower())
     ]
 
 
@@ -221,18 +324,137 @@ def _condicoes_turma(
     escola_id: Optional[str],
     curso_id: Optional[str],
     termo: Optional[str] = None,
+    situacao: Optional[str] = None,
+    modalidade: Optional[str] = None,
+    ano: Optional[int] = None,
 ) -> Tuple[str, List[Any]]:
     conditions: List[str] = []
     params: List[Any] = []
-    for coluna, valor in (("t.polo_id", polo_id), ("t.escola_id", escola_id), ("t.curso_id", curso_id)):
+    for coluna, valor in (
+        ("t.polo_id", polo_id), ("t.escola_id", escola_id), ("t.curso_id", curso_id), ("t.modalidade", modalidade),
+    ):
         if valor:
             conditions.append(f"{coluna} = %s")
             params.append(valor)
+    if situacao:
+        conditions.append(f"({regras.SQL_SITUACAO}) = %s")
+        params.append(situacao)
+    if ano:
+        conditions.append("EXTRACT(YEAR FROM t.data_inicio) = %s")
+        params.append(ano)
     if termo:
-        conditions.append("lower(t.nome) LIKE %s")
-        params.append(f"%{termo}%")
+        conditions.append("(lower(t.nome) LIKE %s OR lower(COALESCE(t.codigo, '')) LIKE %s)")
+        params.extend([f"%{termo}%", f"%{termo}%"])
     return (" WHERE " + " AND ".join(conditions) if conditions else ""), params
 
+
+# ---------- Regras de gravação ----------
+
+def _vigencia_do_curso(curso_id: str) -> Dict[str, Any]:
+    vig = _carga_repo().vigencia_do_curso(curso_id)
+    if vig is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="O curso não tem Calendário Acadêmico: vincule um calendário ao curso antes de criar a turma.",
+        )
+    return vig
+
+
+def _nome_curso(curso_id: str) -> Optional[str]:
+    if not settings.PG_DSN:
+        from app.modules.cursos_disciplinas import _cursos_db
+
+        return (_cursos_db.get(curso_id) or {}).get("nome")
+    with get_db_cursor() as cur:
+        cur.execute("SELECT nome FROM cursos WHERE id = %s", (curso_id,))
+        row = cur.fetchone()
+        return row["nome"] if row else None
+
+
+def _usuario_basico(user_id: str) -> Optional[Dict[str, Any]]:
+    """{status, perfil, polo_id, escola_id} do usuário (para validar o responsável)."""
+    if not settings.PG_DSN:
+        from app.modules.auth.repository import get_auth_repository
+
+        u = get_auth_repository().get_user_by_id(user_id)
+        if not u:
+            return None
+        return {"status": u.get("status"), "perfil": u.get("perfil_nome"),
+                "polo_id": _texto(u.get("polo_id")), "escola_id": _texto(u.get("escola_id"))}
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT u.status, p.nome AS perfil, u.polo_id::text AS polo_id, u.escola_id::text AS escola_id
+              FROM usuarios u LEFT JOIN perfis p ON p.id = u.perfil_id
+             WHERE u.id = %s
+            """,
+            (user_id,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def _responsavel_valido(usuario: Optional[Dict[str, Any]], polo_id: Optional[str], escola_id: Optional[str]) -> bool:
+    if not usuario or usuario.get("status") != "ativo":
+        return False
+    perfil = perfil_canonico(usuario.get("perfil"))
+    if perfil == "polo":
+        return bool(polo_id) and usuario.get("polo_id") == polo_id
+    if perfil == "escola":
+        return bool(escola_id) and usuario.get("escola_id") == escola_id
+    return False
+
+
+def _dados_turma(user: UserResponse, dados: TurmaWriteSchema) -> Dict[str, Any]:
+    polo_id, escola_id = _resolver_vinculo(user, dados.polo_id, dados.escola_id)
+    if dados.modalidade == "presencial" and not polo_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Turma presencial precisa de um polo.")
+    curso_id = str(dados.curso_id)
+    vig = _vigencia_do_curso(curso_id)
+    responsavel_id = _texto(dados.responsavel_id)
+    if responsavel_id and not _responsavel_valido(_usuario_basico(responsavel_id), polo_id, escola_id):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="O responsável deve ser um usuário ativo do polo ou da escola da turma.",
+        )
+    return {
+        "curso_id": curso_id,
+        "polo_id": polo_id,
+        "escola_id": escola_id,
+        "nome": dados.nome,
+        "modalidade": dados.modalidade,
+        "data_inicio": vig["data_inicio"],
+        "data_fim": vig["data_fim"],
+        "turno": dados.turno,
+        "horario_inicio": dados.horario_inicio,
+        "horario_fim": dados.horario_fim,
+        "vagas": dados.vagas,
+        "local_aulas": dados.local_aulas,
+        "responsavel_id": responsavel_id,
+    }
+
+
+def _codigo_memoria(sigla: str, ano: int) -> str:
+    return regras.proximo_codigo(sigla, ano, [t.get("codigo") or "" for t in _turmas_db.values()])
+
+
+def _codigo_postgres(cur: Any, sigla: str, ano: int) -> str:
+    """Trava o prefixo na transação (evita dois códigos iguais em criações simultâneas)."""
+    prefixo = f"{sigla}-{ano}-"
+    cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (prefixo,))
+    cur.execute("SELECT codigo FROM turmas WHERE codigo LIKE %s", (prefixo + "%",))
+    return regras.proximo_codigo(sigla, ano, [r["codigo"] for r in cur.fetchall()])
+
+
+def _validar_vagas(total_ativos: int, vagas: Optional[int]) -> None:
+    if vagas is not None and total_ativos > vagas:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"A turma já tem {total_ativos} aluno(s) ativo(s): as vagas não podem ficar abaixo disso.",
+        )
+
+
+# ---------- Listagens ----------
 
 @router.get(
     "",
@@ -255,11 +477,11 @@ async def list_turmas(
     where, params = _condicoes_turma(polo_id, escola_id, curso_id)
     with get_db_cursor() as cur:
         cur.execute(
-            "SELECT t.id, t.curso_id, t.polo_id, t.escola_id, t.nome, t.data_inicio, "
-            "t.data_fim FROM turmas t" + where + " ORDER BY t.nome, t.id",
+            "SELECT t.id, t.codigo, t.curso_id, t.polo_id, t.escola_id, t.nome, t.modalidade, t.data_inicio, "
+            "t.data_fim, t.concluida_em, t.cancelada_em FROM turmas t" + where + " ORDER BY t.nome, t.id",
             tuple(params),
         )
-        return [dict(r) for r in cur.fetchall()]
+        return [_enriquecer(dict(r)) for r in cur.fetchall()]
 
 
 @router.get(
@@ -272,6 +494,9 @@ async def list_turmas_paginadas(
     curso_id: Optional[uuid.UUID] = None,
     polo_id: Optional[uuid.UUID] = None,
     escola_id: Optional[uuid.UUID] = None,
+    situacao: Optional[regras.Situacao] = None,
+    modalidade: Optional[Modalidade] = None,
+    ano: Optional[int] = Query(None, ge=2000, le=2100),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: UserResponse = Depends(get_current_user),
@@ -281,13 +506,14 @@ async def list_turmas_paginadas(
     escola_filtro = escola_escopo or _texto(escola_id)
     curso_filtro = _texto(curso_id)
     termo = q.strip().lower() if q and q.strip() else None
+    filtros = (polo_filtro, escola_filtro, curso_filtro, termo, situacao, modalidade, ano)
 
     if not settings.PG_DSN:
-        turmas = _filtrar_turmas_memoria(polo_filtro, escola_filtro, curso_filtro, termo)
+        turmas = _filtrar_turmas_memoria(*filtros)
         turmas.sort(key=lambda turma: ((turma.get("nome") or "").lower(), str(turma.get("id"))))
         return {"items": turmas[offset : offset + limit], "total": len(turmas), "limit": limit, "offset": offset}
 
-    where, params = _condicoes_turma(polo_filtro, escola_filtro, curso_filtro, termo)
+    where, params = _condicoes_turma(*filtros)
     with get_db_cursor() as cur:
         cur.execute("SELECT COUNT(*) AS total FROM turmas t" + where, tuple(params))
         total = int(cur.fetchone()["total"])
@@ -295,7 +521,89 @@ async def list_turmas_paginadas(
             _TURMA_SELECT + where + " ORDER BY t.nome, t.id LIMIT %s OFFSET %s",
             tuple(params + [limit, offset]),
         )
-        return {"items": [dict(r) for r in cur.fetchall()], "total": total, "limit": limit, "offset": offset}
+        return {
+            "items": [_enriquecer(dict(r)) for r in cur.fetchall()],
+            "total": total, "limit": limit, "offset": offset,
+        }
+
+
+@router.get(
+    "/sugestao",
+    response_model=SugestaoTurmaSchema,
+    dependencies=[Depends(require_role(_PERFIS_TURMA))],
+)
+async def sugestao_turma(
+    curso_id: uuid.UUID,
+    modalidade: Modalidade = "presencial",
+    polo_id: Optional[uuid.UUID] = None,
+    escola_id: Optional[uuid.UUID] = None,
+    current_user: UserResponse = Depends(get_current_user),
+) -> SugestaoTurmaSchema:
+    """Código previsto, nome sugerido e datas do calendário do curso (assistente de criação)."""
+    polo, escola = _resolver_vinculo(current_user, polo_id, escola_id)
+    vig = _vigencia_do_curso(str(curso_id))
+    sigla = regras.sigla_curso(_nome_curso(str(curso_id)))
+    ano = (vig["data_inicio"] or date.today()).year
+    unidade = None
+    if escola:
+        unidade = (get_polos_escolas_repository().get_escola(escola) or {}).get("nome")
+    elif polo and settings.PG_DSN:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT nome FROM polos WHERE id = %s", (polo,))
+            row = cur.fetchone()
+            unidade = row["nome"] if row else None
+    if settings.PG_DSN:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT codigo FROM turmas WHERE codigo LIKE %s", (f"{sigla}-{ano}-%",))
+            codigo = regras.proximo_codigo(sigla, ano, [r["codigo"] for r in cur.fetchall()])
+    else:
+        codigo = _codigo_memoria(sigla, ano)
+    return SugestaoTurmaSchema(
+        codigo=codigo, nome=regras.nome_sugerido(codigo, unidade, modalidade),
+        data_inicio=vig["data_inicio"], data_fim=vig["data_fim"], calendario_nome=vig.get("nome"),
+    )
+
+
+@router.get(
+    "/responsaveis-possiveis",
+    response_model=List[ResponsavelSchema],
+    dependencies=[Depends(require_role(_PERFIS_TURMA))],
+)
+async def responsaveis_possiveis(
+    polo_id: Optional[uuid.UUID] = None,
+    escola_id: Optional[uuid.UUID] = None,
+    current_user: UserResponse = Depends(get_current_user),
+) -> List[ResponsavelSchema]:
+    """Usuários ativos de perfil polo (do polo) ou escola (da escola) que podem responder pela turma."""
+    polo, escola = _resolver_vinculo(current_user, polo_id, escola_id)
+    if not polo and not escola:
+        return []
+    if not settings.PG_DSN:
+        from app.modules.auth.repository import get_auth_repository
+
+        saida = []
+        for u in getattr(get_auth_repository(), "usuarios", {}).values():
+            basico = _usuario_basico(u["id"])
+            if _responsavel_valido(basico, polo, escola):
+                saida.append(ResponsavelSchema(id=u["id"], nome=f"{u.get('nome') or ''} {u.get('sobrenome') or ''}".strip(),
+                                               perfil=perfil_canonico(basico["perfil"])))
+        return sorted(saida, key=lambda r: r.nome.lower())
+    perfis_polo = list(nomes_equivalentes("polo"))
+    perfis_escola = list(nomes_equivalentes("escola"))
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT u.id::text AS id, TRIM(CONCAT_WS(' ', u.nome, u.sobrenome)) AS nome, lower(p.nome) AS perfil
+              FROM usuarios u JOIN perfis p ON p.id = u.perfil_id
+             WHERE u.status = 'ativo'
+               AND ((lower(p.nome) = ANY(%s) AND u.polo_id = %s::uuid)
+                 OR (lower(p.nome) = ANY(%s) AND u.escola_id = %s::uuid))
+             ORDER BY nome
+             LIMIT 200
+            """,
+            (perfis_polo, polo, perfis_escola, escola),
+        )
+        return [ResponsavelSchema(id=r["id"], nome=r["nome"], perfil=perfil_canonico(r["perfil"])) for r in cur.fetchall()]
 
 
 @router.get(
@@ -322,8 +630,8 @@ async def get_detalhes_curso(
             key=lambda discipline: (discipline.get("ordem") or 0, str(discipline.get("id") or "")),
         )
         turmas = [
-            dict(turma)
-            for turma in _turmas_db.values()
+            _turma_memoria(turma_id)
+            for turma_id, turma in _turmas_db.items()
             if str(turma.get("curso_id")) == course_key
             and (polo_id is None or str(turma.get("polo_id")) == polo_id)
             and (escola_id is None or str(turma.get("escola_id")) == escola_id)
@@ -354,70 +662,19 @@ async def get_detalhes_curso(
 
         cur.execute(
             """
-            SELECT id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim
-            FROM turmas
+            SELECT id, codigo, curso_id, polo_id, escola_id, nome, modalidade, data_inicio, data_fim,
+                   concluida_em, cancelada_em
+            FROM turmas t
             WHERE """
             + " AND ".join(turma_conditions),
             tuple(turma_params),
         )
-        turmas = [dict(row) for row in cur.fetchall()]
+        turmas = [_enriquecer(dict(row)) for row in cur.fetchall()]
 
     return CursoDetalhesSchema(disciplinas=disciplinas, turmas=turmas)
 
 
-def _dados_turma(user: UserResponse, dados: TurmaWriteSchema) -> Dict[str, Any]:
-    _validar_periodo(dados.data_inicio, dados.data_fim, "data_fim anterior a data_inicio")
-    if dados.curso_id and (not dados.data_inicio or not dados.data_fim):
-        # RN05: o cronograma de aulas previstas sai do período da turma.
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Turma com curso precisa de data de início e de término.",
-        )
-    polo_id, escola_id = _resolver_vinculo(user, dados)
-    return {
-        "curso_id": _texto(dados.curso_id),
-        "polo_id": polo_id,
-        "escola_id": escola_id,
-        "nome": dados.nome,
-        "data_inicio": dados.data_inicio,
-        "data_fim": dados.data_fim,
-    }
-
-
-def _validar_referencias_turma(cur: Any, valores: Dict[str, Any]) -> None:
-    _validar_existencia(
-        cur,
-        [
-            ("cursos", valores["curso_id"], "Curso não encontrado"),
-            ("polos", valores["polo_id"], "Polo não encontrado"),
-        ],
-    )
-    _validar_vigencia_calendario(cur, valores)
-
-
-def _validar_vigencia_calendario(cur: Any, valores: Dict[str, Any]) -> None:
-    """O curso segue o Calendário Acadêmico: o período da turma precisa caber na vigência dele."""
-    if not valores.get("curso_id"):
-        return
-    cur.execute(
-        """
-        SELECT ca.nome, ca.data_inicio, ca.data_fim
-          FROM cursos c JOIN calendarios_academicos ca ON ca.id = c.calendario_id
-         WHERE c.id = %s
-        """,
-        (valores["curso_id"],),
-    )
-    cal = cur.fetchone()
-    if not cal:
-        return
-    inicio, fim = valores.get("data_inicio"), valores.get("data_fim")
-    if (inicio and inicio < cal["data_inicio"]) or (fim and fim > cal["data_fim"]):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"O período da turma precisa estar dentro da vigência do calendário \"{cal['nome']}\" "
-                   f"({cal['data_inicio']:%d/%m/%Y} a {cal['data_fim']:%d/%m/%Y}).",
-        )
-
+# ---------- CRUD ----------
 
 @router.post(
     "",
@@ -432,29 +689,21 @@ async def create_turma(
 ):
     new_id = str(uuid.uuid4())
     valores = _dados_turma(current_user, dados)
+    sigla = regras.sigla_curso(_nome_curso(valores["curso_id"]))
+    ano = (valores["data_inicio"] or date.today()).year
     if not settings.PG_DSN:
-        _turmas_db[new_id] = {"id": new_id, **valores}
+        _turmas_db[new_id] = {"id": new_id, "codigo": _codigo_memoria(sigla, ano), **valores}
         return _turma_memoria(new_id)
 
     with get_db_cursor() as cur:
-        _validar_referencias_turma(cur, valores)
+        _validar_existencia(cur, [("cursos", valores["curso_id"], "Curso não encontrado"),
+                                  ("polos", valores["polo_id"], "Polo não encontrado")])
+        codigo = _codigo_postgres(cur, sigla, ano)
+        colunas = ("id", "codigo", *_CAMPOS_ESCRITA)
         cur.execute(
-            """
-            INSERT INTO turmas (
-                id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim,
-                criado_em, atualizado_em
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())
-            """,
-            (
-                new_id,
-                valores["curso_id"],
-                valores["polo_id"],
-                valores["escola_id"],
-                valores["nome"],
-                valores["data_inicio"],
-                valores["data_fim"],
-            ),
+            f"INSERT INTO turmas ({', '.join(colunas)}, criado_em, atualizado_em) "
+            f"VALUES ({', '.join(['%s'] * len(colunas))}, now(), now())",
+            (new_id, codigo, *(valores[c] for c in _CAMPOS_ESCRITA)),
         )
         turma = _buscar_turma(cur, new_id)
     _auditar(current_user, "turma_criada", "turmas", new_id, ip, depois=turma)
@@ -490,30 +739,31 @@ async def update_turma(
 ):
     uid = str(turma_id)
     if not settings.PG_DSN:
-        _exigir_no_escopo(_turma_memoria(uid), current_user)
-        _turmas_db[uid].update(_dados_turma(current_user, dados))
+        antes = _exigir_no_escopo(_turma_memoria(uid), current_user)
+        regras.exigir_turma_editavel(antes)
+        valores = _dados_turma(current_user, dados)
+        _validar_vagas(antes["total_alunos"], valores["vagas"])
+        _turmas_db[uid].update(valores)
         return _turma_memoria(uid)
 
     with get_db_cursor() as cur:
         antes = _exigir_no_escopo(_buscar_turma(cur, uid, bloquear=True), current_user)
+        regras.exigir_turma_editavel(antes)
         valores = _dados_turma(current_user, dados)
-        _validar_referencias_turma(cur, valores)
+        _validar_existencia(cur, [("cursos", valores["curso_id"], "Curso não encontrado"),
+                                  ("polos", valores["polo_id"], "Polo não encontrado")])
+        _validar_vagas(int(antes.get("total_alunos") or 0), valores["vagas"])
+        if valores["curso_id"] != antes.get("curso_id"):
+            cur.execute("SELECT EXISTS (SELECT 1 FROM aulas_previstas WHERE turma_id = %s) AS tem", (uid,))
+            if cur.fetchone()["tem"]:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail="A turma já tem cronograma gerado: o curso não pode ser trocado.",
+                )
         cur.execute(
-            """
-            UPDATE turmas
-            SET curso_id = %s, polo_id = %s, escola_id = %s, nome = %s, data_inicio = %s,
-                data_fim = %s, atualizado_em = now()
-            WHERE id = %s
-            """,
-            (
-                valores["curso_id"],
-                valores["polo_id"],
-                valores["escola_id"],
-                valores["nome"],
-                valores["data_inicio"],
-                valores["data_fim"],
-                uid,
-            ),
+            f"UPDATE turmas SET {', '.join(f'{c} = %s' for c in _CAMPOS_ESCRITA)}, atualizado_em = now() "
+            "WHERE id = %s",
+            (*(valores[c] for c in _CAMPOS_ESCRITA), uid),
         )
         depois = _buscar_turma(cur, uid)
     _auditar(current_user, "turma_atualizada", "turmas", uid, ip, antes=antes, depois=depois)
@@ -531,7 +781,9 @@ async def delete_turma(
     ip: Optional[str] = Depends(get_client_ip),
 ) -> Response:
     uid = str(turma_id)
-    mensagem_conflito = "Não é possível excluir uma turma com alunos, notas ou professores vinculados."
+    mensagem_conflito = (
+        "Não é possível excluir uma turma com alunos, notas ou professores vinculados. Cancele a turma."
+    )
     if not settings.PG_DSN:
         turma = _exigir_no_escopo(_turma_memoria(uid), current_user)
         if turma["total_alunos"]:
@@ -557,6 +809,79 @@ async def delete_turma(
     _auditar(current_user, "turma_excluida", "turmas", uid, ip, antes=antes)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+
+# ---------- Ciclo de vida ----------
+
+@router.post(
+    "/{turma_id}/cancelar",
+    response_model=TurmaDetalheSchema,
+    dependencies=[Depends(require_role(["admin", "polo"]))],
+)
+async def cancelar_turma(
+    turma_id: uuid.UUID,
+    dados: CancelarTurmaRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    ip: Optional[str] = Depends(get_client_ip),
+):
+    """Cancela a turma (fica só leitura). Turma concluída não pode ser cancelada."""
+    uid = str(turma_id)
+    motivo = dados.motivo.strip()
+    agora = datetime.now(timezone.utc)
+    if not settings.PG_DSN:
+        turma = _exigir_no_escopo(_turma_memoria(uid), current_user)
+        regras.exigir_turma_editavel(turma)
+        _turmas_db[uid].update(cancelada_em=agora, cancelada_por=current_user.id, motivo_cancelamento=motivo)
+        return _turma_memoria(uid)
+    with get_db_cursor() as cur:
+        turma = _exigir_no_escopo(_buscar_turma(cur, uid, bloquear=True), current_user)
+        regras.exigir_turma_editavel(turma)
+        cur.execute(
+            "UPDATE turmas SET cancelada_em = now(), cancelada_por = %s, motivo_cancelamento = %s, "
+            "atualizado_em = now() WHERE id = %s",
+            (str(current_user.id), motivo, uid),
+        )
+        depois = _buscar_turma(cur, uid)
+    _auditar(current_user, "turma_cancelada", "turmas", uid, ip,
+             antes={"situacao": turma["situacao"]}, depois={"situacao": "cancelada", "motivo": motivo})
+    return depois
+
+
+@router.post(
+    "/{turma_id}/reabrir",
+    response_model=TurmaDetalheSchema,
+    dependencies=[Depends(require_role(["admin"]))],
+)
+async def reabrir_turma(
+    turma_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+    ip: Optional[str] = Depends(get_client_ip),
+):
+    """Desfaz a conclusão ou o cancelamento (só admin)."""
+    uid = str(turma_id)
+    limpar = {"concluida_em": None, "concluida_por": None, "cancelada_em": None,
+              "cancelada_por": None, "motivo_cancelamento": None}
+    if not settings.PG_DSN:
+        turma = _exigir_no_escopo(_turma_memoria(uid), current_user)
+        if turma["situacao"] not in ("concluida", "cancelada"):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Só turma concluída ou cancelada pode ser reaberta.")
+        _turmas_db[uid].update(limpar)
+        return _turma_memoria(uid)
+    with get_db_cursor() as cur:
+        turma = _exigir_no_escopo(_buscar_turma(cur, uid, bloquear=True), current_user)
+        if turma["situacao"] not in ("concluida", "cancelada"):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Só turma concluída ou cancelada pode ser reaberta.")
+        cur.execute(
+            f"UPDATE turmas SET {', '.join(f'{c} = NULL' for c in limpar)}, atualizado_em = now() WHERE id = %s",
+            (uid,),
+        )
+        depois = _buscar_turma(cur, uid)
+    _auditar(current_user, "turma_reaberta", "turmas", uid, ip,
+             antes={"situacao": turma["situacao"], "motivo": turma.get("motivo_cancelamento")},
+             depois={"situacao": depois["situacao"]})
+    return depois
+
+
+# ---------- Alunos ----------
 
 @router.get(
     "/{turma_id}/alunos",
@@ -658,6 +983,10 @@ async def list_alunos_disponiveis(
         return [dict(r) for r in cur.fetchall()]
 
 
+def _mensagem_lotada(vagas: int) -> HTTPException:
+    return HTTPException(status.HTTP_409_CONFLICT, detail=f"Turma lotada ({vagas} vagas).")
+
+
 @router.post(
     "/{turma_id}/matricular-aluno",
     dependencies=[Depends(require_role(_PERFIS_TURMA))],
@@ -671,14 +1000,18 @@ async def matricular_aluno_turma(
     uid = str(turma_id)
     mensagem = {"message": "Aluno matriculado na turma com sucesso"}
     if not settings.PG_DSN:
-        _exigir_no_escopo(_turma_memoria(uid), current_user)
+        turma = _exigir_no_escopo(_turma_memoria(uid), current_user)
+        regras.exigir_turma_editavel(turma)
         vinculo = {"turma_id": uid, "aluno_id": aluno_id}
         if vinculo not in _turma_alunos_db:
+            if turma.get("vagas") and turma["total_alunos"] >= turma["vagas"]:
+                raise _mensagem_lotada(turma["vagas"])
             _turma_alunos_db.append(vinculo)
         return mensagem
 
     with get_db_cursor() as cur:
-        turma = _exigir_no_escopo(_buscar_turma(cur, uid), current_user)
+        turma = _exigir_no_escopo(_buscar_turma(cur, uid, bloquear=True), current_user)
+        regras.exigir_turma_editavel(turma)
         cur.execute(
             "SELECT id, polo_id, escola_id, revalidado_em FROM alunos WHERE id::text = %s",
             (aluno_id,),
@@ -694,6 +1027,12 @@ async def matricular_aluno_turma(
         campo = "escola_id" if turma.get("escola_id") else "polo_id"
         if turma.get(campo) and str(aluno[campo]) != str(turma[campo]):
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Aluno não pertence ao polo/escola da turma.")
+        cur.execute(
+            "SELECT 1 FROM turma_alunos WHERE turma_id = %s AND aluno_id = %s", (uid, str(aluno["id"]))
+        )
+        ja_matriculado = cur.fetchone() is not None
+        if not ja_matriculado and turma.get("vagas") and int(turma.get("total_alunos") or 0) >= turma["vagas"]:
+            raise _mensagem_lotada(turma["vagas"])
         cur.execute(
             """
             INSERT INTO turma_alunos (id, turma_id, aluno_id, data_matricula, status, criado_em, atualizado_em)
@@ -719,7 +1058,7 @@ async def remover_aluno_turma(
 ) -> Response:
     uid = str(turma_id)
     if not settings.PG_DSN:
-        _exigir_no_escopo(_turma_memoria(uid), current_user)
+        regras.exigir_turma_editavel(_exigir_no_escopo(_turma_memoria(uid), current_user))
         vinculo = {"turma_id": uid, "aluno_id": aluno_id}
         if vinculo not in _turma_alunos_db:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não matriculado nesta turma")
@@ -727,7 +1066,7 @@ async def remover_aluno_turma(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     with get_db_cursor() as cur:
-        _exigir_no_escopo(_buscar_turma(cur, uid), current_user)
+        regras.exigir_turma_editavel(_exigir_no_escopo(_buscar_turma(cur, uid), current_user))
         cur.execute(
             "DELETE FROM turma_alunos WHERE turma_id = %s AND aluno_id::text = %s RETURNING id",
             (uid, aluno_id),

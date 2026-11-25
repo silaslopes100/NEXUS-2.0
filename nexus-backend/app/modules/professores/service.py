@@ -32,6 +32,7 @@ from app.modules.professores.schemas import (
     ProfessorTurmaResumo,
     ProfessorUpdateRequest,
 )
+from app.modules.turmas.regras import exigir_turma_editavel
 
 
 _CAMPOS_CADASTRO_DOCENTE = (
@@ -249,6 +250,7 @@ class ProfessoresService:
         ip: Optional[str] = None,
     ) -> ProfessorTurmaVinculoResumo:
         turma = self._turma_no_escopo(turma_id, current_user)
+        exigir_turma_editavel(turma)
         if not turma.get("curso_id"):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -354,7 +356,7 @@ class ProfessoresService:
         current_user: UserResponse,
         ip: Optional[str] = None,
     ) -> MessageResponse:
-        self._turma_no_escopo(turma_id, current_user)
+        exigir_turma_editavel(self._turma_no_escopo(turma_id, current_user))
         scope_column, scope_id = self._escopo_vinculo(current_user)
         antes, resultado = self.repo.archive_vinculo_turma(
             turma_id, vinculo_id, scope_column, scope_id

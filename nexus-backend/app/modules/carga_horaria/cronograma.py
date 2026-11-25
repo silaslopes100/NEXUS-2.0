@@ -439,3 +439,55 @@ def calcular_frequencia(
             "disciplinas": sorted(linhas, key=lambda l: l["nome"]),
         })
     return sorted(saida, key=lambda a: (not a["em_risco"], (a["nome"] or "").lower()))
+
+
+# ---------- Turmas EAD: liberação e prazo de cada disciplina ----------
+
+def cronograma_ead(
+    disciplinas: Sequence[Dict[str, Any]],
+    inicio: date,
+    regras: RegrasCalendario,
+    conclusoes: Optional[Dict[str, date]] = None,
+    hoje: Optional[date] = None,
+) -> List[Dict[str, Any]]:
+    """Liberação e data limite de cada disciplina do aluno na turma EAD.
+
+    `disciplinas` já vem na ordem do curso: {id, nome, ead_prazo_dias}. Cada disciplina tem N dias
+    depois de liberada (N próprio da disciplina ou `ead_prazo_dias_padrao`). Na liberação
+    sequencial, a próxima libera conforme `ead_proxima_libera`. `conclusoes`: {disciplina_id: data}.
+    """
+    conclusoes = conclusoes or {}
+    hoje = hoje or date.today()
+    saida: List[Dict[str, Any]] = []
+    liberacao: Optional[date] = inicio
+    for ordem, d in enumerate(disciplinas, start=1):
+        prazo = int(d.get("ead_prazo_dias") or regras.ead_prazo_dias_padrao)
+        if regras.ead_liberacao == "todas_no_inicio":
+            liberacao = inicio
+        limite = liberacao + timedelta(days=prazo) if liberacao else None
+        concluida_em = conclusoes.get(str(d["id"]))
+        if concluida_em:
+            situacao_d = "concluida"
+        elif liberacao is None or liberacao > hoje:
+            situacao_d = "aguardando"
+        elif limite and hoje > limite:
+            situacao_d = "vencida"
+        else:
+            situacao_d = "liberada"
+        saida.append({
+            "disciplina_id": str(d["id"]), "nome": d.get("nome"), "ordem": ordem, "prazo_dias": prazo,
+            "liberada_em": liberacao, "data_limite": limite, "concluida_em": concluida_em,
+            "situacao": situacao_d,
+        })
+        if regras.ead_liberacao == "todas_no_inicio" or liberacao is None:
+            continue
+        # Próxima liberação (sequencial).
+        vence = limite + timedelta(days=1)
+        concluiu_no_prazo = concluida_em if concluida_em and concluida_em <= limite else None
+        if regras.ead_proxima_libera == "anterior_vencida":
+            liberacao = vence
+        elif regras.ead_proxima_libera == "anterior_concluida":
+            liberacao = max(concluida_em, liberacao) if concluida_em else None
+        else:  # anterior_concluida_ou_vencida
+            liberacao = max(concluiu_no_prazo, liberacao) if concluiu_no_prazo else vence
+    return saida

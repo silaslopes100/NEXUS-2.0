@@ -5,6 +5,10 @@ Liberação da disciplina: o aluno vê as disciplinas dos cursos EAD em que est�
 (``compras_disciplina_ead``) ou quando há licença ativa para ela; as demais aparecem com cadeado.
 O prazo de conclusão da compra, quando vencido, bloqueia o acesso.
 
+Turma EAD: quando o aluno está numa turma EAD aberta do curso, as disciplinas seguem o
+cronograma da turma (Calendário Acadêmico): a ainda não liberada aparece bloqueada e a data
+limite da turma vira o prazo de conclusão (vencida bloqueia, ou só avisa, conforme a regra).
+
 Travas por aula (na ordem da disciplina):
 - ``drip``: ``liberar_apos_dias`` contados do início do acesso à disciplina;
 - ``sequencial``: com a ordem obrigatória ligada, só depois de concluir as obrigatórias anteriores;
@@ -15,7 +19,7 @@ Pré-visualização (admin): mostra a disciplina inteira, sem travas e sem grava
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
@@ -84,20 +88,60 @@ class AvaAlunoService:
     # ------------------------------------------------------------------ disciplinas
 
     @staticmethod
-    def _situacao(d: Dict[str, Any]) -> str:
+    def _concluiu(d: Dict[str, Any]) -> bool:
+        base = int(d.get("total_obrigatorias") or 0) or int(d.get("total_aulas") or 0)
+        feitas = int(d.get("obrigatorias_concluidas") or 0) if d.get("total_obrigatorias") else int(d.get("aulas_concluidas") or 0)
+        return bool(base) and feitas >= base
+
+    @classmethod
+    def _situacao(cls, d: Dict[str, Any]) -> str:
+        if d.get("ead_aguardando"):  # turma EAD: a disciplina ainda não foi liberada pela sequência
+            return "bloqueada"
         pago = bool(d.get("liberada_em") or d.get("licenca_em")
                     or (d.get("status_pagamento") or "").strip().lower() in _PAGOS)
         prazo = _dt(d.get("prazo_conclusao"))
-        expirado = bool(d.get("reprovado_por_prazo")) or bool(prazo and prazo < _agora())
+        vencido = bool(prazo and prazo < _agora()) and not d.get("ead_prazo_alerta")
+        expirado = bool(d.get("reprovado_por_prazo")) or vencido
         if expirado:
             return "prazo_expirado"
         if not pago:
             return "pagamento_pendente" if d.get("compra_id") else "bloqueada"
         if not d.get("publicado") or not d.get("total_aulas"):
             return "em_breve"
-        base = int(d.get("total_obrigatorias") or 0) or int(d.get("total_aulas") or 0)
-        feitas = int(d.get("obrigatorias_concluidas") or 0) if d.get("total_obrigatorias") else int(d.get("aulas_concluidas") or 0)
-        return "concluida" if base and feitas >= base else "liberada"
+        return "concluida" if cls._concluiu(d) else "liberada"
+
+    def _disciplinas(self, aluno_id: str, usuario_id: str) -> List[Dict[str, Any]]:
+        linhas = self.repo.disciplinas_do_aluno(aluno_id, usuario_id)
+        try:
+            self._aplicar_turma_ead(aluno_id, linhas)
+        except Exception:  # o AVA não pode cair por causa do cronograma da turma
+            logger.exception("Falha ao aplicar os prazos da turma EAD do aluno %s", aluno_id)
+        return linhas
+
+    def _aplicar_turma_ead(self, aluno_id: str, linhas: List[Dict[str, Any]]) -> None:
+        from app.core.config import settings
+        from app.modules.carga_horaria.repository import PostgresCargaHorariaRepository, get_carga_horaria_repository
+        from app.modules.carga_horaria.service import CargaHorariaService
+
+        repo = get_carga_horaria_repository()
+        if not linhas or (not settings.PG_DSN and isinstance(repo, PostgresCargaHorariaRepository)):
+            return
+        conclusoes = {
+            str(d["id"]): (_dt(d.get("ultima_conclusao_em")) or _agora()).date()
+            for d in linhas if self._concluiu(d)
+        }
+        prazos = CargaHorariaService(repo).prazos_ead_do_aluno(str(aluno_id), conclusoes)
+        for d in linhas:
+            p = prazos.get(str(d["id"]))
+            if not p:
+                continue
+            if p["situacao"] == "aguardando":
+                d["ead_aguardando"] = True
+            if p.get("data_limite"):
+                # Vence ao fim do dia limite.
+                d["prazo_conclusao"] = datetime.combine(p["data_limite"] + timedelta(days=1), time.min, tzinfo=timezone.utc)
+            if p.get("ao_vencer") == "alertar":
+                d["ead_prazo_alerta"] = True
 
     def _disciplina_out(self, d: Dict[str, Any]) -> DisciplinaAlunoOut:
         total = int(d.get("total_aulas") or 0)
@@ -112,7 +156,7 @@ class AvaAlunoService:
 
     def home(self, ctx: Dict[str, Any]) -> HomeOut:
         user, aluno = ctx["user"], ctx["aluno"]
-        linhas = self.repo.disciplinas_do_aluno(aluno["id"], str(user.id))
+        linhas = self._disciplinas(aluno["id"], str(user.id))
         disciplinas = [self._disciplina_out(d) for d in linhas]
         abertas = {d.id: d for d in disciplinas if d.situacao in ("liberada", "concluida")}
         continuar = None
@@ -141,7 +185,7 @@ class AvaAlunoService:
             if not d:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada.")
             return d
-        for d in self.repo.disciplinas_do_aluno(ctx["aluno"]["id"], str(ctx["user"].id)):
+        for d in self._disciplinas(ctx["aluno"]["id"], str(ctx["user"].id)):
             if d["id"] == disciplina_id:
                 situacao = self._situacao(d)
                 if situacao in ("liberada", "concluida"):

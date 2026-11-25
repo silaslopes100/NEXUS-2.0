@@ -142,7 +142,7 @@ class PostgresCargaHorariaRepository:
                 """
                 SELECT t.id::text AS id, t.nome, t.curso_id::text AS curso_id, t.polo_id::text AS polo_id,
                        t.escola_id::text AS escola_id, t.data_inicio, t.data_fim, t.concluida_em,
-                       cu.calendario_id::text AS calendario_id
+                       t.cancelada_em, t.modalidade, cu.calendario_id::text AS calendario_id
                   FROM turmas t
                   LEFT JOIN cursos cu ON cu.id = t.curso_id
                  WHERE t.id = %s
@@ -160,7 +160,7 @@ class PostgresCargaHorariaRepository:
             cur.execute(
                 """
                 SELECT id::text AS id, nome, COALESCE(carga_horaria, 0) AS carga_horaria,
-                       COALESCE(qtd_aulas_prevista, 0) AS qtd_aulas_prevista, semestre, ordem
+                       COALESCE(qtd_aulas_prevista, 0) AS qtd_aulas_prevista, semestre, ordem, ead_prazo_dias
                   FROM disciplinas
                  WHERE curso_id = %s AND COALESCE(ativo, true) AND NOT COALESCE(eh_extra_grade, false)
                  ORDER BY semestre NULLS LAST, ordem, nome, id
@@ -239,7 +239,8 @@ class PostgresCargaHorariaRepository:
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                SELECT a.id::text AS aluno_id, a.numero_matricula,
+                SELECT a.id::text AS aluno_id, a.numero_matricula, ta.data_matricula,
+                       a.usuario_id::text AS usuario_id,
                        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.nome, u.sobrenome)), ''), a.numero_matricula) AS nome
                   FROM turma_alunos ta
                   JOIN alunos a ON a.id = ta.aluno_id
@@ -278,6 +279,114 @@ class PostgresCargaHorariaRepository:
                     ip,
                 ),
             )
+
+    # ---------- Vigência e turmas EAD ----------
+
+    def vigencia_do_curso(self, curso_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT ca.id::text AS calendario_id, ca.nome, ca.data_inicio, ca.data_fim, c.nome AS curso_nome
+                  FROM cursos c JOIN calendarios_academicos ca ON ca.id = c.calendario_id
+                 WHERE c.id = %s
+                """,
+                (str(curso_id),),
+            )
+            return _limpar(cur.fetchone())
+
+    def sincronizar_datas_turmas(
+        self, calendario_id: Optional[str] = None, curso_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Início/fim das turmas abertas = vigência do calendário do curso. Devolve as alteradas."""
+        filtro, valor = ("ca.id = %s", calendario_id) if calendario_id else ("c.id = %s", curso_id)
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"""
+                WITH alvo AS (
+                    SELECT t.id, t.data_inicio AS inicio_antes, t.data_fim AS fim_antes,
+                           ca.data_inicio, ca.data_fim
+                      FROM turmas t
+                      JOIN cursos c ON c.id = t.curso_id
+                      JOIN calendarios_academicos ca ON ca.id = c.calendario_id
+                     WHERE {filtro} AND t.concluida_em IS NULL AND t.cancelada_em IS NULL
+                       AND (t.data_inicio IS DISTINCT FROM ca.data_inicio OR t.data_fim IS DISTINCT FROM ca.data_fim)
+                     FOR UPDATE OF t
+                )
+                UPDATE turmas t
+                   SET data_inicio = alvo.data_inicio, data_fim = alvo.data_fim, atualizado_em = now()
+                  FROM alvo
+                 WHERE t.id = alvo.id
+                RETURNING t.id::text AS id, t.nome, alvo.inicio_antes, alvo.fim_antes,
+                          t.data_inicio, t.data_fim
+                """,
+                (str(valor),),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
+    def contar_turmas_abertas_do_calendario(self, calendario_id: str) -> int:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS total FROM turmas t JOIN cursos c ON c.id = t.curso_id
+                 WHERE c.calendario_id = %s AND t.concluida_em IS NULL AND t.cancelada_em IS NULL
+                """,
+                (str(calendario_id),),
+            )
+            return int(cur.fetchone()["total"] or 0)
+
+    def turmas_ead_do_aluno(self, aluno_id: str) -> List[Dict[str, Any]]:
+        """Turmas EAD abertas em que o aluno está ativo (para os prazos do AVA)."""
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.id::text AS turma_id, t.curso_id::text AS curso_id, t.data_inicio, ta.data_matricula
+                  FROM turma_alunos ta
+                  JOIN turmas t ON t.id = ta.turma_id
+                 WHERE ta.aluno_id = %s AND COALESCE(ta.status, 'ativo') = 'ativo'
+                   AND t.modalidade = 'ead' AND t.cancelada_em IS NULL AND t.concluida_em IS NULL
+                 ORDER BY t.data_inicio NULLS LAST
+                """,
+                (str(aluno_id),),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
+    def conclusoes_ava(self, aluno_ids: Sequence[str], disciplina_ids: Sequence[str]) -> Dict[tuple, date]:
+        """{(aluno_id, disciplina_id): data} das disciplinas concluídas no AVA (obrigatórias, ou todas)."""
+        if not aluno_ids or not disciplina_ids:
+            return {}
+        with get_db_cursor() as cur:
+            cur.execute("SELECT to_regclass('ava_progresso') IS NOT NULL AND to_regclass('ava_aulas') IS NOT NULL AS ok")
+            if not cur.fetchone()["ok"]:
+                return {}
+            cur.execute(
+                """
+                WITH aulas AS (
+                    SELECT cap.disciplina_id, a.id, COALESCE(a.obrigatoria, false) AS obrigatoria
+                      FROM ava_aulas a JOIN ava_capitulos cap ON cap.id = a.capitulo_id
+                     WHERE cap.disciplina_id = ANY(%s::uuid[]) AND cap.publicado AND a.publicado
+                ), totais AS (
+                    SELECT disciplina_id, COUNT(*) AS total, COUNT(*) FILTER (WHERE obrigatoria) AS obrigatorias
+                      FROM aulas GROUP BY disciplina_id
+                ), feitas AS (
+                    SELECT al.id AS aluno_id, au.disciplina_id, MAX(p.concluido_em) AS ultima,
+                           COUNT(*) AS feitas, COUNT(*) FILTER (WHERE au.obrigatoria) AS obrigatorias_feitas
+                      FROM alunos al
+                      JOIN ava_progresso p ON p.usuario_id = al.usuario_id AND p.status = 'concluida'
+                      JOIN aulas au ON au.id = p.aula_id
+                     WHERE al.id = ANY(%s::uuid[])
+                     GROUP BY al.id, au.disciplina_id
+                )
+                SELECT f.aluno_id::text AS aluno_id, f.disciplina_id::text AS disciplina_id, f.ultima
+                  FROM feitas f JOIN totais t ON t.disciplina_id = f.disciplina_id
+                 WHERE (t.obrigatorias > 0 AND f.obrigatorias_feitas >= t.obrigatorias)
+                    OR (t.obrigatorias = 0 AND f.feitas >= t.total)
+                """,
+                (list(disciplina_ids), list(aluno_ids)),
+            )
+            return {
+                (r["aluno_id"], r["disciplina_id"]): (r["ultima"].date() if r["ultima"] else date.today())
+                for r in cur.fetchall()
+            }
 
 
 class InMemoryCargaHorariaRepository:
@@ -396,6 +505,69 @@ class InMemoryCargaHorariaRepository:
     def auditar(self, usuario_id, acao, entidade, entidade_id, antes=None, depois=None, ip=None) -> None:
         self.auditoria.append({"usuario_id": usuario_id, "acao": acao, "entidade": entidade,
                                "entidade_id": entidade_id, "antes": antes, "depois": depois})
+
+    # ---------- Vigência e turmas EAD ----------
+
+    def _calendario_do_curso(self, curso_id: str) -> Optional[str]:
+        cal_id = (self.cursos.get(str(curso_id)) or {}).get("calendario_id")
+        if not cal_id:
+            from app.modules.cursos_disciplinas import _cursos_db
+
+            cal_id = (_cursos_db.get(str(curso_id)) or {}).get("calendario_id")
+        return str(cal_id) if cal_id else None
+
+    def vigencia_do_curso(self, curso_id: str) -> Optional[Dict[str, Any]]:
+        cal_id = self._calendario_do_curso(curso_id)
+        cal = self.calendarios.get(cal_id) if cal_id else None
+        if not cal:
+            return None
+        return {"calendario_id": cal_id, "nome": cal.get("nome"),
+                "data_inicio": cal.get("data_inicio"), "data_fim": cal.get("data_fim")}
+
+    def sincronizar_datas_turmas(
+        self, calendario_id: Optional[str] = None, curso_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        from app.modules import turmas as turmas_module
+
+        alteradas = []
+        for loja in (self.turmas, turmas_module._turmas_db):
+            for t in loja.values():
+                cid = t.get("curso_id")
+                if not cid or t.get("concluida_em") or t.get("cancelada_em"):
+                    continue
+                if curso_id and str(cid) != str(curso_id):
+                    continue
+                vig = self.vigencia_do_curso(str(cid))
+                if not vig or (calendario_id and vig["calendario_id"] != str(calendario_id)):
+                    continue
+                if (t.get("data_inicio"), t.get("data_fim")) != (vig["data_inicio"], vig["data_fim"]):
+                    alteradas.append({"id": t["id"], "nome": t.get("nome"), "inicio_antes": t.get("data_inicio"),
+                                      "fim_antes": t.get("data_fim"), "data_inicio": vig["data_inicio"],
+                                      "data_fim": vig["data_fim"]})
+                    t.update(data_inicio=vig["data_inicio"], data_fim=vig["data_fim"])
+        return alteradas
+
+    def contar_turmas_abertas_do_calendario(self, calendario_id: str) -> int:
+        from app.modules import turmas as turmas_module
+
+        ids = {t["id"]: t for loja in (self.turmas, turmas_module._turmas_db) for t in loja.values()}
+        return sum(1 for t in ids.values() if t.get("curso_id") and not t.get("concluida_em")
+                   and not t.get("cancelada_em") and self._calendario_do_curso(t["curso_id"]) == str(calendario_id))
+
+    def turmas_ead_do_aluno(self, aluno_id: str) -> List[Dict[str, Any]]:
+        saida = []
+        for turma_id, alunos in self.alunos.items():
+            t = self.turmas.get(turma_id) or {}
+            if t.get("modalidade") != "ead" or t.get("cancelada_em") or t.get("concluida_em"):
+                continue
+            for a in alunos:
+                if str(a.get("aluno_id")) == str(aluno_id):
+                    saida.append({"turma_id": turma_id, "curso_id": t.get("curso_id"),
+                                  "data_inicio": t.get("data_inicio"), "data_matricula": a.get("data_matricula")})
+        return saida
+
+    def conclusoes_ava(self, aluno_ids: Sequence[str], disciplina_ids: Sequence[str]) -> Dict[tuple, date]:
+        return dict(getattr(self, "conclusoes", {}))
 
 
 _repo_padrao: Optional[CargaHorariaRepositoryInterface] = None

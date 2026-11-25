@@ -18,6 +18,7 @@ from app.modules.carga_horaria.schemas import (
     CronogramaResponse,
     DatasLetivasResponse,
     FrequenciaResponse,
+    PrazosEadResponse,
     RegrasCalendario,
 )
 from app.modules.carga_horaria.service import CargaHorariaService
@@ -105,6 +106,16 @@ async def datas_letivas(
     return service.datas_letivas(str(calendario_id), inicio, fim)
 
 
+@router.get("/calendarios-academicos/{calendario_id}/turmas-afetadas",
+            dependencies=[Depends(require_role(_ADMIN))])
+async def turmas_afetadas(
+    calendario_id: uuid.UUID,
+    service: CargaHorariaService = Depends(get_carga_horaria_service),
+):
+    """Turmas abertas cujas datas mudam junto com a vigência deste calendário."""
+    return {"total": service.turmas_afetadas(str(calendario_id))}
+
+
 # ---------------------------------------------------------------------------
 # Turma: cronograma, andamento, frequência e conclusão
 # ---------------------------------------------------------------------------
@@ -161,3 +172,14 @@ async def concluir_turma(
     service: CargaHorariaService = Depends(get_carga_horaria_service),
 ):
     return service.concluir(current_user, str(turma_id), ip)
+
+
+@router.get("/turmas/{turma_id}/prazos-ead", response_model=PrazosEadResponse,
+            dependencies=[Depends(require_role(_LEITURA))])
+async def obter_prazos_ead(
+    turma_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+    service: CargaHorariaService = Depends(get_carga_horaria_service),
+):
+    """Turma EAD: liberação e data limite de cada disciplina, por aluno."""
+    return service.prazos_ead(current_user, str(turma_id))

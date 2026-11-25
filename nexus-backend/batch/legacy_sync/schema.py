@@ -164,6 +164,21 @@ DDL: List[str] = [
     data_inicio DATE,
     data_fim DATE""",
     ),
+    # Cadastro de turmas (migration 034): código, modalidade, horário, vagas, responsável e cancelamento.
+    """ALTER TABLE turmas
+    ADD COLUMN IF NOT EXISTS codigo VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS modalidade VARCHAR(12) NOT NULL DEFAULT 'presencial',
+    ADD COLUMN IF NOT EXISTS turno VARCHAR(10),
+    ADD COLUMN IF NOT EXISTS horario_inicio TIME,
+    ADD COLUMN IF NOT EXISTS horario_fim TIME,
+    ADD COLUMN IF NOT EXISTS vagas INT,
+    ADD COLUMN IF NOT EXISTS local_aulas TEXT,
+    ADD COLUMN IF NOT EXISTS responsavel_id UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS cancelada_em TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS cancelada_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS motivo_cancelamento TEXT;""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_turmas_codigo ON turmas (codigo);",
+    "ALTER TABLE disciplinas ADD COLUMN IF NOT EXISTS ead_prazo_dias INT;",
     _tbl(
         "disciplina_conteudos",
         """    disciplina_id UUID REFERENCES disciplinas(id) ON DELETE CASCADE,

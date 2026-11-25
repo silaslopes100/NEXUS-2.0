@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -58,6 +58,17 @@ class RegrasCalendario(BaseModel):
         default="alertar", description="Ponto em aberto 5: alertar e o admin decide, ou bloquear a conclusão"
     )
     bloquear_ata_fora_periodo: bool = Field(default=True, description="RN03.5")
+    # Turmas EAD: cada disciplina tem N dias depois de liberada (N próprio da disciplina, se houver).
+    ead_prazo_dias_padrao: int = Field(default=30, ge=1, le=730, description="Turma EAD: dias para concluir")
+    ead_liberacao: Literal["sequencial", "todas_no_inicio"] = Field(
+        default="sequencial", description="sequencial: uma disciplina por vez; todas_no_inicio: tudo liberado"
+    )
+    ead_proxima_libera: Literal["anterior_concluida_ou_vencida", "anterior_vencida", "anterior_concluida"] = Field(
+        default="anterior_concluida_ou_vencida", description="Quando a próxima disciplina é liberada (sequencial)"
+    )
+    ead_ao_vencer: Literal["bloquear", "alertar"] = Field(
+        default="bloquear", description="bloquear: o AVA fecha a disciplina vencida; alertar: só avisa"
+    )
 
 
 class Feriado(BaseModel):
@@ -229,3 +240,32 @@ class ConclusaoResponse(BaseModel):
     concluida_em: datetime
     saldo_pendente: float
     message: str
+
+
+# ---------- Turmas EAD: prazos por disciplina ----------
+
+class PrazoDisciplinaEad(BaseModel):
+    disciplina_id: str
+    nome: Optional[str] = None
+    ordem: int
+    prazo_dias: int
+    liberada_em: Optional[date] = None
+    data_limite: Optional[date] = None
+    concluida_em: Optional[date] = None
+    situacao: Literal["aguardando", "liberada", "concluida", "vencida"]
+
+
+class PrazosAlunoEad(BaseModel):
+    aluno_id: str
+    nome: Optional[str] = None
+    numero_matricula: Optional[str] = None
+    inicio: date
+    vencidas: int = 0
+    disciplinas: List[PrazoDisciplinaEad] = Field(default_factory=list)
+
+
+class PrazosEadResponse(BaseModel):
+    turma_id: str
+    regras: Dict[str, Any]
+    disciplinas: List[Dict[str, Any]] = Field(default_factory=list)  # ordem e prazo de cada disciplina
+    alunos: List[PrazosAlunoEad] = Field(default_factory=list)

@@ -67,6 +67,15 @@ const CAMPOS_REGRAS: { grupo: string; campos: CampoRegra[] }[] = [
       { chave: 'excluir_ata_devolve_saldo', rotulo: 'Excluir ata devolve as horas ao saldo', ajuda: 'Desligado: só a Diretoria exclui atas que abatem horas.', origem: 'RN03.5', tipo: 'bool' },
     ],
   },
+  {
+    grupo: 'Turmas EAD — prazos',
+    campos: [
+      { chave: 'ead_prazo_dias_padrao', rotulo: 'Dias para concluir cada disciplina', ajuda: 'Contados da liberação. A disciplina pode ter prazo próprio no cadastro dela.', origem: 'EAD', tipo: 'numero', min: 1, max: 730 },
+      { chave: 'ead_liberacao', rotulo: 'Liberação das disciplinas', ajuda: 'Uma por vez, na ordem do curso, ou todas no início da turma.', origem: 'EAD', tipo: 'opcoes', opcoes: [{ value: 'sequencial', label: 'Uma por vez' }, { value: 'todas_no_inicio', label: 'Todas no início' }] },
+      { chave: 'ead_proxima_libera', rotulo: 'A próxima disciplina libera quando', ajuda: 'Vale para a liberação uma por vez.', origem: 'EAD', tipo: 'opcoes', opcoes: [{ value: 'anterior_concluida_ou_vencida', label: 'A anterior é concluída ou vence' }, { value: 'anterior_vencida', label: 'O prazo da anterior vence' }, { value: 'anterior_concluida', label: 'A anterior é concluída' }] },
+      { chave: 'ead_ao_vencer', rotulo: 'Disciplina com prazo vencido', ajuda: 'Bloquear o acesso no AVA ou só avisar o aluno.', origem: 'EAD', tipo: 'opcoes', opcoes: [{ value: 'bloquear', label: 'Bloquear no AVA' }, { value: 'alertar', label: 'Só avisar' }] },
+    ],
+  },
 ];
 
 const PERFIS_COORDENACAO: Opcao[] = [{ value: 'admin', label: 'Diretoria (admin)' }, { value: 'polo', label: 'Coordenação do Polo' }];
@@ -148,6 +157,14 @@ export const CalendariosPage: React.FC = () => {
     e.preventDefault();
     if (!form) return;
     if (!form.dias_semana.length) { setErroForm('Escolha pelo menos um dia de aula.'); return; }
+    const original = editandoId ? calendarios.find((c) => c.id === editandoId) : null;
+    if (original && (original.data_inicio !== form.data_inicio || original.data_fim !== form.data_fim)) {
+      // A vigência é o período das turmas dos cursos ligados a este calendário.
+      const afetadas = await cargaHorariaApi.turmasAfetadas(original.id).catch(() => null);
+      if (afetadas && !window.confirm(
+        `Mudar a vigência atualiza o início e o fim de ${afetadas} turma(s) aberta(s) dos cursos deste calendário. Continuar?`,
+      )) return;
+    }
     setSalvando(true);
     setErroForm('');
     try {

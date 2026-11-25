@@ -114,6 +114,14 @@ aplique-a antes de publicar a API, ou a ficha em **Usuários** falhará. Ela acr
 nascimento, documentos, naturalidade, contato de emergência e os campos de inativação, e copia
 para `usuarios.data_nascimento` o nascimento já cadastrado em `alunos`. Nada é apagado.
 
+O cadastro de turmas depende de [`034_turmas_cadastro.sql`](./nexus-backend/scripts/migrations/034_turmas_cadastro.sql):
+aplique-a antes de publicar a API, ou Turmas, Disciplinas e o AVA falharão.
+- Ela acrescenta em `turmas` código, modalidade, turno, horário, vagas, local, responsável e
+  cancelamento, e em `disciplinas` o prazo EAD.
+- Gera o código das turmas existentes e marca como EAD as turmas do polo "EAD".
+- **Muda o início e o fim** das turmas abertas para a vigência do calendário do curso. Depois de
+  aplicar, regere o cronograma das turmas na tela da turma.
+
 O gateway **Simulador** (`fake`) existe só no sandbox, para testes sem chaves reais.
 Ele é recusado em `producao`, e só o admin pode simular pagamentos.
 

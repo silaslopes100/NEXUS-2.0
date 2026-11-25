@@ -8,10 +8,12 @@ import { inputCls } from '@/features/turmas/components/TurmaFormModal';
 
 interface Props {
   turma: Turma;
-  onClose: () => void;
+  onClose?: () => void;
+  embutido?: boolean;
+  somenteLeitura?: boolean;
 }
 
-export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
+export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose, embutido = false, somenteLeitura = false }) => {
   const [vinculos, setVinculos] = useState<ProfessorTurmaVinculo[]>([]);
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
   const [professores, setProfessores] = useState<ProfessorDisponivel[]>([]);
@@ -128,36 +130,8 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="turma-professores-titulo"
-        className="glass my-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl"
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
-          <div>
-            <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-nexus-yellow">
-              <GraduationCap className="h-4 w-4" /> Gestão de docentes
-            </p>
-            <h2 id="turma-professores-titulo" className="mt-1 text-xl font-bold text-white">
-              {turma.nome}
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Associe professores a disciplinas do curso desta turma.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar gestão de docentes"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-
+  const conteudo = (
+    <>
         {(erro || erroBusca) && (
           <div role="alert" className="mt-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
             <AlertCircle className="h-4 w-4 shrink-0" />
@@ -170,6 +144,7 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
           </p>
         )}
 
+        {!somenteLeitura && (
         <form onSubmit={vincular} className="mt-5 grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <div className="space-y-1 text-xs font-semibold text-slate-300">
             <label htmlFor="buscar-professor-turma">Professor</label>
@@ -253,6 +228,7 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
             </p>
           )}
         </form>
+        )}
 
         <section aria-label="Professores vinculados" className="mt-6">
           <h3 className="mb-3 text-sm font-bold text-white">Vínculos atuais</h3>
@@ -276,6 +252,7 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
                       <p className="text-xs text-slate-500">{vinculo.professor_email}</p>
                     )}
                   </div>
+                  {!somenteLeitura && (
                   <button
                     type="button"
                     onClick={() => void arquivar(vinculo)}
@@ -289,6 +266,7 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
                     )}
                     {arquivandoId === vinculo.id ? 'Arquivando...' : 'Arquivar vínculo'}
                   </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -297,6 +275,41 @@ export const TurmaProfessoresPanel: React.FC<Props> = ({ turma, onClose }) => {
             Arquivar um vínculo preserva materiais e atas associados.
           </p>
         </section>
+    </>
+  );
+
+  if (embutido) return <div>{conteudo}</div>;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="turma-professores-titulo"
+        className="glass my-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl"
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-nexus-yellow">
+              <GraduationCap className="h-4 w-4" /> Gestão de docentes
+            </p>
+            <h2 id="turma-professores-titulo" className="mt-1 text-xl font-bold text-white">
+              {turma.nome}
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Associe professores a disciplinas do curso desta turma.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar gestão de docentes"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+        {conteudo}
       </section>
     </div>
   );

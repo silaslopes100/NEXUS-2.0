@@ -5,7 +5,7 @@ Todo curso segue o Calendário Acadêmico a que está vinculado; as turmas herda
 from __future__ import annotations
 
 from collections import OrderedDict
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
@@ -28,8 +28,12 @@ from app.modules.carga_horaria.schemas import (
     DisciplinaCronograma,
     FrequenciaResponse,
     MesLetivo,
+    PrazoDisciplinaEad,
+    PrazosAlunoEad,
+    PrazosEadResponse,
     RegrasCalendario,
 )
+from app.modules.turmas.regras import exigir_turma_editavel
 
 
 def regras_do_calendario(calendario: Optional[Dict[str, Any]]) -> RegrasCalendario:
@@ -103,7 +107,27 @@ class CargaHorariaService:
         depois = self.obter_calendario(calendario_id)
         self.repo.auditar(user.id, "calendario_academico_atualizado", "calendarios_academicos", calendario_id,
                           antes=antes.model_dump(mode="json"), depois=depois.model_dump(mode="json"), ip=ip)
+        self.sincronizar_turmas(user, ip, calendario_id=calendario_id)
         return depois
+
+    def sincronizar_turmas(
+        self, user: Optional[UserResponse], ip: Optional[str],
+        calendario_id: Optional[str] = None, curso_id: Optional[str] = None,
+    ) -> int:
+        """Início e fim das turmas abertas = vigência do calendário do curso (auditado por turma)."""
+        alteradas = self.repo.sincronizar_datas_turmas(calendario_id=calendario_id, curso_id=curso_id)
+        for t in alteradas:
+            self.repo.auditar(
+                user.id if user else None, "turma_datas_sincronizadas", "turmas", t["id"],
+                antes={"data_inicio": str(t.get("inicio_antes")), "data_fim": str(t.get("fim_antes"))},
+                depois={"data_inicio": str(t.get("data_inicio")), "data_fim": str(t.get("data_fim")),
+                        "origem": "calendario_academico"},
+                ip=ip,
+            )
+        return len(alteradas)
+
+    def turmas_afetadas(self, calendario_id: str) -> int:
+        return self.repo.contar_turmas_abertas_do_calendario(calendario_id)
 
     def excluir_calendario(self, user: UserResponse, calendario_id: str, ip: Optional[str]) -> None:
         antes = self.obter_calendario(calendario_id)
@@ -194,8 +218,7 @@ class CargaHorariaService:
 
     def gerar_cronograma(self, user: UserResponse, turma_id: str, ip: Optional[str]) -> CronogramaResponse:
         turma = self.contexto(user, turma_id)
-        if turma.get("concluida_em"):
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="Turma concluída: o cronograma não pode ser alterado.")
+        exigir_turma_editavel(turma)
         calendario = self._exigir_calendario(turma)
         regras = regras_do_calendario(calendario)
         disciplinas = self.repo.disciplinas_do_curso(turma["curso_id"])
@@ -276,6 +299,8 @@ class CargaHorariaService:
         turma = self.contexto(user, turma_id)
         if turma.get("concluida_em"):
             raise HTTPException(status.HTTP_409_CONFLICT, detail="A turma já está concluída.")
+        if turma.get("cancelada_em"):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Turma cancelada: reabra antes de concluir.")
         andamento = self.andamento(user, turma_id)
         if not andamento.pode_concluir:
             raise HTTPException(
@@ -287,3 +312,58 @@ class CargaHorariaService:
                           depois={"saldo_pendente": andamento.saldo, "progresso_pct": andamento.progresso_pct}, ip=ip)
         msg = "Turma concluída." if not andamento.saldo else f"Turma concluída com saldo de {andamento.saldo:g} h."
         return ConclusaoResponse(turma_id=turma_id, concluida_em=quando, saldo_pendente=andamento.saldo, message=msg)
+
+    # ---------- Turmas EAD: prazo de cada disciplina ----------
+
+    @staticmethod
+    def _inicio_aluno(turma_inicio: Any, data_matricula: Any) -> date:
+        datas = [d.date() if isinstance(d, datetime) else d for d in (turma_inicio, data_matricula) if d]
+        return max(datas) if datas else date.today()
+
+    def _disciplinas_ead(self, curso_id: Optional[str]) -> List[Dict[str, Any]]:
+        if not curso_id:
+            return []
+        disciplinas = self.repo.disciplinas_do_curso(curso_id)
+        return sorted(disciplinas, key=lambda d: (d.get("semestre") or 0, d.get("ordem") or 0, d.get("nome") or ""))
+
+    def prazos_ead(self, user: Optional[UserResponse], turma_id: str, hoje: Optional[date] = None) -> PrazosEadResponse:
+        turma = self.contexto(user, turma_id)
+        if turma.get("modalidade") != "ead":
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Prazos por disciplina valem só para turma EAD.")
+        regras = regras_do_calendario(turma.get("calendario"))
+        disciplinas = self._disciplinas_ead(turma.get("curso_id"))
+        alunos = self.repo.alunos_turma(turma_id)
+        conclusoes = self.repo.conclusoes_ava([a["aluno_id"] for a in alunos], [d["id"] for d in disciplinas])
+        saida = []
+        for a in alunos:
+            inicio = self._inicio_aluno(turma.get("data_inicio"), a.get("data_matricula"))
+            minhas = {d_id: dt for (al, d_id), dt in conclusoes.items() if al == a["aluno_id"]}
+            linhas = cr.cronograma_ead(disciplinas, inicio, regras, minhas, hoje)
+            saida.append(PrazosAlunoEad(
+                aluno_id=a["aluno_id"], nome=a.get("nome"), numero_matricula=a.get("numero_matricula"), inicio=inicio,
+                vencidas=sum(1 for l in linhas if l["situacao"] == "vencida"),
+                disciplinas=[PrazoDisciplinaEad(**l) for l in linhas],
+            ))
+        return PrazosEadResponse(
+            turma_id=turma_id,
+            regras={k: v for k, v in regras.model_dump().items() if k.startswith("ead_")},
+            disciplinas=[{"disciplina_id": d["id"], "nome": d.get("nome"),
+                          "prazo_dias": int(d.get("ead_prazo_dias") or regras.ead_prazo_dias_padrao)}
+                         for d in disciplinas],
+            alunos=saida,
+        )
+
+    def prazos_ead_do_aluno(
+        self, aluno_id: str, conclusoes: Dict[str, date], hoje: Optional[date] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """{disciplina_id: {liberada_em, data_limite, situacao, ao_vencer}} das turmas EAD abertas do aluno (AVA)."""
+        resultado: Dict[str, Dict[str, Any]] = {}
+        for t in self.repo.turmas_ead_do_aluno(aluno_id):
+            turma = self.repo.contexto_turma(t["turma_id"])
+            if not turma:
+                continue
+            regras = regras_do_calendario(turma.get("calendario"))
+            inicio = self._inicio_aluno(t.get("data_inicio"), t.get("data_matricula"))
+            for linha in cr.cronograma_ead(self._disciplinas_ead(t.get("curso_id")), inicio, regras, conclusoes, hoje):
+                resultado.setdefault(linha["disciplina_id"], {**linha, "ao_vencer": regras.ead_ao_vencer})
+        return resultado
