@@ -97,7 +97,7 @@ DDL: List[str] = [
     ultimo_login_em TIMESTAMPTZ""",
     ),
     "ALTER TABLE polos ADD COLUMN IF NOT EXISTS coordenador_usuario_id UUID REFERENCES usuarios(id);",
-    # Ficha cadastral (migration 031): dados pessoais, contato de emergência e inativação.
+    # Ficha cadastral (migration 033): dados pessoais, contato de emergência e inativação.
     """ALTER TABLE usuarios
     ADD COLUMN IF NOT EXISTS data_nascimento DATE,
     ADD COLUMN IF NOT EXISTS rg VARCHAR(20),

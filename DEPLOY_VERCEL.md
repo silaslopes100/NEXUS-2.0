@@ -109,7 +109,7 @@ Depois da 029, aplique [`030_remover_calendarios_oficiais.sql`](./nexus-backend/
 Ela apaga a tabela antiga `calendarios_oficiais` e a coluna `turmas.calendario_oficial_id`, que a API
 não usa mais. É irreversível: faça backup antes se quiser guardar esses registros.
 
-A ficha cadastral do usuário depende de [`031_ficha_cadastral.sql`](./nexus-backend/scripts/migrations/031_ficha_cadastral.sql):
+A ficha cadastral do usuário depende de [`033_ficha_cadastral.sql`](./nexus-backend/scripts/migrations/033_ficha_cadastral.sql):
 aplique-a antes de publicar a API, ou a ficha em **Usuários** falhará. Ela acrescenta em `usuarios`
 nascimento, documentos, naturalidade, contato de emergência e os campos de inativação, e copia
 para `usuarios.data_nascimento` o nascimento já cadastrado em `alunos`. Nada é apagado.

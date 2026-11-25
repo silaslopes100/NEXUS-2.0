@@ -1,4 +1,4 @@
--- 031 — Ficha cadastral do usuário: dados pessoais, documentos, contato de emergência e inativação.
+-- 033 — Ficha cadastral do usuário: dados pessoais, documentos, contato de emergência e inativação.
 --  * usuarios.data_nascimento passa a ser a fonte; alunos.data_nascimento continua sendo gravada
 --    junto (o login e outras telas leem de lá). Backfill a partir de alunos.
 --  * inativado_em / inativado_por / motivo_inativacao: "Excluir" virou "Inativar" (a exclusão
