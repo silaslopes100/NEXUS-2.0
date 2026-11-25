@@ -2,13 +2,16 @@ import React, { useState } from 'react';
 import { ClipboardCheck, Loader2, PlayCircle, X } from 'lucide-react';
 import { mensagemErro } from '@/features/comunicacao/api';
 import { EditorRico } from '@/features/comunicacao/components/editor/EditorRico';
-import { Aula, AulaPayload, ItemAula, TipoAula, avaAdminApi } from '../../api';
+import { Aula, AulaPayload, ItemAula, ReordenarPayload, TipoAula, avaAdminApi } from '../../api';
 import { ItensAula } from './ItensAula';
 import { SeletorAvaliacao } from './SeletorAvaliacao';
 import { botaoPrimario, botaoSecundario, campo, rotulo } from './estilos';
 
 interface Props {
-  disciplinaId: string;
+  /** Grava a ordem dos itens no dono da aula (disciplina ou treinamento). */
+  reordenarItens: (payload: ReordenarPayload) => Promise<unknown>;
+  /** Treinamentos não têm aula de avaliação. */
+  permitirAvaliacao?: boolean;
   cursoId?: string | null;
   capituloId: string;
   capituloTitulo: string;
@@ -24,9 +27,11 @@ const OPCOES: { tipo: TipoAula; titulo: string; texto: string; icone: React.Elem
   { tipo: 'avaliacao', titulo: 'Avaliação', texto: 'Uma avaliação cadastrada nas disciplinas do curso.', icone: ClipboardCheck },
 ];
 
-export const AulaDrawer: React.FC<Props> = ({ disciplinaId, cursoId, capituloId, capituloTitulo, aula, onFechar, onAlterada }) => {
+export const AulaDrawer: React.FC<Props> = ({
+  reordenarItens, permitirAvaliacao = true, cursoId, capituloId, capituloTitulo, aula, onFechar, onAlterada,
+}) => {
   const [atual, setAtual] = useState<Aula | null>(aula ?? null);
-  const [tipo, setTipo] = useState<TipoAula | null>(aula?.tipo ?? null);
+  const [tipo, setTipo] = useState<TipoAula | null>(aula?.tipo ?? (permitirAvaliacao ? null : 'conteudo'));
   const [titulo, setTitulo] = useState(aula?.titulo ?? '');
   const [descricao, setDescricao] = useState(aula?.descricao ?? '');
   const [duracao, setDuracao] = useState(aula?.duracao_min != null ? String(aula.duracao_min) : '');
@@ -111,7 +116,7 @@ export const AulaDrawer: React.FC<Props> = ({ disciplinaId, cursoId, capituloId,
                   <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${tipo === 'avaliacao' ? 'bg-blue-500/20 text-blue-200' : 'bg-nexus-yellow/15 text-nexus-yellow'}`}>
                     {tipo === 'avaliacao' ? 'Avaliação' : 'Conteúdo'}
                   </span>
-                  {!atual && (
+                  {!atual && permitirAvaliacao && (
                     <button type="button" onClick={() => setTipo(null)} className="text-xs text-slate-400 underline hover:text-white">
                       trocar tipo
                     </button>
@@ -165,7 +170,7 @@ export const AulaDrawer: React.FC<Props> = ({ disciplinaId, cursoId, capituloId,
               {tipo === 'conteudo' && atual && (
                 <section className="space-y-3 border-t border-slate-800 pt-5">
                   <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Conteúdos da aula</h3>
-                  <ItensAula disciplinaId={disciplinaId} aulaId={atual.id} itens={atual.itens} onChange={itensAlterados} />
+                  <ItensAula reordenar={reordenarItens} aulaId={atual.id} itens={atual.itens} onChange={itensAlterados} />
                 </section>
               )}
               {tipo === 'conteudo' && !atual && (

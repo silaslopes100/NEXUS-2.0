@@ -32,6 +32,8 @@ import {
   Newspaper,
   Megaphone,
   MessageSquareWarning,
+  Medal,
+  Trophy,
   LucideIcon,
 } from 'lucide-react';
 import { UserRole } from '@/types/auth';
@@ -132,6 +134,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Conteúdo EAD (AVA)',
           path: '/admin/ava',
           icon: Laptop,
+        },
+        {
+          title: 'Treinamentos',
+          path: '/admin/treinamentos',
+          icon: GraduationCap,
         },
         {
           title: 'Presenças & Frequência',
@@ -400,6 +407,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: MessageSquare,
         },
         {
+          title: 'Treinamentos',
+          path: '/treinamentos',
+          icon: GraduationCap,
+        },
+        {
           title: 'Feed',
           path: '/feed',
           icon: Newspaper,
@@ -477,6 +489,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: MessageSquare,
         },
         {
+          title: 'Treinamentos',
+          path: '/treinamentos',
+          icon: GraduationCap,
+        },
+        {
           title: 'Feed',
           path: '/feed',
           icon: Newspaper,
@@ -529,6 +546,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: MessageSquare,
         },
         {
+          title: 'Treinamentos',
+          path: '/treinamentos',
+          icon: GraduationCap,
+        },
+        {
           title: 'Feed',
           path: '/feed',
           icon: Newspaper,
@@ -563,6 +585,18 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Laptop,
           badge: 'Aulas',
           badgeColor: 'emerald',
+          somenteEad: true,
+        },
+        {
+          title: 'Minhas Conquistas',
+          path: '/aluno/ava/conquistas',
+          icon: Medal,
+          somenteEad: true,
+        },
+        {
+          title: 'Ranking do Curso',
+          path: '/aluno/ava/ranking',
+          icon: Trophy,
           somenteEad: true,
         },
         {

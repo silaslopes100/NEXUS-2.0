@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, BookOpenCheck, CheckCircle2, Clock, GraduationCap, Loader2, Lock, Play, PlayCircle, Sparkles } from 'lucide-react';
+import { AlertCircle, Award, BookOpenCheck, CheckCircle2, Clock, GraduationCap, Loader2, Lock, Play, PlayCircle, Sparkles, Trophy } from 'lucide-react';
 import { mensagemErro } from '@/features/comunicacao/api';
 import { urlArquivo } from '@/lib/uploadDireto';
 import { formatarDuracao } from '../../api';
-import { DisciplinaAluno, HomeAva, SITUACAO, avaAlunoApi, saudacao } from '../../alunoApi';
+import { DisciplinaAluno, HomeAva, PerfilGamificacao, Ranking, SITUACAO, avaAlunoApi, gamificacaoApi, saudacao } from '../../alunoApi';
+import { AnelNivel, BarraXp, ConquistaBadge, RankingLista, StreakChip } from '../../components/gamificacao/Gamificacao';
 
 type Filtro = 'todas' | 'andamento' | 'concluidas' | 'bloqueadas';
 
@@ -93,9 +94,14 @@ export const AvaHomePage: React.FC = () => {
   const [dados, setDados] = useState<HomeAva | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('todas');
+  const [perfil, setPerfil] = useState<PerfilGamificacao | null>(null);
+  const [ranking, setRanking] = useState<Ranking | null>(null);
 
   useEffect(() => {
     avaAlunoApi.home().then(setDados).catch((e) => setErro(mensagemErro(e, 'Não foi possível carregar a Sala de Aula Virtual.')));
+    // A gamificação é complementar: se falhar, a página segue sem ela.
+    gamificacaoApi.perfil().then(setPerfil).catch(() => undefined);
+    gamificacaoApi.ranking('semana', null, 5).then(setRanking).catch(() => undefined);
   }, []);
 
   const lista = useMemo(() => {
@@ -179,6 +185,54 @@ export const AvaHomePage: React.FC = () => {
           )}
         </div>
       </section>
+
+      {/* Gamificação */}
+      {perfil && (
+        <section className="grid gap-4 lg:grid-cols-3">
+          <Link to="/aluno/ava/conquistas"
+            className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-nexus-yellow/50">
+            <div className="flex items-center gap-4">
+              <AnelNivel nivel={perfil.nivel} />
+              <BarraXp nivel={perfil.nivel} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StreakChip dias={perfil.streak_atual} hoje={perfil.estudou_hoje} />
+              <span className="text-xs text-slate-400"><strong className="text-white">{perfil.xp_semana}</strong> XP nesta semana</span>
+            </div>
+          </Link>
+
+          <Link to="/aluno/ava/conquistas"
+            className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-nexus-yellow/50">
+            <p className="flex items-center justify-between text-sm font-bold text-white">
+              <span className="flex items-center gap-2"><Award size={16} className="text-nexus-yellow" /> Medalhas</span>
+              <span className="text-xs font-normal text-slate-400">
+                {perfil.conquistas.filter((c) => c.obtida_em).length}/{perfil.conquistas.length}
+              </span>
+            </p>
+            <div className="flex flex-1 items-center justify-around gap-2">
+              {[...perfil.conquistas]
+                .sort((a, b) => Number(!!b.obtida_em) - Number(!!a.obtida_em) || String(b.obtida_em).localeCompare(String(a.obtida_em)))
+                .slice(0, 4)
+                .map((c) => <ConquistaBadge key={c.codigo} conquista={c} tamanho="sm" mostrarTexto={false} />)}
+            </div>
+            <p className="text-xs text-slate-500">
+              {perfil.conquistas.find((c) => !c.obtida_em)
+                ? `Próxima: ${perfil.conquistas.find((c) => !c.obtida_em)!.nome} — ${perfil.conquistas.find((c) => !c.obtida_em)!.descricao}`
+                : 'Você desbloqueou todas as medalhas! 🏆'}
+            </p>
+          </Link>
+
+          <Link to="/aluno/ava/ranking"
+            className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-nexus-yellow/50">
+            <p className="flex items-center gap-2 text-sm font-bold text-white"><Trophy size={16} className="text-nexus-yellow" /> Ranking da semana</p>
+            {ranking && ranking.itens.length > 0 ? (
+              <RankingLista itens={ranking.itens} minha={ranking.minha_posicao} compacto />
+            ) : (
+              <p className="flex-1 text-sm text-slate-400">Ninguém pontuou nesta semana ainda. Conclua uma aula e saia na frente!</p>
+            )}
+          </Link>
+        </section>
+      )}
 
       {/* Disciplinas */}
       <section className="space-y-5">

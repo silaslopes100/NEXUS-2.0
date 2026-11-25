@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  Award,
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
@@ -19,7 +20,8 @@ import { mensagemErro } from '@/features/comunicacao/api';
 import { formatarNota, Resultado } from '@/features/avaliacoes/api';
 import { RealizarAvaliacao } from '@/features/avaliacoes/components/RealizarAvaliacao';
 import { formatarDuracao } from '../../api';
-import { AulaAluno, Conclusao, DisciplinaPlayer, avaAlunoApi } from '../../alunoApi';
+import { AulaAluno, Conclusao, DisciplinaPlayer, PlayerApi, Recompensa, avaAlunoApi } from '../../alunoApi';
+import { CelebracaoRecompensa } from '../../components/gamificacao/CelebracaoRecompensa';
 import { VideoEmbed, VideoEmbedHandle } from '../../components/player/VideoEmbed';
 import { ConteudoItem } from '../../components/player/ConteudoItem';
 import { SidebarCapitulos } from '../../components/player/SidebarCapitulos';
@@ -29,7 +31,17 @@ import { soltarConfete } from '../../utils/confete';
 interface Props {
   /** Pré-visualização do admin: sem travas e sem gravar progresso. */
   previa?: boolean;
+  /** Treinamento (Polo/Escola/Professor) usa o mesmo player com outra API e outros caminhos. */
+  modo?: 'disciplina' | 'treinamento';
+  api?: PlayerApi;
+  /** Baixa o certificado (treinamentos). */
+  onBaixarCertificado?: (id: string) => Promise<void>;
 }
+
+const CAMINHOS = {
+  disciplina: { base: '/aluno/ava/disciplinas', voltar: '/aluno/ava', admin: '/admin/ava/disciplinas', item: 'Disciplina' },
+  treinamento: { base: '/treinamentos', voltar: '/treinamentos', admin: '/admin/treinamentos', item: 'Treinamento' },
+} as const;
 
 interface Aviso {
   id: number;
@@ -38,11 +50,24 @@ interface Aviso {
 }
 
 /** Player da disciplina (estilo Hotmart/Kiwify): conteúdo à esquerda, trilha de aulas à direita. */
-export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
+export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'disciplina', api = avaAlunoApi, onBaixarCertificado }) => {
   const { disciplinaId = '', aulaId } = useParams();
   const navigate = useNavigate();
-  const base = previa ? `/admin/ava/disciplinas/${disciplinaId}/previa` : `/aluno/ava/disciplinas/${disciplinaId}`;
-  const voltar = previa ? `/admin/ava/disciplinas/${disciplinaId}` : '/aluno/ava';
+  const cam = CAMINHOS[modo];
+  const base = previa ? `${cam.admin}/${disciplinaId}/previa` : `${cam.base}/${disciplinaId}`;
+  const voltar = previa ? `${cam.admin}/${disciplinaId}` : cam.voltar;
+  const [baixando, setBaixando] = useState(false);
+  const baixarCertificado = async () => {
+    if (!onBaixarCertificado) return;
+    setBaixando(true);
+    try {
+      await onBaixarCertificado(disciplinaId);
+    } catch (e) {
+      avisar(e instanceof Error && e.message ? e.message : 'Não foi possível gerar o certificado.', 'info');
+    } finally {
+      setBaixando(false);
+    }
+  };
 
   const [disciplina, setDisciplina] = useState<DisciplinaPlayer | null>(null);
   const [aula, setAula] = useState<AulaAluno | null>(null);
@@ -54,6 +79,7 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
   const [trilhaMobile, setTrilhaMobile] = useState(false);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [celebracao, setCelebracao] = useState<'disciplina' | null>(null);
+  const [recompensa, setRecompensa] = useState<Recompensa | null>(null);
   const video = useRef<VideoEmbedHandle>(null);
   const enviado = useRef({ pct: 0, em: 0 });
 
@@ -65,14 +91,14 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
 
   const carregarDisciplina = useCallback(async () => {
     try {
-      const d = await avaAlunoApi.disciplina(disciplinaId);
+      const d = await api.disciplina(disciplinaId);
       setDisciplina(d);
       return d;
     } catch (e) {
       setErro(mensagemErro(e, 'Não foi possível abrir a disciplina.'));
       return null;
     }
-  }, [disciplinaId]);
+  }, [disciplinaId, api]);
 
   useEffect(() => {
     setDisciplina(null);
@@ -96,7 +122,7 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
     setModoProva(false);
     setTrilhaMobile(false);
     enviado.current = { pct: 0, em: Date.now() };
-    avaAlunoApi
+    api
       .aula(aulaId)
       .then((a) => {
         if (!ativo) return;
@@ -109,7 +135,7 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
     return () => {
       ativo = false;
     };
-  }, [aulaId]);
+  }, [aulaId, api]);
 
   // ------------------------------------------------------------------ conclusão
 
@@ -117,15 +143,25 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
     async (c: Conclusao) => {
       setAula((a) => (a && a.id === c.aula_id ? { ...a, status: 'concluida', percentual: 100 } : a));
       await carregarDisciplina();
-      if (c.ja_estava_concluida) return;
+      const r = c.recompensa;
+      const xp = r && r.xp_ganho > 0 ? ` · +${r.xp_ganho} XP` : '';
+      const fogo = r && r.streak_atual > 1 ? ` · 🔥 ${r.streak_atual} dias` : '';
+      const especial = !!r && (r.subiu_nivel || r.conquistas.length > 0);
+      if (especial) setRecompensa(r);
+      if (c.ja_estava_concluida) {
+        if (especial) soltarConfete();
+        return;
+      }
       if (c.disciplina_concluida) {
         soltarConfete(3200);
         setCelebracao('disciplina');
+        if (xp) avisar(`${cam.item} concluída${xp}`);
       } else if (c.capitulo_concluido) {
         soltarConfete();
-        avisar('Capítulo concluído! Continue assim 🚀');
+        avisar(`Capítulo concluído! Continue assim 🚀${xp}`);
       } else {
-        avisar('Aula concluída ✓');
+        if (especial) soltarConfete();
+        avisar(`Aula concluída ✓${xp}${fogo}`);
       }
     },
     [carregarDisciplina, avisar],
@@ -139,7 +175,7 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
     }
     setConcluindo(true);
     try {
-      const c = await avaAlunoApi.concluir(aula.id);
+      const c = await api.concluir(aula.id);
       await aplicarConclusao(c);
       if (c.proxima_aula_id && !c.disciplina_concluida) navigate(`${base}/aulas/${c.proxima_aula_id}`);
     } catch (e) {
@@ -156,24 +192,24 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
       const ultimo = enviado.current;
       if (pct < 90 && pct < ultimo.pct + 10 && agora - ultimo.em < 30_000) return;
       enviado.current = { pct: Math.max(pct, ultimo.pct), em: agora };
-      avaAlunoApi
+      api
         .progresso(aula.id, pct, Math.floor(pos))
         .then((c) => c && aplicarConclusao(c))
         .catch(() => undefined);
     },
-    [previa, aula, aplicarConclusao],
+    [previa, aula, aplicarConclusao, api],
   );
 
   const aoResultadoProva = useCallback(
     async (r: Resultado) => {
       if (!aula || !r.aprovado) return;
       try {
-        await aplicarConclusao(await avaAlunoApi.concluir(aula.id));
+        await aplicarConclusao(await api.concluir(aula.id));
       } catch {
         /* a conclusão também acontece ao reabrir a aula */
       }
     },
-    [aula, aplicarConclusao],
+    [aula, aplicarConclusao, api],
   );
 
   // ------------------------------------------------------------------ render
@@ -230,6 +266,12 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
             </div>
           </div>
           {d.progresso_pct === 100 && <Trophy className="text-nexus-yellow" size={22} />}
+          {disciplina.certificado_disponivel && onBaixarCertificado && (
+            <button type="button" onClick={() => void baixarCertificado()} disabled={baixando}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-400 disabled:opacity-50">
+              {baixando ? <Loader2 size={14} className="animate-spin" /> : <Award size={14} />} Certificado
+            </button>
+          )}
         </div>
       </header>
 
@@ -265,14 +307,14 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
                     <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 sm:p-6">
                       <RealizarAvaliacao
                         chave={aula.id}
-                        iniciar={() => avaAlunoApi.iniciarAvaliacao(aula.id)}
+                        iniciar={() => api.iniciarAvaliacao!(aula.id)}
                         rotuloVoltar="Voltar à aula"
                         rotuloSair="Sair e continuar depois (o tempo continua contando)"
                         semTentativas="Você usou todas as tentativas desta avaliação. Fale com a secretaria EAD."
                         onResultado={(r) => void aoResultadoProva(r)}
                         onVoltar={() => {
                           setModoProva(false);
-                          void avaAlunoApi.aula(aula.id).then(setAula).catch(() => undefined);
+                          void api.aula(aula.id).then(setAula).catch(() => undefined);
                         }}
                       />
                     </div>
@@ -330,7 +372,7 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
                 )}
 
                 {!modoProva && (
-                  <AbasAula aula={aula} previa={previa} posicaoVideo={() => video.current?.posicao() ?? null}
+                  <AbasAula api={api} aula={aula} previa={previa} posicaoVideo={() => video.current?.posicao() ?? null}
                     onIrPara={(seg) => {
                       video.current?.irPara(seg);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -407,6 +449,9 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
         ))}
       </div>
 
+      {/* Conquista nova / subida de nível (depois da celebração da disciplina, se houver) */}
+      {recompensa && !celebracao && <CelebracaoRecompensa recompensa={recompensa} onFechar={() => setRecompensa(null)} />}
+
       {/* Celebração de disciplina concluída */}
       {celebracao && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={() => setCelebracao(null)}>
@@ -415,16 +460,28 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false }) => {
             <span className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-nexus-yellow/15 text-nexus-yellow">
               <PartyPopper size={40} />
             </span>
-            <h2 className="text-2xl font-extrabold text-white">Disciplina concluída!</h2>
-            <p className="mt-2 text-sm text-slate-300">Parabéns! Você finalizou <strong className="text-white">{d.nome}</strong>. Que tal começar a próxima?</p>
+            <h2 className="text-2xl font-extrabold text-white">{cam.item} concluíd{modo === 'treinamento' ? 'o' : 'a'}!</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Parabéns! Você finalizou <strong className="text-white">{d.nome}</strong>.
+              {modo === 'treinamento'
+                ? disciplina.certificado_disponivel ? ' Seu certificado já está disponível.' : ''
+                : ' Que tal começar a próxima?'}
+            </p>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <button type="button" onClick={() => setCelebracao(null)} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-800">
                 Revisar conteúdo
               </button>
-              <button type="button" onClick={() => navigate('/aluno/ava')}
-                className="rounded-xl bg-nexus-yellow px-5 py-2.5 text-sm font-bold text-ink hover:bg-nexus-yellow-hover">
-                Ver minhas disciplinas
-              </button>
+              {modo === 'treinamento' && disciplina.certificado_disponivel && onBaixarCertificado ? (
+                <button type="button" onClick={() => void baixarCertificado()} disabled={baixando}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-nexus-yellow px-5 py-2.5 text-sm font-bold text-ink hover:bg-nexus-yellow-hover disabled:opacity-50">
+                  {baixando ? <Loader2 size={16} className="animate-spin" /> : <Award size={16} />} Baixar certificado
+                </button>
+              ) : (
+                <button type="button" onClick={() => navigate(cam.voltar)}
+                  className="rounded-xl bg-nexus-yellow px-5 py-2.5 text-sm font-bold text-ink hover:bg-nexus-yellow-hover">
+                  {modo === 'treinamento' ? 'Ver treinamentos' : 'Ver minhas disciplinas'}
+                </button>
+              )}
             </div>
           </div>
         </div>

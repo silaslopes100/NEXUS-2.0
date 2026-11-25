@@ -310,7 +310,7 @@ export const AvaDisciplinaEditorPage: React.FC = () => {
       {drawer && (
         <AulaDrawer
           key={drawer.aula?.id ?? `nova-${drawer.capitulo.id}`}
-          disciplinaId={disciplinaId}
+          reordenarItens={(payload) => avaAdminApi.reordenar(disciplinaId, payload)}
           cursoId={disciplina.curso_id}
           capituloId={drawer.capitulo.id}
           capituloTitulo={drawer.capitulo.titulo}

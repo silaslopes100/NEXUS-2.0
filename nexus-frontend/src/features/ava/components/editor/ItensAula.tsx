@@ -35,6 +35,7 @@ import {
   ItemPayload,
   ROTULO_ITEM,
   ROTULO_PROVEDOR,
+  ReordenarPayload,
   TipoItem,
   avaAdminApi,
 } from '../../api';
@@ -272,13 +273,14 @@ const LinhaItem: React.FC<{ item: ItemAula; onEditar: () => void; onExcluir: () 
 // ---------------------------------------------------------------------------
 
 interface Props {
-  disciplinaId: string;
+  /** Grava a nova ordem dos itens (no dono da aula: disciplina ou treinamento). */
+  reordenar: (payload: ReordenarPayload) => Promise<unknown>;
   aulaId: string;
   itens: ItemAula[];
   onChange: (itens: ItemAula[]) => void;
 }
 
-export const ItensAula: React.FC<Props> = ({ disciplinaId, aulaId, itens, onChange }) => {
+export const ItensAula: React.FC<Props> = ({ reordenar, aulaId, itens, onChange }) => {
   const [form, setForm] = useState<{ tipo: TipoItem; item?: ItemAula } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const sensores = useSensors(
@@ -293,7 +295,7 @@ export const ItensAula: React.FC<Props> = ({ disciplinaId, aulaId, itens, onChan
       .map((i, ordem) => ({ ...i, ordem }));
     onChange(nova);
     try {
-      await avaAdminApi.reordenar(disciplinaId, { itens: nova.map((i) => ({ id: i.id, ordem: i.ordem })) });
+      await reordenar({ itens: nova.map((i) => ({ id: i.id, ordem: i.ordem })) });
     } catch (e) {
       onChange(antes);
       setErro(mensagemErro(e, 'Não foi possível salvar a nova ordem.'));

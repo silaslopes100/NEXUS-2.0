@@ -3,12 +3,13 @@ import { Clock, FileText, Link2, Loader2, NotebookPen, Pencil, Star, Trash2 } fr
 import { ConteudoHtml } from '@/features/comunicacao/components/ConteudoHtml';
 import { mensagemErro } from '@/features/comunicacao/api';
 import { tamanhoLegivel } from '@/features/chat/utils';
-import { Anotacao, AulaAluno, avaAlunoApi, tempoVideo } from '../../alunoApi';
+import { Anotacao, AulaAluno, PlayerApi, tempoVideo } from '../../alunoApi';
 import { BotaoDownload } from './ConteudoItem';
 
 type Aba = 'visao' | 'materiais' | 'anotacoes';
 
 interface Props {
+  api: PlayerApi;
   aula: AulaAluno;
   previa: boolean;
   /** Posição atual do vídeo (para carimbar a anotação). */
@@ -17,7 +18,7 @@ interface Props {
   onIrPara?: (seg: number) => void;
 }
 
-const Estrelas: React.FC<{ aulaId: string; inicial?: number | null; desabilitado: boolean }> = ({ aulaId, inicial, desabilitado }) => {
+const Estrelas: React.FC<{ api: PlayerApi; aulaId: string; inicial?: number | null; desabilitado: boolean }> = ({ api, aulaId, inicial, desabilitado }) => {
   const [nota, setNota] = useState(inicial ?? 0);
   const [sobre, setSobre] = useState(0);
   const [obrigado, setObrigado] = useState(false);
@@ -25,7 +26,7 @@ const Estrelas: React.FC<{ aulaId: string; inicial?: number | null; desabilitado
     const anterior = nota;
     setNota(n);
     try {
-      await avaAlunoApi.avaliarAula(aulaId, n);
+      await api.avaliarAula(aulaId, n);
       setObrigado(true);
     } catch {
       setNota(anterior);
@@ -47,7 +48,7 @@ const Estrelas: React.FC<{ aulaId: string; inicial?: number | null; desabilitado
   );
 };
 
-const Anotacoes: React.FC<Props> = ({ aula, previa, posicaoVideo, onIrPara }) => {
+const Anotacoes: React.FC<Props> = ({ api, aula, previa, posicaoVideo, onIrPara }) => {
   const [lista, setLista] = useState<Anotacao[]>(aula.anotacoes);
   const [texto, setTexto] = useState('');
   const [editando, setEditando] = useState<{ id: string; texto: string } | null>(null);
@@ -60,7 +61,7 @@ const Anotacoes: React.FC<Props> = ({ aula, previa, posicaoVideo, onIrPara }) =>
     setErro(null);
     try {
       const pos = posicaoVideo();
-      const nova = await avaAlunoApi.criarAnotacao(aula.id, texto.trim(), pos != null ? Math.floor(pos) : null);
+      const nova = await api.criarAnotacao(aula.id, texto.trim(), pos != null ? Math.floor(pos) : null);
       setLista((l) => [nova, ...l]);
       setTexto('');
     } catch (e) {
@@ -73,7 +74,7 @@ const Anotacoes: React.FC<Props> = ({ aula, previa, posicaoVideo, onIrPara }) =>
   const salvarEdicao = async () => {
     if (!editando?.texto.trim()) return;
     try {
-      const a = await avaAlunoApi.atualizarAnotacao(editando.id, editando.texto.trim());
+      const a = await api.atualizarAnotacao(editando.id, editando.texto.trim());
       setLista((l) => l.map((x) => (x.id === a.id ? a : x)));
       setEditando(null);
     } catch (e) {
@@ -84,7 +85,7 @@ const Anotacoes: React.FC<Props> = ({ aula, previa, posicaoVideo, onIrPara }) =>
   const excluir = async (id: string) => {
     if (!window.confirm('Excluir esta anotação?')) return;
     try {
-      await avaAlunoApi.excluirAnotacao(id);
+      await api.excluirAnotacao(id);
       setLista((l) => l.filter((x) => x.id !== id));
     } catch (e) {
       setErro(mensagemErro(e));
@@ -180,7 +181,7 @@ export const AbasAula: React.FC<Props> = (props) => {
             ) : (
               <p className="text-sm text-slate-500">Sem descrição para esta aula.</p>
             )}
-            {aula.tipo === 'conteudo' && <Estrelas key={aula.id} aulaId={aula.id} inicial={aula.minha_nota} desabilitado={previa} />}
+            {aula.tipo === 'conteudo' && <Estrelas key={aula.id} api={props.api} aulaId={aula.id} inicial={aula.minha_nota} desabilitado={previa} />}
           </div>
         )}
         {aba === 'materiais' &&
