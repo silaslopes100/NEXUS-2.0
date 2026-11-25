@@ -192,22 +192,58 @@ class AvaliacoesService:
         )
 
     def iniciar(self, avaliacao_id: str, usuario_id: str) -> TentativaOut:
+        """Prova online do aluno de Polo/Escola (exige licença ativa da disciplina)."""
         aluno = self._aluno(usuario_id)
-        avaliacao = self.repo.get_avaliacao(avaliacao_id)
-        if not avaliacao or not avaliacao.get("ativo"):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Avaliação não disponível")
+        avaliacao = self._avaliacao_ativa(avaliacao_id)
         if aluno.get("modalidade") == "ead":
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Alunos EAD realizam as avaliações pelo AVA")
         licenca = self.repo.get_licenca_ativa(aluno["id"], str(avaliacao["disciplina_id"]))
         if not licenca:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Você não tem licença ativa para esta disciplina")
+        return self._abrir_tentativa(avaliacao, aluno, "prova_licenca", licenca.get("id"))
+
+    def iniciar_ava(self, avaliacao_id: str, usuario_id: str) -> TentativaOut:
+        """Avaliação dentro do AVA (aluno EAD). A liberação da disciplina é validada pelo módulo AVA."""
+        aluno = self._aluno(usuario_id)
+        if aluno.get("modalidade") != "ead":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="A Sala de Aula Virtual é exclusiva para alunos EAD.")
+        return self._abrir_tentativa(self._avaliacao_ativa(avaliacao_id), aluno, "ava", None)
+
+    def estado_ava(self, avaliacao_id: str, aluno_id: str) -> Optional[Dict[str, Any]]:
+        """Situação do aluno numa avaliação (para a aula do tipo avaliação no AVA)."""
+        avaliacao = self.repo.get_avaliacao(avaliacao_id)
+        if not avaliacao:
+            return None
+        e = self._estado(avaliacao, aluno_id)
+        minima = float(avaliacao.get("nota_minima") or 6)
+        aprovado = e["melhor"] is not None and e["melhor"] >= minima
+        ativa = bool(avaliacao.get("ativo"))
+        return {
+            "avaliacao_id": avaliacao["id"], "titulo": avaliacao["titulo"], "instrucoes": avaliacao.get("instrucoes"),
+            "ativa": ativa, "tempo_limite_min": avaliacao.get("tempo_limite_min"),
+            "total_questoes": len(avaliacao.get("questoes") or []), "tentativas_max": e["maximo"],
+            "tentativas_usadas": len(e["finalizadas"]), "tentativas_restantes": e["restantes"],
+            "melhor_nota": e["melhor"], "nota_minima": minima, "aprovado": aprovado,
+            "tentativa_aberta_id": e["aberta"]["id"] if e["aberta"] else None,
+            "pode_realizar": ativa and (bool(e["aberta"]) or (e["restantes"] > 0 and not aprovado)),
+        }
+
+    def _avaliacao_ativa(self, avaliacao_id: str) -> Dict[str, Any]:
+        avaliacao = self.repo.get_avaliacao(avaliacao_id)
+        if not avaliacao or not avaliacao.get("ativo"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Avaliação não disponível")
+        return avaliacao
+
+    def _abrir_tentativa(self, avaliacao: Dict[str, Any], aluno: Dict[str, Any], contexto: str,
+                         licenca_id: Optional[str]) -> TentativaOut:
+        """Retoma a tentativa aberta ou cria uma nova (respeitando aprovação e limite de tentativas)."""
         e = self._estado(avaliacao, aluno["id"])
         if e["aberta"]:
             aberta = e["aberta"]
             expira = _como_dt(aberta.get("expira_em"))
             if expira and expira <= _agora():
                 self._fechar(avaliacao, aberta, aluno["id"], "expirada")
-                return self.iniciar(avaliacao_id, usuario_id)
+                return self._abrir_tentativa(avaliacao, aluno, contexto, licenca_id)
             return self._tentativa_out(avaliacao, aberta)
         if e["melhor"] is not None and e["melhor"] >= float(avaliacao.get("nota_minima") or 6):
             raise HTTPException(status.HTTP_409_CONFLICT, detail="Você já foi aprovado nesta avaliação")
@@ -218,8 +254,8 @@ class AvaliacoesService:
             random.SystemRandom().shuffle(ordem)
         tempo = avaliacao.get("tempo_limite_min")
         tid = self.repo.criar_tentativa({
-            "avaliacao_id": avaliacao["id"], "aluno_id": aluno["id"], "licenca_id": licenca.get("id"),
-            "contexto": "prova_licenca", "ordem_questoes": ordem,
+            "avaliacao_id": avaliacao["id"], "aluno_id": aluno["id"], "licenca_id": licenca_id,
+            "contexto": contexto, "ordem_questoes": ordem,
             "expira_em": _agora() + timedelta(minutes=int(tempo)) if tempo else None,
         })
         return self._tentativa_out(avaliacao, self.repo.get_tentativa(tid))

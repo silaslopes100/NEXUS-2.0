@@ -563,7 +563,6 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: Laptop,
           badge: 'Aulas',
           badgeColor: 'emerald',
-          isPlaceholder: true,
           somenteEad: true,
         },
         {

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  Eye,
   ImagePlus,
   Layers,
   ListOrdered,
@@ -36,6 +37,7 @@ const Interruptor: React.FC<{ ligado: boolean; onChange: (v: boolean) => void; r
 /** Montagem do conteúdo EAD de uma disciplina: Capítulos >> Aulas >> Conteúdos. */
 export const AvaDisciplinaEditorPage: React.FC = () => {
   const { disciplinaId = '' } = useParams();
+  const navigate = useNavigate();
   const [estrutura, setEstrutura] = useState<Estrutura | null>(null);
   const [capitulos, setCapitulos] = useState<Capitulo[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -201,7 +203,11 @@ export const AvaDisciplinaEditorPage: React.FC = () => {
             <span className={`self-start rounded-full px-3 py-1 text-xs font-bold md:self-end ${config.publicado ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-300'}`}>
               {config.publicado ? 'Publicado para os alunos' : 'Rascunho'}
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => navigate(`/admin/ava/disciplinas/${disciplinaId}/previa`)}
+                disabled={totalAulas === 0} className={botaoSecundario} title="Ver como o aluno verá (inclui rascunhos)">
+                <Eye size={15} /> Pré-visualizar
+              </button>
               <button type="button" onClick={() => setMostrarConfig((v) => !v)} className={botaoSecundario}>
                 <Settings2 size={15} /> Configurações
               </button>

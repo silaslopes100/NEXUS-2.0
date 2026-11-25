@@ -38,3 +38,10 @@ async def require_aluno_ead(user: UserResponse = Depends(get_current_user)) -> D
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             detail="Sua matrícula precisa ser regularizada para acessar a Sala de Aula Virtual.")
     return {"user": user, "aluno": aluno}
+
+
+async def require_ava_leitura(user: UserResponse = Depends(get_current_user)) -> Dict[str, Any]:
+    """Aluno EAD, ou admin em pré-visualização (``previa=True``: sem travas e sem gravar progresso)."""
+    if perfil_do_usuario(user) == "admin":
+        return {"user": user, "aluno": None, "previa": True}
+    return await require_aluno_ead(user)

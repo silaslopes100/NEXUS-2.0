@@ -7,6 +7,8 @@ import { RequireRole } from '@/components/guards/RequireRole';
 import { RequireAlunoEad } from '@/components/guards/RequireAlunoEad';
 import { AvaConteudoPage } from '@/features/ava/pages/admin/AvaConteudoPage';
 import { AvaDisciplinaEditorPage } from '@/features/ava/pages/admin/AvaDisciplinaEditorPage';
+import { AvaHomePage } from '@/features/ava/pages/aluno/AvaHomePage';
+import { AvaDisciplinaPage } from '@/features/ava/pages/aluno/AvaDisciplinaPage';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AdminDashboardPage } from '@/pages/dashboard/AdminDashboardPage';
 import { PoloDashboardPage } from '@/pages/dashboard/PoloDashboardPage';
@@ -107,6 +109,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/ead" element={<Navigate to="/admin/ava" replace />} />
           <Route path="/admin/ava" element={<AvaConteudoPage />} />
           <Route path="/admin/ava/disciplinas/:disciplinaId" element={<AvaDisciplinaEditorPage />} />
+          <Route path="/admin/ava/disciplinas/:disciplinaId/previa" element={<AvaDisciplinaPage previa />} />
+          <Route path="/admin/ava/disciplinas/:disciplinaId/previa/aulas/:aulaId" element={<AvaDisciplinaPage previa />} />
           <Route path="/admin/presencas" element={<PresencasPage />} />
           <Route path="/admin/licencas" element={<LicencasPage />} />
           <Route path="/admin/cupons" element={<ModulePlaceholderPage />} />
@@ -197,7 +201,9 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/estagio" element={<CentralEstagioAlunoPage />} />
           </Route>
           <Route element={<RequireAlunoEad />}>
-            <Route path="/aluno/ava" element={<ModulePlaceholderPage />} />
+            <Route path="/aluno/ava" element={<AvaHomePage />} />
+            <Route path="/aluno/ava/disciplinas/:disciplinaId" element={<AvaDisciplinaPage />} />
+            <Route path="/aluno/ava/disciplinas/:disciplinaId/aulas/:aulaId" element={<AvaDisciplinaPage />} />
           </Route>
           <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />
           <Route path="/aluno/livros" element={<ModulePlaceholderPage />} />
