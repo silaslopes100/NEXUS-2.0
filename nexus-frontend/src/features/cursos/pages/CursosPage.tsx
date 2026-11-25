@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Calendario, cargaHorariaApi } from '@/features/carga_horaria/api';
 import {
   AlertCircle,
   BookOpen,
@@ -46,9 +47,9 @@ const initialForm: CursoForm = {
   descricao: '',
   nivel_academico: 'bacharelado',
   modalidade: 'hibrido',
-  carga_horaria_total: 1,
   semestres: 1,
   status: 'ativo',
+  calendario_id: '',
   disciplina_ids: [],
 };
 
@@ -79,6 +80,7 @@ export const CursosPage: React.FC = () => {
   const [disciplinasLoading, setDisciplinasLoading] = useState(false);
   const [disciplinasError, setDisciplinasError] = useState('');
   const [buscaDisciplina, setBuscaDisciplina] = useState('');
+  const [calendarios, setCalendarios] = useState<Calendario[]>([]);
   const [formError, setFormError] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
@@ -204,6 +206,20 @@ export const CursosPage: React.FC = () => {
     setIsFormOpen(true);
   };
 
+  useEffect(() => {
+    if (!isFormOpen) return;
+    cargaHorariaApi.listarCalendarios().then(setCalendarios).catch(() => setCalendarios([]));
+  }, [isFormOpen]);
+
+  // RN02: prévia da carga do curso = soma das disciplinas ativas selecionadas.
+  const cargaSelecionada = useMemo(() => {
+    const marcadas = disciplinasDisponiveis.filter((d) => form.disciplina_ids.includes(d.id) && d.ativo !== false);
+    return {
+      carga: marcadas.reduce((soma, d) => soma + (d.carga_horaria || 0), 0),
+      aulas: marcadas.reduce((soma, d) => soma + (d.qtd_aulas_prevista || 0), 0),
+    };
+  }, [disciplinasDisponiveis, form.disciplina_ids]);
+
   const abrirEdicao = (curso: Curso) => {
     setEditing(curso);
     setForm({
@@ -211,8 +227,8 @@ export const CursosPage: React.FC = () => {
       descricao: curso.descricao ?? '',
       nivel_academico: curso.nivel_academico ?? '',
       modalidade: curso.modalidade ?? 'hibrido',
-      carga_horaria_total: curso.carga_horaria_total ?? 0,
       semestres: curso.semestres ?? 3,
+      calendario_id: curso.calendario_id ?? '',
       status: curso.status ?? 'ativo',
       disciplina_ids: [],
     });
@@ -588,19 +604,30 @@ export const CursosPage: React.FC = () => {
               </label>
 
               <label className="space-y-1.5 text-sm text-slate-300">
-                <span>Carga horária total *</span>
-                <input
+                <span>Calendário Acadêmico *</span>
+                <select
                   required
-                  type="number"
-                  min={1}
-                  step={1}
                   className={inputClass}
-                  value={form.carga_horaria_total || ''}
-                  onChange={(event) =>
-                    setForm({ ...form, carga_horaria_total: Number(event.target.value) })
-                  }
-                />
+                  value={form.calendario_id}
+                  onChange={(event) => setForm({ ...form, calendario_id: event.target.value })}
+                >
+                  <option value="">Selecione</option>
+                  {calendarios.map((c) => (
+                    <option key={c.id} value={c.id} disabled={!c.ativo && c.id !== form.calendario_id}>
+                      {c.nome}{c.ativo ? '' : ' (inativo)'}
+                    </option>
+                  ))}
+                </select>
+                <span className="block text-xs text-slate-500">O curso segue as datas e regras deste calendário.</span>
               </label>
+
+              <div className="space-y-1.5 text-sm text-slate-300">
+                <span>Carga horária total</span>
+                <p className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-white">
+                  {cargaSelecionada.carga} h · {cargaSelecionada.aulas} aula(s) previstas
+                </p>
+                <span className="block text-xs text-slate-500">Soma das disciplinas ativas (calculada automaticamente).</span>
+              </div>
 
               <label className="space-y-1.5 text-sm text-slate-300">
                 <span>Semestres *</span>

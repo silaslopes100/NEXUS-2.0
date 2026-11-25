@@ -547,6 +547,12 @@ async def get_detalhes_curso(
 
 def _dados_turma(user: UserResponse, dados: TurmaWriteSchema) -> Dict[str, Any]:
     _validar_periodo(dados.data_inicio, dados.data_fim, "data_fim anterior a data_inicio")
+    if dados.curso_id and (not dados.data_inicio or not dados.data_fim):
+        # RN05: o cronograma de aulas previstas sai do período da turma.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Turma com curso precisa de data de início e de término.",
+        )
     polo_id, escola_id = _resolver_vinculo(user, dados)
     return {
         "curso_id": _texto(dados.curso_id),
@@ -568,6 +574,31 @@ def _validar_referencias_turma(cur: Any, valores: Dict[str, Any]) -> None:
             ("calendarios_oficiais", valores["calendario_oficial_id"], "Calendário não encontrado"),
         ],
     )
+    _validar_vigencia_calendario(cur, valores)
+
+
+def _validar_vigencia_calendario(cur: Any, valores: Dict[str, Any]) -> None:
+    """O curso segue o Calendário Acadêmico: o período da turma precisa caber na vigência dele."""
+    if not valores.get("curso_id"):
+        return
+    cur.execute(
+        """
+        SELECT ca.nome, ca.data_inicio, ca.data_fim
+          FROM cursos c JOIN calendarios_academicos ca ON ca.id = c.calendario_id
+         WHERE c.id = %s
+        """,
+        (valores["curso_id"],),
+    )
+    cal = cur.fetchone()
+    if not cal:
+        return
+    inicio, fim = valores.get("data_inicio"), valores.get("data_fim")
+    if (inicio and inicio < cal["data_inicio"]) or (fim and fim > cal["data_fim"]):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"O período da turma precisa estar dentro da vigência do calendário \"{cal['nome']}\" "
+                   f"({cal['data_inicio']:%d/%m/%Y} a {cal['data_fim']:%d/%m/%Y}).",
+        )
 
 
 @router.post(

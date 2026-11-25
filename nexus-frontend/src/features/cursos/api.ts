@@ -18,9 +18,13 @@ export interface Curso {
   descricao?: string | null;
   nivel_academico?: NivelAcademico | null;
   modalidade?: ModalidadeCurso | null;
+  /** RN02: soma das disciplinas ativas (calculada pelo sistema). */
   carga_horaria_total?: number | null;
+  aulas_previstas_total?: number | null;
   semestres?: number | null;
   status?: StatusCurso | null;
+  /** Calendário Acadêmico que o curso segue obrigatoriamente. */
+  calendario_id?: string | null;
 }
 
 export interface CursosPagina {
@@ -35,9 +39,9 @@ export interface CursoCreate {
   descricao: string;
   nivel_academico: NivelAcademico;
   modalidade: ModalidadeCurso;
-  carga_horaria_total: number;
   semestres: number;
   status: StatusCurso;
+  calendario_id: string;
   disciplina_ids: string[];
 }
 

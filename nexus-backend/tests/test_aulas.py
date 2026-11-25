@@ -11,6 +11,7 @@ from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.aulas.repository import InMemoryAulasRepository, hoje, set_aulas_repository
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
+from app.modules.carga_horaria.repository import InMemoryCargaHorariaRepository, set_carga_horaria_repository
 
 _PERFIS = {
     "p-admin": {"id": "p-admin", "nome": "admin", "descricao": "Administrador"},
@@ -64,8 +65,12 @@ def repo():
     ]
     aulas.polos_ativos = {"polo-1": "Polo Central", "polo-2": "Polo Norte"}
     set_aulas_repository(aulas)
+    # Carga horária em memória, lendo atas e presenças deste mesmo repositório de aulas.
+    aulas.carga = InMemoryCargaHorariaRepository(aulas_repo=aulas)
+    set_carga_horaria_repository(aulas.carga)
     yield aulas
     set_aulas_repository(None)
+    set_carga_horaria_repository(None)
 
 
 @pytest_asyncio.fixture

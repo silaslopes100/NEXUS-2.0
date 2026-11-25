@@ -19,6 +19,12 @@ from app.modules.financeiro.schemas import FiltrosPeriodo
 
 # Saídas de licença para alunos (consumo do estoque).
 TIPOS_CONSUMO_LICENCA = ("venda_aluno", "reingresso_churn")
+# RN07: chamadas de aulas Extra/Reforço/Complemento/Revisão não entram na frequência.
+PRESENCA_CONTA = """NOT EXISTS (
+                    SELECT 1 FROM aulas_ministradas am
+                     WHERE am.professor_disciplina_id = pr.professor_disciplina_id
+                       AND am.data_aula = pr.data_aula AND am.numero_aula = pr.numero_aula
+                       AND am.tipo NOT IN ('prevista', 'reposicao'))"""
 # Mesmos predicados da tela de Vendas (financeiro/repository.kpis_vendas), para os números baterem.
 PEDIDO_PAGO = "p.pago_em IS NOT NULL AND p.status <> 'cancelado'"
 ORDENACOES_RANKING = ("novas_licencas", "receita_paga", "alunos_ativos", "presenca_pct")
@@ -71,10 +77,11 @@ class PostgresDashboardMixin:
                 (SELECT COUNT(*) FROM alunos_desistentes d JOIN alunos a ON a.id = d.aluno_id
                   WHERE d.data_marcacao >= %s AND d.data_marcacao < %s::date + 1{ua}) AS desistencias,
                 (SELECT COUNT(*) FROM presencas pr JOIN alunos a ON a.id = pr.aluno_id
-                  WHERE COALESCE(pr.data_aula, pr.criado_em::date) BETWEEN %s AND %s{ua}) AS presencas_total,
+                  WHERE COALESCE(pr.data_aula, pr.criado_em::date) BETWEEN %s AND %s{ua}
+                    AND {PRESENCA_CONTA}) AS presencas_total,
                 (SELECT COUNT(*) FROM presencas pr JOIN alunos a ON a.id = pr.aluno_id
-                  WHERE pr.presente AND COALESCE(pr.data_aula, pr.criado_em::date) BETWEEN %s AND %s{ua})
-                  AS presencas_positivas,
+                  WHERE pr.presente AND COALESCE(pr.data_aula, pr.criado_em::date) BETWEEN %s AND %s{ua}
+                    AND {PRESENCA_CONTA}) AS presencas_positivas,
                 (SELECT COUNT(*) FROM certificados ce LEFT JOIN alunos a ON a.id = ce.aluno_id
                   WHERE ce.emitido_em >= %s AND ce.emitido_em < %s::date + 1{ua}) AS certificados,
                 (SELECT COALESCE(SUM(lm.quantidade), 0) FROM licencas_movimentacoes lm
@@ -108,7 +115,17 @@ class PostgresDashboardMixin:
                   WHERE pg.status = 'vencido' AND p.status = 'aguardando_pagamento') AS cobrancas_vencidas_qtd,
                 (SELECT COALESCE(SUM(pg.valor), 0) FROM pagamentos pg JOIN pedidos p ON p.id = pg.pedido_id
                   WHERE pg.status = 'vencido' AND p.status = 'aguardando_pagamento') AS cobrancas_vencidas_valor,
-                (SELECT COUNT(*) FROM estagio_submissoes WHERE status = 'em_analise') AS estagios_em_analise
+                (SELECT COUNT(*) FROM estagio_submissoes WHERE status = 'em_analise') AS estagios_em_analise,
+                (SELECT COUNT(*) FROM (
+                    SELECT ap.turma_id
+                      FROM aulas_previstas ap
+                      JOIN turmas t ON t.id = ap.turma_id AND t.concluida_em IS NULL
+                      LEFT JOIN aulas_ministradas ata
+                        ON ata.aula_prevista_id = ap.id AND ata.tipo IN ('prevista', 'reposicao')
+                     WHERE ap.data_prevista <= CURRENT_DATE
+                     GROUP BY ap.turma_id
+                    HAVING COUNT(*) FILTER (WHERE ata.id IS NULL) > 0
+                 ) atrasadas) AS turmas_atrasadas
         """
         with get_db_cursor() as cur:
             cur.execute(sql, tuple(ua_p + ul_p))
@@ -171,6 +188,7 @@ class PostgresDashboardMixin:
                       FROM presencas pr JOIN alunos a ON a.id = pr.aluno_id
                      WHERE a.polo_id = po.id
                        AND COALESCE(pr.data_aula, pr.criado_em::date) BETWEEN %s AND %s
+                       AND {PRESENCA_CONTA}
               ) pres ON TRUE
              WHERE po.status = 'ativo'
         """
@@ -297,6 +315,7 @@ class InMemoryDashboardMixin:
             "cobrancas_vencidas_qtd": 0,
             "cobrancas_vencidas_valor": 0.0,
             "estagios_em_analise": 0,
+            "turmas_atrasadas": 0,
         }
         self.ranking_polos_rows: List[Dict[str, Any]] = []
 

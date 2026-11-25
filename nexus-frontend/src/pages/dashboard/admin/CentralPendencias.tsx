@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowLeftRight, CheckCircle2, ChevronRight, FileCheck2, Inbox, Receipt, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, CalendarClock, CheckCircle2, ChevronRight, FileCheck2, Inbox, Receipt, Truck } from 'lucide-react';
 import { formatBRL } from '@/features/financeiro/types';
 import { DashboardExecutivo } from '@/types/admin';
 import { fmtInt } from './formato';
@@ -34,6 +34,10 @@ export const CentralPendencias: React.FC<{ pendencias: DashboardExecutivo['pende
         icone: ArrowLeftRight, to: '/admin/transferencias', dica: 'Aguardando análise',
       },
       {
+        rotulo: 'Turmas atrasadas', valor: pendencias.turmas_atrasadas ?? 0,
+        icone: CalendarClock, to: '/admin/turmas-calendarios', dica: 'Aula prevista sem ata ou reposição',
+      },
+      {
         rotulo: 'Estágios em análise', valor: pendencias.estagios_em_analise,
         icone: FileCheck2, to: '/admin/estagios', dica: 'Comprovantes para avaliar',
       },
@@ -60,7 +64,7 @@ export const CentralPendencias: React.FC<{ pendencias: DashboardExecutivo['pende
       ) : !pendencias ? (
         <p className="text-sm text-slate-500">Carregando...</p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {itens.map((i) => {
             const Icone = i.icone;
             const ativo = i.valor > 0;

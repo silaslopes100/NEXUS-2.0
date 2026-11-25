@@ -71,6 +71,7 @@ class PendenciasBloco(BaseModel):
     cobrancas_vencidas_qtd: int = 0
     cobrancas_vencidas_valor: float = 0.0
     estagios_em_analise: int = 0
+    turmas_atrasadas: int = 0  # RN06: aula prevista até hoje sem ata (nem reposição)
 
 
 class DashboardExecutivoResponse(BaseModel):

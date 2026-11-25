@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.modules.carga_horaria.schemas import AulaPrevistaResponse, TipoAula
+
 
 class AulaCreateRequest(BaseModel):
     professor_disciplina_id: str = Field(min_length=1)
@@ -14,6 +16,11 @@ class AulaCreateRequest(BaseModel):
     conteudo_ministrado: Optional[str] = None
     observacoes: Optional[str] = None
     visivel_aluno: bool = True
+    # RN03: aula prevista do cronograma ou aula não prevista com tipo e justificativa.
+    tipo: TipoAula = "prevista"
+    aula_prevista_id: Optional[str] = None
+    horas: Optional[float] = Field(default=None, gt=0, le=200)
+    justificativa: Optional[str] = Field(default=None, max_length=2000)
 
 
 class AulaUpdateRequest(BaseModel):
@@ -22,6 +29,25 @@ class AulaUpdateRequest(BaseModel):
     conteudo_ministrado: Optional[str] = None
     observacoes: Optional[str] = None
     visivel_aluno: Optional[bool] = None
+    horas: Optional[float] = Field(default=None, gt=0, le=200)
+    justificativa: Optional[str] = Field(default=None, max_length=2000)
+
+
+class AulaTipoUpdateRequest(BaseModel):
+    """RN03.5: troca do tipo depois do registro, só por perfil de coordenação (com auditoria)."""
+    tipo: TipoAula
+    aula_prevista_id: Optional[str] = None
+    justificativa: Optional[str] = Field(default=None, max_length=2000)
+
+
+class AulasPendentesResponse(BaseModel):
+    cronograma_gerado: bool
+    turma_data_inicio: Optional[date] = None
+    turma_data_fim: Optional[date] = None
+    tipos_permitidos: List[TipoAula]
+    pendentes: List[AulaPrevistaResponse] = Field(default_factory=list)
+    # Todas as aulas previstas da disciplina (referência para Reforço/Complemento/Revisão).
+    previstas: List[AulaPrevistaResponse] = Field(default_factory=list)
 
 
 class AulaResumo(BaseModel):
@@ -42,6 +68,11 @@ class AulaResumo(BaseModel):
     conteudo_ministrado: Optional[str] = None
     observacoes: Optional[str] = None
     visivel_aluno: bool = True
+    tipo: str = "prevista"
+    aula_prevista_id: Optional[str] = None
+    aula_prevista_numero: Optional[int] = None
+    horas: Optional[float] = None
+    justificativa: Optional[str] = None
     total_materiais: int = 0
     presentes: int = 0
     total_chamada: int = 0

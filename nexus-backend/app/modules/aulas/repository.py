@@ -5,6 +5,9 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
+from fastapi import HTTPException, status
+from psycopg2.errors import UniqueViolation
+
 from app.core.database import get_db_cursor
 
 # Filtros aceitos por `listar`:
@@ -28,6 +31,8 @@ _SELECT_AULA = """
            TRIM(CONCAT_WS(' ', usuario.nome, usuario.sobrenome)) AS professor_nome,
            aula.data_aula, aula.numero_aula, aula.conteudo_ministrado,
            aula.observacoes, aula.visivel_aluno, aula.criado_em, aula.atualizado_em,
+           aula.tipo, aula.aula_prevista_id::text AS aula_prevista_id, aula.horas, aula.justificativa,
+           (SELECT ap.numero FROM aulas_previstas ap WHERE ap.id = aula.aula_prevista_id) AS aula_prevista_numero,
            (SELECT COUNT(*) FROM professor_materiais material
              WHERE material.aula_id = aula.id) AS total_materiais,
            COALESCE(chamada.presentes, 0) AS presentes,
@@ -189,13 +194,20 @@ class PostgresAulasRepository:
 
     def criar(self, data: Dict[str, Any]) -> str:
         aula_id = str(uuid.uuid4())
+        try:
+            return self._inserir(aula_id, data)
+        except UniqueViolation as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Esta aula prevista já tem ata registrada.") from exc
+
+    def _inserir(self, aula_id: str, data: Dict[str, Any]) -> str:
         with get_db_cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO aulas_ministradas (
                     id, professor_disciplina_id, data_aula, numero_aula, conteudo_ministrado,
-                    observacoes, visivel_aluno, criado_por, criado_em, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                    observacoes, visivel_aluno, criado_por, tipo, aula_prevista_id, horas, justificativa,
+                    criado_em, atualizado_em
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     aula_id,
@@ -206,15 +218,28 @@ class PostgresAulasRepository:
                     data.get("observacoes"),
                     data.get("visivel_aluno", True),
                     data.get("criado_por"),
+                    data.get("tipo") or "prevista",
+                    data.get("aula_prevista_id"),
+                    data.get("horas"),
+                    data.get("justificativa"),
                 ),
             )
         return aula_id
 
     def atualizar(self, aula_id: str, data: Dict[str, Any]) -> None:
-        permitidos = ("data_aula", "numero_aula", "conteudo_ministrado", "observacoes", "visivel_aluno")
+        permitidos = (
+            "data_aula", "numero_aula", "conteudo_ministrado", "observacoes", "visivel_aluno",
+            "tipo", "aula_prevista_id", "horas", "justificativa",
+        )
         campos = [k for k in permitidos if k in data]
         if not campos:
             return
+        try:
+            self._atualizar(aula_id, data, campos)
+        except UniqueViolation as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Esta aula prevista já tem ata registrada.") from exc
+
+    def _atualizar(self, aula_id: str, data: Dict[str, Any], campos: List[str]) -> None:
         with get_db_cursor() as cur:
             # A chamada acompanha a aula se a data ou o número mudarem.
             if "data_aula" in data or "numero_aula" in data:
@@ -514,6 +539,10 @@ class InMemoryAulasRepository:
             "conteudo_ministrado": data.get("conteudo_ministrado"),
             "observacoes": data.get("observacoes"),
             "visivel_aluno": data.get("visivel_aluno", True),
+            "tipo": data.get("tipo") or "prevista",
+            "aula_prevista_id": data.get("aula_prevista_id"),
+            "horas": data.get("horas"),
+            "justificativa": data.get("justificativa"),
             "criado_em": agora,
             "atualizado_em": agora,
         }

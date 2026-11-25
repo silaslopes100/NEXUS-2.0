@@ -49,7 +49,7 @@ const initialForm: DisciplinaForm = {
   nome: '',
   ordem: '0',
   carga_horaria: '40',
-  qtd_aulas_prevista: '10',
+  qtd_aulas_prevista: '2',
   tipo: 'presencial',
   eh_extra_grade: false,
   ativo: true,
@@ -734,10 +734,11 @@ export const DisciplinasPage: React.FC = () => {
                 />
               </label>
               <label className="space-y-1.5 text-sm text-slate-300">
-                <span>Carga horária</span>
+                <span>Carga horária (h) *</span>
                 <input
+                  required
                   type="number"
-                  min={0}
+                  min={1}
                   step={1}
                   className={inputClass}
                   value={form.carga_horaria}
@@ -745,10 +746,11 @@ export const DisciplinasPage: React.FC = () => {
                 />
               </label>
               <label className="space-y-1.5 text-sm text-slate-300">
-                <span>Aulas previstas</span>
+                <span>Aulas previstas *</span>
                 <input
+                  required
                   type="number"
-                  min={0}
+                  min={1}
                   step={1}
                   className={inputClass}
                   value={form.qtd_aulas_prevista}

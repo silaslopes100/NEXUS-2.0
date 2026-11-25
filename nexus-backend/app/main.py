@@ -29,6 +29,7 @@ from app.modules.presencas import router as presencas_router
 from app.modules.professores import router as professores_router
 from app.modules.transferencias import router as transferencias_router
 from app.modules.turmas import router as turmas_router
+from app.modules.carga_horaria.router import router as carga_horaria_router
 
 # Nota: os módulos legados de gestão `alunos` e `licencas` foram absorvidos por
 # `polos_escolas`. O router isolado de perfil self-service do aluno é registrado
@@ -74,6 +75,7 @@ app.include_router(presencas_router)
 app.include_router(aulas_router)
 app.include_router(polos_escolas_router)
 app.include_router(cursos_disciplinas_router)
+app.include_router(carga_horaria_router)
 app.include_router(turmas_router)
 app.include_router(ead_router)
 app.include_router(notas_historico_router)

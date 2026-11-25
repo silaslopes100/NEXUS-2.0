@@ -121,6 +121,7 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
             "descricao": "Formação acadêmica em teologia.",
             "modalidade": "hibrido",
             "carga_horaria_total": 2400,
+            "calendario_id": "00000000-0000-0000-0000-0000000000ca",
             "semestres": 4,
             "status": "ativo",
             "nivel_academico": "bacharelado",
@@ -130,7 +131,9 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
     assert c_res.status_code == 201
     assert c_res.json()["nivel_academico"] == "bacharelado"
     assert c_res.json()["descricao"] == "Formação acadêmica em teologia."
-    assert c_res.json()["carga_horaria_total"] == 2400
+    # RN02: a carga do curso é a soma das disciplinas (o valor enviado é ignorado).
+    assert c_res.json()["carga_horaria_total"] == 0
+    assert c_res.json()["calendario_id"] == "00000000-0000-0000-0000-0000000000ca"
     assert c_res.json()["status"] == "ativo"
     acesso_escrita_negado = await client.post(
         "/cursos-disciplinas/cursos",
@@ -139,6 +142,7 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
             "descricao": "Não deve ser cadastrado pelo Polo.",
             "modalidade": "ead",
             "carga_horaria_total": 100,
+            "calendario_id": "00000000-0000-0000-0000-0000000000ca",
             "semestres": 2,
             "status": "ativo",
             "nivel_academico": "bacharelado",
@@ -153,6 +157,7 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
             "descricao": "Descrição",
             "modalidade": "ead",
             "carga_horaria_total": 100,
+            "calendario_id": "00000000-0000-0000-0000-0000000000ca",
             "semestres": 2,
             "status": "ativo",
             "nivel_academico": "doutorado",
@@ -198,6 +203,7 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
             "descricao": "Curso com matriz vinculada",
             "modalidade": "hibrido",
             "carga_horaria_total": 120,
+            "calendario_id": "00000000-0000-0000-0000-0000000000ca",
             "semestres": 2,
             "status": "ativo",
             "nivel_academico": "bacharelado",
@@ -238,6 +244,7 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
             "descricao": "Não deve ser salvo",
             "modalidade": "hibrido",
             "carga_horaria_total": 120,
+            "calendario_id": "00000000-0000-0000-0000-0000000000ca",
             "semestres": 2,
             "status": "ativo",
             "nivel_academico": "bacharelado",
@@ -385,7 +392,7 @@ async def test_modulo_cursos_e_disciplinas(client: AsyncClient, monkeypatch):
 
     turma_res = await client.post(
         "/turmas",
-        json={"nome": "Turma do Curso", "curso_id": curso_id},
+        json={"nome": "Turma do Curso", "curso_id": curso_id, "data_inicio": "2026-02-01", "data_fim": "2026-06-30"},
         headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert turma_res.status_code == 201

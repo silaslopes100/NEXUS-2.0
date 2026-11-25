@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit2, GraduationCap, Loader2, Plus, Search, Trash2, Users } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight, Edit2, GraduationCap, Loader2, Plus, Search, Trash2, Users } from 'lucide-react';
 import { alunosApi, apiErrorMessage, EscolaOption } from '@/features/alunos/api';
 import { Curso, cursosApi } from '@/features/cursos/api';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
@@ -7,6 +7,7 @@ import { formatarData, Turma, turmasApi } from '@/features/turmas/api';
 import { CalendariosTab } from '@/features/turmas/components/CalendariosTab';
 import { TurmaAlunosPanel } from '@/features/turmas/components/TurmaAlunosPanel';
 import { TurmaProfessoresPanel } from '@/features/turmas/components/TurmaProfessoresPanel';
+import { TurmaCargaHorariaPanel } from '@/features/carga_horaria/components/TurmaCargaHorariaPanel';
 import { EscolaOpcao, inputCls, TurmaFormModal } from '@/features/turmas/components/TurmaFormModal';
 import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 
@@ -42,6 +43,7 @@ export const TurmasPage: React.FC = () => {
   const [form, setForm] = useState<FormState>({ aberto: false });
   const [turmaAlunos, setTurmaAlunos] = useState<Turma | null>(null);
   const [turmaProfessores, setTurmaProfessores] = useState<Turma | null>(null);
+  const [turmaCarga, setTurmaCarga] = useState<Turma | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
 
@@ -269,6 +271,15 @@ export const TurmasPage: React.FC = () => {
                           <span className="flex justify-end gap-2">
                             <button
                               type="button"
+                              aria-label={`Carga horária de ${turma.nome}`}
+                              onClick={() => setTurmaCarga(turma)}
+                              title="Cronograma, andamento e frequência"
+                              className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800"
+                            >
+                              <CalendarClock size={14} />
+                            </button>
+                            <button
+                              type="button"
                               aria-label={`Professores de ${turma.nome}`}
                               onClick={() => setTurmaProfessores(turma)}
                               title="Gerenciar professores"
@@ -361,6 +372,14 @@ export const TurmasPage: React.FC = () => {
             setTurmaAlunos(null);
             if (houveAlteracao) recarregar();
           }}
+        />
+      )}
+      {turmaCarga && (
+        <TurmaCargaHorariaPanel
+          turma={turmaCarga}
+          podeGerar={isAdmin || isPolo}
+          podeConcluir={isAdmin}
+          onClose={() => setTurmaCarga(null)}
         />
       )}
       {turmaProfessores && (

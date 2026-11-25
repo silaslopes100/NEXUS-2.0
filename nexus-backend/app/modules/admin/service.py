@@ -175,6 +175,7 @@ class AdminService:
                 cobrancas_vencidas_qtd=int(foto.get("cobrancas_vencidas_qtd") or 0),
                 cobrancas_vencidas_valor=round(float(foto.get("cobrancas_vencidas_valor") or 0), 2),
                 estagios_em_analise=int(foto.get("estagios_em_analise") or 0),
+                turmas_atrasadas=int(foto.get("turmas_atrasadas") or 0),
             ),
         )
 

@@ -1,4 +1,5 @@
 import { apiClient } from '@/api/client';
+import { AulaPrevista, TipoAula } from '@/features/carga_horaria/api';
 
 export interface AulaResumo {
   id: string;
@@ -18,6 +19,12 @@ export interface AulaResumo {
   conteudo_ministrado?: string | null;
   observacoes?: string | null;
   visivel_aluno: boolean;
+  /** RN03: tipo da ata e aula prevista que ela cumpre (ou referencia). */
+  tipo?: TipoAula;
+  aula_prevista_id?: string | null;
+  aula_prevista_numero?: number | null;
+  horas?: number | null;
+  justificativa?: string | null;
   total_materiais: number;
   presentes: number;
   total_chamada: number;
@@ -60,9 +67,23 @@ export interface AulaCreatePayload {
   numero_aula: number;
   conteudo_ministrado?: string | null;
   observacoes?: string | null;
+  tipo?: TipoAula;
+  aula_prevista_id?: string | null;
+  horas?: number | null;
+  justificativa?: string | null;
 }
 
-export type AulaUpdatePayload = Partial<Omit<AulaCreatePayload, 'professor_disciplina_id'>>;
+export type AulaUpdatePayload = Partial<Omit<AulaCreatePayload, 'professor_disciplina_id' | 'tipo' | 'aula_prevista_id'>>;
+
+/** Aulas previstas pendentes do vínculo e tipos de ata permitidos (RN03). */
+export interface AulasPendentes {
+  cronograma_gerado: boolean;
+  turma_data_inicio?: string | null;
+  turma_data_fim?: string | null;
+  tipos_permitidos: TipoAula[];
+  pendentes: AulaPrevista[];
+  previstas: AulaPrevista[];
+}
 
 export interface OpcaoFiltro {
   id: string;
@@ -141,6 +162,17 @@ export const aulasApi = {
   },
   excluir: async (id: string): Promise<void> => {
     await apiClient.delete(`/aulas/me/${id}`);
+  },
+  pendentes: async (vinculoId: string): Promise<AulasPendentes> => {
+    const { data } = await apiClient.get<AulasPendentes>('/aulas/me/pendentes', { params: { vinculo_id: vinculoId } });
+    return data;
+  },
+  alterarTipo: async (
+    id: string,
+    payload: { tipo: TipoAula; aula_prevista_id?: string | null; justificativa?: string | null },
+  ): Promise<AulaDetalhe> => {
+    const { data } = await apiClient.patch<AulaDetalhe>(`/aulas/${id}/tipo`, payload);
+    return data;
   },
   excluirMaterial: async (aulaId: string, materialId: string): Promise<void> => {
     await apiClient.delete(`/aulas/me/${aulaId}/materiais/${materialId}`);

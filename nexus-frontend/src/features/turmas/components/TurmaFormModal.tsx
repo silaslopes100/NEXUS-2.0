@@ -86,6 +86,11 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
       setErro('A data de fim não pode ser anterior à data de início.');
       return;
     }
+    if (form.curso_id && (!form.data_inicio || !form.data_fim)) {
+      // RN05: o cronograma de aulas previstas sai do período da turma.
+      setErro('Turma com curso precisa de data de início e de término.');
+      return;
+    }
     const payload: TurmaInput = {
       nome: form.nome.trim(),
       curso_id: form.curso_id || null,
@@ -200,9 +205,10 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
           )}
 
           <label className="space-y-1.5 text-sm text-slate-300">
-            <span>Início</span>
+            <span>Início{form.curso_id ? ' *' : ''}</span>
             <input
               type="date"
+              required={Boolean(form.curso_id)}
               className={inputCls}
               value={form.data_inicio}
               onChange={(e) => atualizar('data_inicio', e.target.value)}
@@ -210,9 +216,10 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
           </label>
 
           <label className="space-y-1.5 text-sm text-slate-300">
-            <span>Fim</span>
+            <span>Fim{form.curso_id ? ' *' : ''}</span>
             <input
               type="date"
+              required={Boolean(form.curso_id)}
               className={inputCls}
               min={form.data_inicio || undefined}
               value={form.data_fim}

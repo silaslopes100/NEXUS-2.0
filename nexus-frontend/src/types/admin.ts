@@ -264,6 +264,7 @@ export interface DashboardExecutivo {
     cobrancas_vencidas_qtd: number;
     cobrancas_vencidas_valor: number;
     estagios_em_analise: number;
+    turmas_atrasadas: number;
   };
 }
 

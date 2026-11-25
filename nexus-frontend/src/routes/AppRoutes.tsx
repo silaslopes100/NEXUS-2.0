@@ -23,6 +23,7 @@ import { LicencasEscolaPage } from '@/features/licencas/pages/LicencasEscolaPage
 import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
 import { PerfilAlunoPage } from '@/features/alunos/pages/PerfilAlunoPage';
 import { TurmasPage } from '@/features/turmas/pages/TurmasPage';
+import { CalendariosPage } from '@/features/carga_horaria/pages/CalendariosPage';
 import { ProfessoresPage } from '@/features/professores/pages/ProfessoresPage';
 import { MinhasDisciplinasPage as MinhasDisciplinasProfessorPage } from '@/features/professores/pages/MinhasDisciplinasPage';
 import { MinhasConteudosPage as MinhasConteudosProfessorPage } from '@/features/professores/pages/MinhasConteudosPage';
@@ -98,6 +99,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/disciplinas" element={<DisciplinasPage />} />
           <Route path="/admin/aulas" element={<AulasAuditoriaPage />} />
           <Route path="/admin/turmas-calendarios" element={<TurmasPage />} />
+          <Route path="/admin/calendarios" element={<CalendariosPage />} />
           <Route path="/admin/alunos" element={<AlunosPage />} />
           <Route path="/admin/ead" element={<ModulePlaceholderPage />} />
           <Route path="/admin/presencas" element={<PresencasPage />} />

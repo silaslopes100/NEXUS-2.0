@@ -279,6 +279,14 @@ class ProfessoresService:
                 status.HTTP_400_BAD_REQUEST,
                 detail="A disciplina selecionada não pertence ao curso da turma.",
             )
+        carga = self.repo.get_disciplina_carga(disciplina_id) or {}
+        if not (carga.get("carga_horaria") or 0) > 0 or not (carga.get("qtd_aulas_prevista") or 0) > 0:
+            # RN01: sem carga horária e quantidade de aulas previstas, a disciplina não entra na turma.
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Defina a carga horária e a quantidade de aulas previstas da disciplina "
+                       "antes de vinculá-la a uma turma.",
+            )
 
         scope_column, scope_id = self._escopo_vinculo(current_user)
         vinculo_id, resultado = self.repo.create_or_reactivate_vinculo_turma(

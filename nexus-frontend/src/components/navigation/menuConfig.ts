@@ -110,6 +110,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           icon: ClipboardList,
         },
         {
+          title: 'Calendários Acadêmicos',
+          path: '/admin/calendarios',
+          icon: CalendarDays,
+        },
+        {
           title: 'Turmas & Calendários',
           path: '/admin/turmas-calendarios',
           icon: CalendarDays,

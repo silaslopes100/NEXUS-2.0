@@ -20,7 +20,9 @@ import { apiErrorMessage, professoresApi } from '@/features/professores/api';
 import { AlunoChamada, presencasApi, PresencaVinculo } from '@/features/presencas/api';
 import { ConteudoMaterialForm } from '@/features/professores/components/ConteudoMaterialForm';
 import { formatarData } from '@/features/turmas/api';
-import { AulaDetalhe, AulaResumo, aulasApi, dataLocalHoje } from '@/features/aulas/api';
+import { AulaDetalhe, AulaResumo, AulasPendentes, aulasApi, dataLocalHoje } from '@/features/aulas/api';
+import { ROTULO_TIPO_AULA, TIPOS_QUE_ABATEM, TipoAula, fmtHoras } from '@/features/carga_horaria/api';
+import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 import { MaterialItem, SeloAta, SeloPresenca } from '@/features/aulas/components/AulaComponentes';
 
 const PAGE_SIZE = 20;
@@ -349,6 +351,16 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
   const [numeroAula, setNumeroAula] = useState(1);
   const [ata, setAta] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  // RN03: tipo da ata, aula prevista que ela cumpre/referencia, horas e justificativa.
+  const [tipo, setTipo] = useState<TipoAula>('prevista');
+  const [aulaPrevistaId, setAulaPrevistaId] = useState('');
+  const [horas, setHoras] = useState('');
+  const [justificativa, setJustificativa] = useState('');
+  const [infoPendentes, setInfoPendentes] = useState<AulasPendentes | null>(null);
+  const [novoTipo, setNovoTipo] = useState<TipoAula | ''>('');
+  const { user, perfil } = useAuthStore();
+  const papel = normalizeUserRole(perfil?.nome ?? user?.perfil?.nome);
+  const podeAlterarTipo = papel === 'admin' || papel === 'polo';
   const [salvandoAta, setSalvandoAta] = useState(false);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
@@ -364,6 +376,42 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
     setNumeroAula(detalhe.numero_aula);
     setAta(detalhe.conteudo_ministrado || '');
     setObservacoes(detalhe.observacoes || '');
+    setTipo(detalhe.tipo || 'prevista');
+    setAulaPrevistaId(detalhe.aula_prevista_id || '');
+    setHoras(detalhe.horas != null ? String(detalhe.horas) : '');
+    setJustificativa(detalhe.justificativa || '');
+  };
+
+  // Aulas previstas pendentes do vínculo (e tipos permitidos) para uma aula nova.
+  useEffect(() => {
+    if (aulaId || !vinculoId) return;
+    let ativo = true;
+    aulasApi
+      .pendentes(vinculoId)
+      .then((info) => {
+        if (!ativo) return;
+        setInfoPendentes(info);
+        setTipo((atual) => (info.tipos_permitidos.includes(atual) ? atual : info.tipos_permitidos[0]));
+        setAulaPrevistaId('');
+      })
+      .catch(() => ativo && setInfoPendentes(null));
+    return () => { ativo = false; };
+  }, [aulaId, vinculoId]);
+
+  const abateHoras = TIPOS_QUE_ABATEM.includes(tipo);
+  const comCronograma = Boolean(infoPendentes?.cronograma_gerado);
+  const opcoesReferencia = infoPendentes
+    ? abateHoras ? infoPendentes.pendentes : infoPendentes.previstas
+    : [];
+
+  const escolherAulaPrevista = (id: string) => {
+    setAulaPrevistaId(id);
+    const ref = infoPendentes?.previstas.find((a) => a.id === id);
+    if (ref && abateHoras) {
+      setNumeroAula(ref.numero);
+      setHoras(String(ref.horas_previstas));
+      if (tipo === 'prevista') setDataAula(ref.data_prevista.slice(0, 10));
+    }
   };
 
   const recarregar = useCallback(async (id: string) => {
@@ -387,11 +435,17 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
     event.preventDefault();
     setErro('');
     setAviso('');
+    if (!aula && !abateHoras && !justificativa.trim()) {
+      setErro('Informe a justificativa da aula não prevista.');
+      return;
+    }
     const dados = {
       data_aula: dataAula,
       numero_aula: numeroAula,
       conteudo_ministrado: ata,
       observacoes,
+      horas: horas ? Number(horas) : null,
+      justificativa: justificativa.trim() || null,
     };
 
     if (aula) {
@@ -416,7 +470,12 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
     setSalvandoAta(true);
     let criada: AulaDetalhe;
     try {
-      criada = await aulasApi.registrar({ ...dados, professor_disciplina_id: vinculoId });
+      criada = await aulasApi.registrar({
+        ...dados,
+        professor_disciplina_id: vinculoId,
+        tipo,
+        aula_prevista_id: aulaPrevistaId || null,
+      });
     } catch (error) {
       setErro(apiErrorMessage(error, 'Não foi possível registrar a aula.'));
       setSalvandoAta(false);
@@ -455,6 +514,23 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
       setErro(`Aula registrada, mas alguns itens não foram salvos. Refaça-os abaixo: ${falhas.join('; ')}.`);
     } else {
       setAviso('Aula registrada com a ata, os anexos e a chamada.');
+    }
+  };
+
+  const alterarTipo = async () => {
+    if (!aula || !novoTipo) return;
+    setErro('');
+    setAviso('');
+    try {
+      aplicar(await aulasApi.alterarTipo(aula.id, {
+        tipo: novoTipo,
+        aula_prevista_id: aulaPrevistaId || aula.aula_prevista_id || null,
+        justificativa: justificativa.trim() || null,
+      }));
+      setNovoTipo('');
+      setAviso('Tipo da aula alterado (registrado na auditoria).');
+    } catch (error) {
+      setErro(apiErrorMessage(error, 'Não foi possível alterar o tipo da aula.'));
     }
   };
 
@@ -551,10 +627,77 @@ const AulaEditor: React.FC<AulaEditorProps> = ({ aulaId, vinculos, vinculoInicia
                     value={numeroAula}
                     onChange={(e) => setNumeroAula(Math.max(1, Number(e.target.value) || 1))}
                     required
+                    disabled={!aula && comCronograma && abateHoras}
+                    title={!aula && comCronograma && abateHoras ? 'Definido pela aula prevista' : undefined}
                     className={campo}
                   />
                 </label>
               </div>
+
+              {aula ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <span className="rounded-md bg-slate-800 px-2 py-1 font-semibold text-slate-200">{ROTULO_TIPO_AULA[aula.tipo || 'prevista']}</span>
+                  {aula.aula_prevista_numero != null && <span>Aula prevista nº {aula.aula_prevista_numero}</span>}
+                  {aula.horas != null && <span>· {fmtHoras(aula.horas)}</span>}
+                  {podeAlterarTipo && (
+                    <span className="ml-auto flex items-center gap-2">
+                      <select aria-label="Novo tipo" value={novoTipo} onChange={(e) => setNovoTipo(e.target.value as TipoAula | '')} className={campo}>
+                        <option value="">Alterar tipo…</option>
+                        {(Object.keys(ROTULO_TIPO_AULA) as TipoAula[]).filter((t) => t !== aula.tipo).map((t) => (
+                          <option key={t} value={t}>{ROTULO_TIPO_AULA[t]}</option>
+                        ))}
+                      </select>
+                      <button type="button" disabled={!novoTipo} onClick={() => void alterarTipo()} className="rounded-lg border border-slate-700 px-3 py-1.5 font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-40">Aplicar</button>
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  {infoPendentes && !comCronograma && (
+                    <p className="text-xs text-amber-300">Turma sem cronograma gerado: esta ata fica registrada, mas não abate horas da disciplina.</p>
+                  )}
+                  {infoPendentes && comCronograma && !infoPendentes.pendentes.length && (
+                    <p className="text-xs text-slate-400">Todas as aulas previstas desta disciplina já foram realizadas: só aulas não previstas podem ser registradas.</p>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)_110px]">
+                    <label className="space-y-1.5 text-sm text-slate-300">
+                      <span>Tipo da aula</span>
+                      <select value={tipo} onChange={(e) => { setTipo(e.target.value as TipoAula); setAulaPrevistaId(''); }} className={campo}>
+                        {(infoPendentes?.tipos_permitidos || ['prevista']).map((t) => (
+                          <option key={t} value={t}>{ROTULO_TIPO_AULA[t]}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {comCronograma && (
+                      <label className="space-y-1.5 text-sm text-slate-300">
+                        <span>{abateHoras ? 'Aula prevista que esta ata cumpre' : `Aula de referência${tipo === 'extra' ? ' (opcional)' : ''}`}</span>
+                        <select value={aulaPrevistaId} onChange={(e) => escolherAulaPrevista(e.target.value)} required={tipo !== 'extra'} className={campo}>
+                          <option value="">Selecione</option>
+                          {opcoesReferencia.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              Aula {a.numero} · {formatarData(a.data_prevista)} · {fmtHoras(a.horas_previstas)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <label className="space-y-1.5 text-sm text-slate-300">
+                      <span>Horas</span>
+                      <input type="number" min={0.5} step={0.5} value={horas} onChange={(e) => setHoras(e.target.value)} required={!abateHoras} className={campo} />
+                    </label>
+                  </div>
+                  {(tipo !== 'prevista') && (
+                    <label className="block space-y-1.5 text-sm text-slate-300">
+                      <span>Justificativa *</span>
+                      <textarea value={justificativa} onChange={(e) => setJustificativa(e.target.value)} rows={2} required className={campo}
+                        placeholder={tipo === 'reposicao' ? 'Por que a aula prevista não aconteceu na data' : 'Motivo da aula fora do cronograma'} />
+                    </label>
+                  )}
+                  {!abateHoras && (
+                    <p className="text-[11px] text-slate-500">Aulas não previstas contam como horas complementares: não abatem o saldo nem entram na frequência.</p>
+                  )}
+                </div>
+              )}
               <label className="block space-y-1.5 text-sm text-slate-300">
                 <span>Conteúdo ministrado</span>
                 <textarea

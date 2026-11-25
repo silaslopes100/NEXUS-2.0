@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from psycopg2.errors import ForeignKeyViolation
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import settings
@@ -35,20 +36,25 @@ class CursoSchema(BaseModel):
     nome: str = Field(min_length=2, max_length=255)
     descricao: Optional[str] = None
     modalidade: str = "hibrido"
+    # RN02: soma das disciplinas ativas (calculada; nunca editada à mão).
     carga_horaria_total: Optional[int] = 0
+    aulas_previstas_total: Optional[int] = 0
     semestres: int = 3
     status: str = "ativo"
     nivel_academico: Optional[NivelAcademico] = None
+    calendario_id: Optional[str] = None
 
 
 class CursoCreateSchema(CursoSchema):
     nome: str = Field(min_length=2, max_length=255)
     descricao: str = Field(min_length=1)
     modalidade: ModalidadeCurso
-    carga_horaria_total: int = Field(gt=0)
+    carga_horaria_total: Optional[int] = None  # ignorado: calculado pelas disciplinas (RN02)
     semestres: int = Field(gt=0)
     status: StatusCurso
     nivel_academico: NivelAcademico
+    # O curso segue obrigatoriamente as regras do Calendário Acadêmico vinculado.
+    calendario_id: uuid.UUID
     disciplina_ids: List[uuid.UUID] = Field(default_factory=list)
 
 
@@ -56,10 +62,11 @@ class CursoUpdateSchema(BaseModel):
     nome: str = Field(min_length=2, max_length=255)
     descricao: str = Field(min_length=1)
     modalidade: ModalidadeCursoEdicao
-    carga_horaria_total: int = Field(gt=0)
+    carga_horaria_total: Optional[int] = None  # ignorado: calculado pelas disciplinas (RN02)
     semestres: int = Field(gt=0)
     status: StatusCursoEdicao
     nivel_academico: NivelAcademico
+    calendario_id: uuid.UUID
     # None mantém os vínculos atuais; uma lista substitui todos os vínculos do curso.
     disciplina_ids: Optional[List[uuid.UUID]] = None
 
@@ -93,8 +100,9 @@ class DisciplinaWriteSchema(BaseModel):
     semestre: Optional[int] = Field(default=1, ge=0)
     nome: str = Field(min_length=1, max_length=255)
     ordem: int = 0
-    carga_horaria: Optional[int] = Field(default=40, ge=0)
-    qtd_aulas_prevista: Optional[int] = Field(default=10, ge=0)
+    # RN01: carga horária (padrão 40 h) e quantidade de aulas previstas, ambas > 0.
+    carga_horaria: int = Field(default=40, gt=0)
+    qtd_aulas_prevista: int = Field(default=2, gt=0)
     tipo: str = Field(default="presencial", min_length=1, max_length=16)
     eh_extra_grade: bool = False
     # Preço do kit da disciplina (1 livro + 1 licença). Com preço, o kit fica à venda na compra por Curso;
@@ -148,22 +156,40 @@ CURSO_COM_VINCULOS_DETAIL = (
 )
 
 
-def _vincular_disciplinas(cur: Any, curso_id: str, disciplina_ids: List[str]) -> None:
+def _totais(disciplinas: List[Dict[str, Any]]) -> Dict[str, int]:
+    """RN02: carga e aulas previstas do curso = soma das disciplinas ativas.
+
+    No banco, o trigger `trg_disciplinas_recalcular_curso` mantém os mesmos totais.
+    """
+    ativas = [d for d in disciplinas if d.get("ativo", True) is not False]
+    return {
+        "carga_horaria_total": sum(int(d.get("carga_horaria") or 0) for d in ativas),
+        "aulas_previstas_total": sum(int(d.get("qtd_aulas_prevista") or 0) for d in ativas),
+    }
+
+
+def _vincular_disciplinas(cur: Any, curso_id: str, disciplina_ids: List[str]) -> List[Dict[str, Any]]:
     cur.execute(
         """
         UPDATE disciplinas
         SET curso_id = %s, atualizado_em = now()
         WHERE id = ANY(%s::uuid[])
-        RETURNING id
+        RETURNING id, carga_horaria, qtd_aulas_prevista, ativo
         """,
         (curso_id, disciplina_ids),
     )
-    updated_ids = {str(row["id"]) for row in cur.fetchall()}
+    linhas = [dict(row) for row in cur.fetchall()]
+    updated_ids = {str(row["id"]) for row in linhas}
     if updated_ids != set(disciplina_ids):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Uma ou mais disciplinas não foram encontradas.",
         )
+    return linhas
+
+
+def _calendario_inexistente() -> HTTPException:
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Calendário Acadêmico não encontrado")
 
 
 @router.get(
@@ -176,8 +202,8 @@ async def list_cursos():
         with get_db_cursor() as cur:
             cur.execute(
                 """
-                SELECT id, nome, descricao, modalidade, carga_horaria_total,
-                       semestres, status, nivel_academico
+                SELECT id, nome, descricao, modalidade, carga_horaria_total, aulas_previstas_total,
+                       semestres, status, nivel_academico, calendario_id::text AS calendario_id
                 FROM cursos
                 ORDER BY nome
                 """
@@ -235,8 +261,8 @@ async def list_cursos_paginados(
 
         cur.execute(
             f"""
-            SELECT id, nome, descricao, modalidade, carga_horaria_total,
-                   semestres, status, nivel_academico
+            SELECT id, nome, descricao, modalidade, carga_horaria_total, aulas_previstas_total,
+                   semestres, status, nivel_academico, calendario_id::text AS calendario_id
             FROM cursos
             {conditions}
             ORDER BY nome, id
@@ -258,6 +284,7 @@ async def create_curso(dados: CursoCreateSchema):
     disciplina_ids = list(dict.fromkeys(str(disciplina_id) for disciplina_id in dados.disciplina_ids))
     c_dict = dados.model_dump(exclude={"disciplina_ids"})
     c_dict["id"] = new_id
+    c_dict["calendario_id"] = str(dados.calendario_id)
     if not settings.PG_DSN:
         missing_ids = [disciplina_id for disciplina_id in disciplina_ids if disciplina_id not in _disciplinas_db]
         if missing_ids:
@@ -265,33 +292,37 @@ async def create_curso(dados: CursoCreateSchema):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Uma ou mais disciplinas não foram encontradas.",
             )
-        _cursos_db[new_id] = c_dict
         for disciplina_id in disciplina_ids:
             _disciplinas_db[disciplina_id]["curso_id"] = new_id
+        c_dict.update(_totais([_disciplinas_db[d] for d in disciplina_ids]))
+        _cursos_db[new_id] = c_dict
         return c_dict
 
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
             INSERT INTO cursos (
                 id, nome, descricao, modalidade, carga_horaria_total, semestres,
-                status, nivel_academico, criado_em, atualizado_em
+                status, nivel_academico, calendario_id, criado_em, atualizado_em
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+            VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s, now(), now())
             """,
-            (
-                new_id,
-                dados.nome,
-                dados.descricao,
-                dados.modalidade,
-                dados.carga_horaria_total,
-                dados.semestres,
-                dados.status,
-                dados.nivel_academico,
-            ),
-        )
-        if disciplina_ids:
-            _vincular_disciplinas(cur, new_id, disciplina_ids)
+                (
+                    new_id,
+                    dados.nome,
+                    dados.descricao,
+                    dados.modalidade,
+                    dados.semestres,
+                    dados.status,
+                    dados.nivel_academico,
+                    str(dados.calendario_id),
+                ),
+            )
+            vinculadas = _vincular_disciplinas(cur, new_id, disciplina_ids) if disciplina_ids else []
+    except ForeignKeyViolation as exc:
+        raise _calendario_inexistente() from exc
+    c_dict.update(_totais(vinculadas))
     return c_dict
 
 
@@ -322,45 +353,52 @@ async def update_curso(curso_id: uuid.UUID, dados: CursoUpdateSchema):
                     disciplina["curso_id"] = uid
                 elif disciplina.get("curso_id") == uid:
                     disciplina["curso_id"] = None
-        current.update(dados.model_dump(exclude={"disciplina_ids"}))
+        current.update(dados.model_dump(exclude={"disciplina_ids", "carga_horaria_total"}))
+        current["calendario_id"] = str(dados.calendario_id)
+        current.update(_totais([d for d in _disciplinas_db.values() if d.get("curso_id") == uid]))
         return current
 
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            UPDATE cursos
-            SET nome = %s, descricao = %s, modalidade = %s, carga_horaria_total = %s,
-                semestres = %s, status = %s, nivel_academico = %s, atualizado_em = now()
-            WHERE id = %s
-            RETURNING id, nome, descricao, modalidade, carga_horaria_total,
-                      semestres, status, nivel_academico
-            """,
-            (
-                dados.nome,
-                dados.descricao,
-                dados.modalidade,
-                dados.carga_horaria_total,
-                dados.semestres,
-                dados.status,
-                dados.nivel_academico,
-                uid,
-            ),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
-        if disciplina_ids is not None:
+    try:
+        with get_db_cursor() as cur:
             cur.execute(
                 """
+            UPDATE cursos
+            SET nome = %s, descricao = %s, modalidade = %s, calendario_id = %s,
+                semestres = %s, status = %s, nivel_academico = %s, atualizado_em = now()
+            WHERE id = %s
+            RETURNING id, nome, descricao, modalidade, carga_horaria_total, aulas_previstas_total,
+                      semestres, status, nivel_academico, calendario_id::text AS calendario_id
+            """,
+                (
+                    dados.nome,
+                    dados.descricao,
+                    dados.modalidade,
+                    str(dados.calendario_id),
+                    dados.semestres,
+                    dados.status,
+                    dados.nivel_academico,
+                    uid,
+                ),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
+            resultado = dict(row)
+            if disciplina_ids is not None:
+                cur.execute(
+                    """
                 UPDATE disciplinas
                 SET curso_id = NULL, atualizado_em = now()
                 WHERE curso_id = %s AND NOT (id = ANY(%s::uuid[]))
                 """,
-                (uid, disciplina_ids),
-            )
-            if disciplina_ids:
-                _vincular_disciplinas(cur, uid, disciplina_ids)
-        return dict(row)
+                    (uid, disciplina_ids),
+                )
+                vinculadas = _vincular_disciplinas(cur, uid, disciplina_ids) if disciplina_ids else []
+                # O trigger recalcula no banco; a resposta já reflete os novos vínculos.
+                resultado.update(_totais(vinculadas))
+            return resultado
+    except ForeignKeyViolation as exc:
+        raise _calendario_inexistente() from exc
 
 
 @router.delete(

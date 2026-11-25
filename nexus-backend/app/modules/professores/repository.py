@@ -78,6 +78,7 @@ class ProfessoresRepositoryInterface(Protocol):
     def get_turma_vinculo_scope(self, turma_id: str) -> Optional[Dict[str, Any]]: ...
 
     def get_disciplina_curso(self, disciplina_id: str) -> Optional[str]: ...
+    def get_disciplina_carga(self, disciplina_id: str) -> Optional[Dict[str, Any]]: ...
 
     def list_vinculos_ativos_por_turma(
         self, turma_id: str, scope_column: Optional[str] = None, scope_id: Optional[str] = None
@@ -224,6 +225,15 @@ class PostgresProfessoresRepository:
             )
             row = cur.fetchone()
             return str(row["curso_id"]) if row and row.get("curso_id") else None
+
+    def get_disciplina_carga(self, disciplina_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT nome, carga_horaria, qtd_aulas_prevista FROM disciplinas WHERE id = %s",
+                (str(disciplina_id),),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
 
     def list_vinculos_ativos_por_turma(
         self, turma_id: str, scope_column: Optional[str] = None, scope_id: Optional[str] = None
@@ -1205,6 +1215,16 @@ class InMemoryProfessoresRepository:
         disciplina = self.disciplinas.get(str(disciplina_id))
         curso_id = disciplina.get("curso_id") if disciplina else None
         return str(curso_id) if curso_id else None
+
+    def get_disciplina_carga(self, disciplina_id: str) -> Optional[Dict[str, Any]]:
+        disciplina = self.disciplinas.get(str(disciplina_id))
+        if not disciplina:
+            return None
+        return {
+            "nome": disciplina.get("nome"),
+            "carga_horaria": disciplina.get("carga_horaria", 40),
+            "qtd_aulas_prevista": disciplina.get("qtd_aulas_prevista", 2),
+        }
 
     def list_vinculos_ativos_por_turma(
         self, turma_id: str, scope_column: Optional[str] = None, scope_id: Optional[str] = None

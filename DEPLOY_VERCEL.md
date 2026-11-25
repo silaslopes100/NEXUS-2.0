@@ -94,6 +94,17 @@ A listagem e o cadastro de Disciplinas leem a coluna `disciplinas.preco`: apliqu
 [`019_disciplinas_preco.sql`](./nexus-backend/scripts/migrations/019_disciplinas_preco.sql)
 antes de publicar essa versão da API, ou a tela de Disciplinas falhará.
 
+Calendário Acadêmico, carga horária, cronograma, tipos de ata e frequência (RN01–RN07)
+dependem de [`029_calendario_carga_horaria.sql`](./nexus-backend/scripts/migrations/029_calendario_carga_horaria.sql):
+aplique-a antes de publicar a API, ou cursos, turmas, Diário de Aulas e a Dashboard
+falharão.
+- Ela cria `calendarios_academicos` e `aulas_previstas`.
+- Acrescenta colunas em `cursos`, `turmas` e `aulas_ministradas`.
+- Instala o trigger que recalcula a carga do curso a partir das disciplinas.
+- Cria o "Calendário Padrão" (aulas aos sábados, recesso em julho e dezembro) e
+  vincula a ele os cursos existentes. Revise esse calendário na tela
+  **Calendários Acadêmicos** antes de gerar cronogramas.
+
 O gateway **Simulador** (`fake`) existe só no sandbox, para testes sem chaves reais.
 Ele é recusado em `producao`, e só o admin pode simular pagamentos.
 

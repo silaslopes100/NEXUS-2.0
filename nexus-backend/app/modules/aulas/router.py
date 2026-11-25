@@ -21,13 +21,15 @@ from app.modules.aulas.schemas import (
     AulaCreateRequest,
     AulaDetalhe,
     AulaListResponse,
+    AulasPendentesResponse,
+    AulaTipoUpdateRequest,
     AulaUpdateRequest,
     DisciplinaAulasResumo,
     FiltrosAuditoriaResponse,
     MessageResponse,
 )
 from app.modules.aulas.service import AulasService
-from app.modules.auth.dependencies import get_current_user, require_role
+from app.modules.auth.dependencies import get_client_ip, get_current_user, require_role
 from app.modules.auth.schemas import UserResponse
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,20 @@ async def registrar_aula(
     return service.criar(current_user, dados)
 
 
+@router.get(
+    "/me/pendentes",
+    response_model=AulasPendentesResponse,
+    dependencies=[Depends(require_role(_DOCENTES))],
+)
+async def aulas_previstas_pendentes(
+    vinculo_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+    service: AulasService = Depends(get_aulas_service),
+):
+    """Aulas previstas pendentes da turma/disciplina do vínculo e os tipos de ata permitidos (RN03)."""
+    return service.pendentes(current_user, str(vinculo_id))
+
+
 @router.get("/me/{aula_id}", response_model=AulaDetalhe, dependencies=[Depends(require_role(_DOCENTES))])
 async def detalhe_minha_aula(
     aula_id: uuid.UUID,
@@ -114,13 +130,26 @@ async def atualizar_minha_aula(
     return service.atualizar(current_user, str(aula_id), dados)
 
 
+@router.patch("/{aula_id}/tipo", response_model=AulaDetalhe, dependencies=[Depends(require_role(["admin", "polo"]))])
+async def alterar_tipo_da_aula(
+    aula_id: uuid.UUID,
+    dados: AulaTipoUpdateRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    ip: Optional[str] = Depends(get_client_ip),
+    service: AulasService = Depends(get_aulas_service),
+):
+    """RN03.5: troca do tipo depois do registro (perfis definidos no calendário), com auditoria."""
+    return service.alterar_tipo(current_user, str(aula_id), dados, ip)
+
+
 @router.delete("/me/{aula_id}", response_model=MessageResponse, dependencies=[Depends(require_role(_DOCENTES))])
 async def excluir_minha_aula(
     aula_id: uuid.UUID,
     current_user: UserResponse = Depends(get_current_user),
+    ip: Optional[str] = Depends(get_client_ip),
     service: AulasService = Depends(get_aulas_service),
 ):
-    chaves = service.excluir(current_user, str(aula_id))
+    chaves = service.excluir(current_user, str(aula_id), ip)
     await _limpar_arquivos(chaves)
     return MessageResponse(message="Aula excluída com a chamada e os materiais")
 
