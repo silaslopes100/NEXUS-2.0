@@ -216,7 +216,6 @@ FONTE_CONTAGEM = [
     ("cursos", ["pacotes"]),
     ("disciplinas", ["section"]),
     ("disciplina_conteudos", ["lesson"]),
-    ("calendarios_oficiais", ["section"]),
     ("matriculas_ead", ["enrol"]),
     ("notas", ["quiz"]),
     ("presencas", ["presenca"]),

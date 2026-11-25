@@ -50,7 +50,7 @@ não são atualizados pelo ETL.
 | `cursos` | — | Cadastro mantido pelo sistema; sem rastreabilidade do ETL. `nivel_academico` é informado no cadastro |
 | `disciplinas` | — | Cadastro mantido pelo sistema; o ETL não cria nem atualiza disciplinas |
 | `disciplina_conteudos` | — | Conteúdos do AVA mantidos pelo sistema; o ETL não cria nem atualiza conteúdos |
-| `calendarios_oficiais` | — | Calendários mantidos pelo sistema; o ETL não cria nem atualiza calendários |
+| `calendarios_academicos` | — | Calendários Acadêmicos mantidos pelo sistema (migration 029); o ETL não cria nem atualiza calendários. `calendarios_oficiais` foi removida na migration 030 |
 | `turmas` | — | **sem origem legado confiável**; tabela criada vazia (dado novo do sistema) |
 | `matriculas_ead` | `enrol` | `user_id`/`course_id` TEXT podem ter vários ids → usa o primeiro; classificação Polo×EAD a revisar com a equipe |
 | `notas` | `quiz` | origem='ava'; valor = resultado (0–10) |

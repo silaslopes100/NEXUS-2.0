@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { apiErrorMessage, EscolaOption } from '@/features/alunos/api';
 import { Curso } from '@/features/cursos/api';
-import { Calendario, formatarData, Turma, turmasApi, TurmaInput } from '@/features/turmas/api';
+import { Turma, turmasApi, TurmaInput } from '@/features/turmas/api';
 
 export type EscolaOpcao = EscolaOption & { polo_id?: string };
 
@@ -37,18 +37,9 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
     escola_id: turma?.escola_id ?? '',
     data_inicio: turma?.data_inicio ?? '',
     data_fim: turma?.data_fim ?? '',
-    calendario_oficial_id: turma?.calendario_oficial_id ?? '',
   });
-  const [calendarios, setCalendarios] = useState<Calendario[]>([]);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState('');
-
-  useEffect(() => {
-    turmasApi
-      .listarCalendarios()
-      .then(setCalendarios)
-      .catch((e) => setErro(apiErrorMessage(e, 'Erro ao carregar calendários.')));
-  }, []);
 
   const atualizar = (campo: keyof typeof form, valor: string) =>
     setForm((atual) => ({ ...atual, [campo]: valor }));
@@ -61,10 +52,6 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
     }
     return doPolo;
   }, [escolas, form.polo_id, turma]);
-
-  const calendariosVisiveis = calendarios.filter(
-    (c) => !c.curso_id || !form.curso_id || c.curso_id === form.curso_id
-  );
 
   const selecionarPolo = (poloId: string) =>
     setForm((atual) => {
@@ -98,7 +85,6 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
       escola_id: form.escola_id || null,
       data_inicio: form.data_inicio || null,
       data_fim: form.data_fim || null,
-      calendario_oficial_id: form.calendario_oficial_id || null,
     };
     setSaving(true);
     setErro('');
@@ -227,22 +213,6 @@ export const TurmaFormModal: React.FC<TurmaFormModalProps> = ({
             />
           </label>
 
-          <label className="space-y-1.5 text-sm text-slate-300 sm:col-span-2">
-            <span>Calendário oficial</span>
-            <select
-              className={inputCls}
-              value={form.calendario_oficial_id}
-              onChange={(e) => atualizar('calendario_oficial_id', e.target.value)}
-            >
-              <option value="">Sem calendário</option>
-              {calendariosVisiveis.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {[c.curso_nome, c.disciplina_nome].filter(Boolean).join(' · ') || 'Calendário geral'} (
-                  {formatarData(c.data_liberacao)} a {formatarData(c.data_encerramento)})
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
         <footer className="flex justify-end gap-3">

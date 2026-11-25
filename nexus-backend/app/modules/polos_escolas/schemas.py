@@ -205,7 +205,6 @@ class TurmaEscolaCreateRequest(BaseModel):
     curso_id: Optional[str] = None
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
-    calendario_oficial_id: Optional[str] = None
 
 
 class TurmaEscolaResponse(BaseModel):
@@ -218,7 +217,6 @@ class TurmaEscolaResponse(BaseModel):
     nome: str
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
-    calendario_oficial_id: Optional[str] = None
     total_alunos: int = 0
     criado_em: Optional[datetime] = None
 

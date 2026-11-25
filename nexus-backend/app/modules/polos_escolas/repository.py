@@ -1316,8 +1316,8 @@ class PostgresPolosEscolasRepository:
             cur.execute(
                 """
                 INSERT INTO turmas (id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim,
-                                    calendario_oficial_id, criado_em, atualizado_em)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                                    criado_em, atualizado_em)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())
                 """,
                 (
                     new_id,
@@ -1327,7 +1327,6 @@ class PostgresPolosEscolasRepository:
                     data["nome"],
                     data.get("data_inicio"),
                     data.get("data_fim"),
-                    data.get("calendario_oficial_id"),
                 ),
             )
         return new_id

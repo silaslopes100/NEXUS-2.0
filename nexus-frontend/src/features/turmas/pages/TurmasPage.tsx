@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CalendarClock, ChevronLeft, ChevronRight, Edit2, GraduationCap, Loader2, Plus, Search, Trash2, Users } from 'lucide-react';
 import { alunosApi, apiErrorMessage, EscolaOption } from '@/features/alunos/api';
 import { Curso, cursosApi } from '@/features/cursos/api';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import { formatarData, Turma, turmasApi } from '@/features/turmas/api';
-import { CalendariosTab } from '@/features/turmas/components/CalendariosTab';
 import { TurmaAlunosPanel } from '@/features/turmas/components/TurmaAlunosPanel';
 import { TurmaProfessoresPanel } from '@/features/turmas/components/TurmaProfessoresPanel';
 import { TurmaCargaHorariaPanel } from '@/features/carga_horaria/components/TurmaCargaHorariaPanel';
@@ -14,7 +14,6 @@ import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 const PAGE_SIZE = 10;
 const BUSCA_DEBOUNCE_MS = 300;
 
-type Aba = 'turmas' | 'calendarios';
 type FormState = { aberto: false } | { aberto: true; turma: Turma | null };
 
 export const TurmasPage: React.FC = () => {
@@ -24,7 +23,6 @@ export const TurmasPage: React.FC = () => {
   const isPolo = role === 'polo';
   const poloUsuario = user?.polo_id ?? '';
 
-  const [aba, setAba] = useState<Aba>('turmas');
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -122,40 +120,28 @@ export const TurmasPage: React.FC = () => {
   const mostrarEscolaFiltro = (isAdmin || isPolo) && escolas.length > 0;
   const paginaAtual = Math.floor(offset / PAGE_SIZE) + 1;
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const abaCls = (ativa: boolean) =>
-    `rounded-lg px-4 py-2 text-sm font-semibold ${
-      ativa ? 'bg-blue-600 text-on-accent' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-    }`;
-
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-white">{isAdmin ? 'Turmas & Calendários' : 'Turmas'}</h1>
-        {aba === 'turmas' && (
-          <button
-            type="button"
-            onClick={() => setForm({ aberto: true, turma: null })}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500"
-          >
-            <Plus size={16} /> Cadastrar turma
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setForm({ aberto: true, turma: null })}
+          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-on-accent hover:bg-blue-500"
+        >
+          <Plus size={16} /> Cadastrar turma
+        </button>
       </header>
 
       {isAdmin && (
-        <div role="tablist" className="flex gap-2">
-          <button type="button" role="tab" aria-selected={aba === 'turmas'} className={abaCls(aba === 'turmas')} onClick={() => setAba('turmas')}>
-            Turmas
-          </button>
-          <button type="button" role="tab" aria-selected={aba === 'calendarios'} className={abaCls(aba === 'calendarios')} onClick={() => setAba('calendarios')}>
-            Calendários
-          </button>
-        </div>
+        <p className="text-sm text-slate-400">
+          O calendário de cada turma vem do Calendário Acadêmico do curso.{' '}
+          <Link to="/admin/calendarios" className="font-semibold text-blue-400 hover:text-blue-300">
+            Gerenciar Calendários Acadêmicos
+          </Link>
+        </p>
       )}
 
-      {aba === 'calendarios' ? (
-        <CalendariosTab cursos={cursos} />
-      ) : (
         <>
           {erro && (
             <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
@@ -347,7 +333,6 @@ export const TurmasPage: React.FC = () => {
             </span>
           </footer>
         </>
-      )}
 
       {form.aberto && (
         <TurmaFormModal

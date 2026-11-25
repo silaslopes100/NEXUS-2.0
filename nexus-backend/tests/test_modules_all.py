@@ -493,7 +493,6 @@ def turmas_setup(auth_setup, monkeypatch):
     """Isola o estado em memória de turmas e cria usuários com escopo nos dois nomes de perfil."""
     monkeypatch.setattr(settings, "PG_DSN", "")
     monkeypatch.setattr(turmas_module, "_turmas_db", {})
-    monkeypatch.setattr(turmas_module, "_calendarios_db", {})
     monkeypatch.setattr(turmas_module, "_turma_alunos_db", [])
 
     polos_repo = InMemoryPolosEscolasRepository()
@@ -667,52 +666,13 @@ async def test_turmas_professor_sem_acesso(client: AsyncClient, turmas_setup):
 
 
 @pytest.mark.asyncio
-async def test_calendarios_crud_e_permissoes(client: AsyncClient, turmas_setup):
+async def test_calendario_oficial_antigo_removido(client: AsyncClient, turmas_setup):
+    """O fluxo antigo /turmas/calendarios saiu: o calendário vem do Calendário Acadêmico do curso."""
     admin = _auth(*ADMIN)
-    polo = _auth(*POLO_CURTO)
-
-    sem_token = await client.get("/turmas/calendarios")
-    assert sem_token.status_code in (401, 403)
-
-    invalido = await client.post(
-        "/turmas/calendarios",
-        json={"data_liberacao": "2026-06-01", "data_encerramento": "2026-01-01"},
-        headers=admin,
-    )
-    assert invalido.status_code == 422
-
-    negado = await client.post("/turmas/calendarios", json={}, headers=polo)
-    assert negado.status_code == 403
-
-    criado = await client.post(
-        "/turmas/calendarios",
-        json={"data_liberacao": "2026-01-01", "data_encerramento": "2026-06-01"},
-        headers=admin,
-    )
-    assert criado.status_code == 201
-    calendario_id = criado.json()["id"]
-
-    listagem = await client.get("/turmas/calendarios", headers=polo)
-    assert [item["id"] for item in listagem.json()] == [calendario_id]
-
-    editado = await client.put(
-        f"/turmas/calendarios/{calendario_id}",
-        json={"data_liberacao": "2026-02-01", "data_encerramento": "2026-07-01"},
-        headers=admin,
-    )
-    assert editado.status_code == 200
-    assert editado.json()["data_liberacao"] == "2026-02-01"
-
-    turma = await client.post(
-        "/turmas", json={"nome": "Com calendário", "calendario_oficial_id": calendario_id}, headers=admin
-    )
+    assert (await client.post("/turmas/calendarios", json={}, headers=admin)).status_code in (404, 405)
+    turma = await client.post("/turmas", json={"nome": "Sem calendário antigo"}, headers=admin)
     assert turma.status_code == 201
-
-    assert (await client.delete(f"/turmas/calendarios/{calendario_id}", headers=polo)).status_code == 403
-    assert (await client.delete(f"/turmas/calendarios/{calendario_id}", headers=admin)).status_code == 409
-
-    assert (await client.delete(f"/turmas/{turma.json()['id']}", headers=admin)).status_code == 204
-    assert (await client.delete(f"/turmas/calendarios/{calendario_id}", headers=admin)).status_code == 204
+    assert "calendario_oficial_id" not in turma.json()
 
 
 # 09. EAD

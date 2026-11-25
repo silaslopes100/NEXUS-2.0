@@ -105,6 +105,10 @@ falharão.
   vincula a ele os cursos existentes. Revise esse calendário na tela
   **Calendários Acadêmicos** antes de gerar cronogramas.
 
+Depois da 029, aplique [`030_remover_calendarios_oficiais.sql`](./nexus-backend/scripts/migrations/030_remover_calendarios_oficiais.sql).
+Ela apaga a tabela antiga `calendarios_oficiais` e a coluna `turmas.calendario_oficial_id`, que a API
+não usa mais. É irreversível: faça backup antes se quiser guardar esses registros.
+
 O gateway **Simulador** (`fake`) existe só no sandbox, para testes sem chaves reais.
 Ele é recusado em `producao`, e só o admin pode simular pagamentos.
 

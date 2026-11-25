@@ -139,21 +139,13 @@ DDL: List[str] = [
     preco NUMERIC(12,2) CHECK (preco IS NULL OR preco >= 0)""",
     ),
     _tbl(
-        "calendarios_oficiais",
-        """    curso_id UUID REFERENCES cursos(id) ON DELETE SET NULL,
-    disciplina_id UUID REFERENCES disciplinas(id) ON DELETE SET NULL,
-    data_liberacao DATE,
-    data_encerramento DATE""",
-    ),
-    _tbl(
         "turmas",
         """    curso_id UUID REFERENCES cursos(id) ON DELETE SET NULL,
     polo_id UUID REFERENCES polos(id) ON DELETE SET NULL,
     escola_id UUID REFERENCES escolas(id) ON DELETE SET NULL,
     nome VARCHAR(255) NOT NULL,
     data_inicio DATE,
-    data_fim DATE,
-    calendario_oficial_id UUID REFERENCES calendarios_oficiais(id) ON DELETE SET NULL""",
+    data_fim DATE""",
     ),
     _tbl(
         "disciplina_conteudos",

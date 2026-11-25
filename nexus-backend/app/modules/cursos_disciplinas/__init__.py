@@ -409,11 +409,11 @@ async def update_curso(curso_id: uuid.UUID, dados: CursoUpdateSchema):
 async def delete_curso(curso_id: uuid.UUID) -> Response:
     uid = str(curso_id)
     if not settings.PG_DSN:
-        from app.modules.turmas import _calendarios_db, _turmas_db
+        from app.modules.turmas import _turmas_db
 
         if uid not in _cursos_db:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
-        vinculados = (*_disciplinas_db.values(), *_turmas_db.values(), *_calendarios_db.values())
+        vinculados = (*_disciplinas_db.values(), *_turmas_db.values())
         if any(item.get("curso_id") == uid for item in vinculados):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CURSO_COM_VINCULOS_DETAIL)
         del _cursos_db[uid]
@@ -424,7 +424,6 @@ async def delete_curso(curso_id: uuid.UUID) -> Response:
         SELECT
             EXISTS (SELECT 1 FROM disciplinas WHERE curso_id = %s)
             OR EXISTS (SELECT 1 FROM turmas WHERE curso_id = %s)
-            OR EXISTS (SELECT 1 FROM calendarios_oficiais WHERE curso_id = %s)
             OR EXISTS (SELECT 1 FROM matriculas_ead WHERE curso_id = %s)
             OR EXISTS (SELECT 1 FROM certificados WHERE curso_id = %s)
             AS em_uso
@@ -434,7 +433,7 @@ async def delete_curso(curso_id: uuid.UUID) -> Response:
         if cur.fetchone() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso não encontrado")
 
-        cur.execute(references_sql, (uid,) * 5)
+        cur.execute(references_sql, (uid,) * 4)
         row = cur.fetchone()
         if row is None or row["em_uso"]:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CURSO_COM_VINCULOS_DETAIL)
@@ -664,8 +663,7 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
 
     references_sql = """
         SELECT
-            EXISTS (SELECT 1 FROM calendarios_oficiais WHERE disciplina_id = %s)
-            OR EXISTS (SELECT 1 FROM disciplina_conteudos WHERE disciplina_id = %s)
+            EXISTS (SELECT 1 FROM disciplina_conteudos WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM professor_disciplinas WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM compras_disciplina_ead WHERE disciplina_id = %s)
             OR EXISTS (SELECT 1 FROM avisos_liberacao_ead WHERE disciplina_id = %s)
@@ -682,7 +680,7 @@ async def delete_disciplina(disciplina_id: uuid.UUID) -> Response:
         if cur.fetchone() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Disciplina não encontrada")
 
-        cur.execute(references_sql, (uid,) * 11)
+        cur.execute(references_sql, (uid,) * 10)
         row = cur.fetchone()
         if row is None or row["em_uso"]:
             raise HTTPException(

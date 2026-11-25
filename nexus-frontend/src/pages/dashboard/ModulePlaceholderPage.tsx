@@ -46,9 +46,9 @@ export const ModulePlaceholderPage: React.FC = () => {
         category: 'Ambiente Virtual (AVA)',
       },
       '/admin/turmas-calendarios': {
-        title: 'Turmas & Calendários Oficiais',
-        desc: 'Montagem de turmas por polo, períodos de liberação e encerramento de disciplinas.',
-        table: 'turmas / calendarios_oficiais',
+        title: 'Turmas & Calendários',
+        desc: 'Montagem de turmas por polo; o calendário vem do Calendário Acadêmico do curso.',
+        table: 'turmas / calendarios_academicos',
         category: 'Planejamento Acadêmico',
       },
       '/admin/alunos': {
