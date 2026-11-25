@@ -82,7 +82,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Entrou pelo número da licença: só a prova e as notas (sem perfil, compras etc.).
   const ROTAS_LICENCA = ['/aluno/disciplinas', '/aluno/historico'];
-  const menuBase: MenuGroup[] = menuByRole[activeRole] || menuByRole.aluno;
+  // Itens do AVA (somenteEad) só aparecem para o aluno EAD.
+  const alunoEad = !!user?.aluno_ead && !user?.tambem_aluno;
+  const menuBase: MenuGroup[] = (menuByRole[activeRole] || menuByRole.aluno)
+    .map((group) => ({ ...group, items: group.items.filter((item) => !item.somenteEad || alunoEad) }))
+    .filter((group) => group.items.length > 0);
   const menuGroups: MenuGroup[] = viaLicenca
     ? menuBase
         .map((group) => ({ ...group, items: group.items.filter((item) => ROTAS_LICENCA.includes(item.path)) }))
@@ -91,7 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Chat e Mural já existem nos menus de Polo e Escola; aqui entram só as telas próprias do aluno.
   const itensAreaAluno: MenuItem[] = user?.tambem_aluno
-    ? menuByRole.aluno.flatMap((group) => group.items).filter((item) => item.path.startsWith('/aluno/'))
+    ? menuByRole.aluno.flatMap((group) => group.items).filter((item) => item.path.startsWith('/aluno/') && !item.somenteEad)
     : [];
 
   const contadores = useContadoresMenu(activeRole, !!user?.tambem_aluno, !!user && !viaLicenca);

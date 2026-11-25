@@ -46,6 +46,8 @@ export interface MenuItem {
   isPlaceholder?: boolean;
   /** Contador numérico dinâmico (consultado pelo Sidebar). */
   contador?: 'estagios' | 'feed_moderacao';
+  /** Só aparece para alunos EAD (AVA). */
+  somenteEad?: boolean;
 }
 
 export interface MenuGroup {
@@ -127,10 +129,9 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           isPlaceholder: true,
         },
         {
-          title: 'EAD',
-          path: '/admin/ead',
+          title: 'Conteúdo EAD (AVA)',
+          path: '/admin/ava',
           icon: Laptop,
-          isPlaceholder: true,
         },
         {
           title: 'Presenças & Frequência',
@@ -563,6 +564,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           badge: 'Aulas',
           badgeColor: 'emerald',
           isPlaceholder: true,
+          somenteEad: true,
         },
         {
           title: 'Minhas Disciplinas',

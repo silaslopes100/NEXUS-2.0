@@ -43,6 +43,8 @@ class UserResponse(BaseModel):
     tambem_aluno: bool = False
     # Aluno em Churn: precisa regularizar a situação antes de nova matrícula.
     aluno_desistente: bool = False
+    # Aluno com modalidade EAD: único perfil com acesso ao AVA (Sala de Aula Virtual).
+    aluno_ead: bool = False
 
 
 class LoginRequest(BaseModel):

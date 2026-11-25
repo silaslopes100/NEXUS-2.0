@@ -64,7 +64,8 @@ class PostgresAuthRepository:
                    u.polo_id, u.escola_id, u.perfil_id,
                    p.nome as perfil_nome, p.descricao as perfil_descricao,
                    EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id) AS possui_cadastro_aluno,
-                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id AND a.status = 'desistente') AS aluno_desistente
+                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id AND a.status = 'desistente') AS aluno_desistente,
+                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id AND a.modalidade = 'ead') AS aluno_ead
             FROM usuarios u
             LEFT JOIN perfis p ON u.perfil_id = p.id
             WHERE lower(u.email) = lower(%s)
@@ -82,7 +83,8 @@ class PostgresAuthRepository:
                    u.polo_id, u.escola_id, u.perfil_id,
                    p.nome as perfil_nome, p.descricao as perfil_descricao,
                    EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id) AS possui_cadastro_aluno,
-                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id AND a.status = 'desistente') AS aluno_desistente
+                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id AND a.status = 'desistente') AS aluno_desistente,
+                   EXISTS (SELECT 1 FROM alunos a WHERE a.usuario_id = u.id AND a.modalidade = 'ead') AS aluno_ead
             FROM usuarios u
             LEFT JOIN perfis p ON u.perfil_id = p.id
             WHERE u.id = %s

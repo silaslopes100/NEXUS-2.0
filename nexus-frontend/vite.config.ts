@@ -110,6 +110,11 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      // API do AVA (as telas do SPA ficam em /admin/ava e /aluno/ava, fora deste prefixo).
+      '/ava': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
 });

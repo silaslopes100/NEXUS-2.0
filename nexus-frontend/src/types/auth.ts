@@ -29,6 +29,8 @@ export interface User {
   ultimo_login_em?: string | null;
   tambem_aluno?: boolean;
   aluno_desistente?: boolean;
+  /** Aluno da modalidade EAD: único perfil com acesso à Sala de Aula Virtual (AVA). */
+  aluno_ead?: boolean;
 }
 
 export interface LoginResponse {

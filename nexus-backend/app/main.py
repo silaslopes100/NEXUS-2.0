@@ -10,6 +10,7 @@ from app.core.database import close_connection_pool
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.aulas.router import router as aulas_router
+from app.modules.ava.admin_router import router as ava_admin_router
 from app.modules.alunos.perfil import router as aluno_perfil_router
 from app.modules.alunos_gestao import router as alunos_gestao_router
 from app.modules.alunos_gestao import router_aprendizado as aluno_aprendizado_router
@@ -88,6 +89,7 @@ app.include_router(transferencias_router)
 app.include_router(comunicacao_router)
 app.include_router(chat_router)
 app.include_router(estagios_router)
+app.include_router(ava_admin_router)
 
 
 @app.get("/health", tags=["Health"])

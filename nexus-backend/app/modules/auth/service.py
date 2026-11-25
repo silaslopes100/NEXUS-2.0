@@ -71,6 +71,9 @@ class AuthService:
                 and bool(user_data.get("possui_cadastro_aluno"))
             ),
             aluno_desistente=bool(user_data.get("aluno_desistente")),
+            aluno_ead=(
+                perfil_canonico(user_data.get("perfil_nome")) == "aluno" and bool(user_data.get("aluno_ead"))
+            ),
         )
 
     def login(
