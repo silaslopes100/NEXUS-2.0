@@ -9,6 +9,13 @@ import { AvaConteudoPage } from '@/features/ava/pages/admin/AvaConteudoPage';
 import { AvaDisciplinaEditorPage } from '@/features/ava/pages/admin/AvaDisciplinaEditorPage';
 import { AvaHomePage } from '@/features/ava/pages/aluno/AvaHomePage';
 import { AvaDisciplinaPage } from '@/features/ava/pages/aluno/AvaDisciplinaPage';
+import { AvaConquistasPage } from '@/features/ava/pages/aluno/AvaConquistasPage';
+import { AvaRankingPage } from '@/features/ava/pages/aluno/AvaRankingPage';
+import { TreinamentosAdminPage } from '@/features/ava/pages/admin/TreinamentosAdminPage';
+import { TreinamentoEditorPage } from '@/features/ava/pages/admin/TreinamentoEditorPage';
+import { TreinamentosCatalogoPage } from '@/features/ava/pages/treinamentos/TreinamentosCatalogoPage';
+import { ValidarCertificadoPage } from '@/features/ava/pages/treinamentos/ValidarCertificadoPage';
+import { treinamentoPlayerApi, treinamentosApi } from '@/features/ava/treinamentosApi';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AdminDashboardPage } from '@/pages/dashboard/AdminDashboardPage';
 import { PoloDashboardPage } from '@/pages/dashboard/PoloDashboardPage';
@@ -76,6 +83,11 @@ const RootRedirect: React.FC = () => {
   return <Navigate to="/auth/login" replace />;
 };
 
+/** Player do AVA no modo treinamento (mesma experiência da Sala de Aula Virtual). */
+const TreinamentoPlayer: React.FC<{ previa?: boolean }> = ({ previa }) => (
+  <AvaDisciplinaPage modo="treinamento" previa={previa} api={treinamentoPlayerApi} onBaixarCertificado={treinamentosApi.baixarCertificado} />
+);
+
 export const AppRoutes: React.FC = () => {
   return (
     <Routes>
@@ -86,6 +98,10 @@ export const AppRoutes: React.FC = () => {
         <Route path="redefinir-senha" element={<RedefinirSenhaPage />} />
         <Route index element={<Navigate to="/auth/login" replace />} />
       </Route>
+
+      {/* Validação pública de certificado (fora do layout logado) */}
+      <Route path="/certificados/validar" element={<ValidarCertificadoPage />} />
+      <Route path="/certificados/validar/:codigo" element={<ValidarCertificadoPage />} />
 
       {/* Rotas Protegidas - Layout Principal */}
       <Route element={<AppLayout />}>
@@ -123,6 +139,10 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/estoque" element={<EstoquePage />} />
           <Route path="/admin/estagios" element={<CentralEstagioAdminPage />} />
           <Route path="/admin/feed/moderacao" element={<ModeracaoFeedPage />} />
+          <Route path="/admin/treinamentos" element={<TreinamentosAdminPage />} />
+          <Route path="/admin/treinamentos/:treinamentoId" element={<TreinamentoEditorPage />} />
+          <Route path="/admin/treinamentos/:disciplinaId/previa" element={<TreinamentoPlayer previa />} />
+          <Route path="/admin/treinamentos/:disciplinaId/previa/aulas/:aulaId" element={<TreinamentoPlayer previa />} />
           <Route path="/admin/avisos" element={<AvisosAdminPage />} />
         </Route>
 
@@ -204,6 +224,8 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/ava" element={<AvaHomePage />} />
             <Route path="/aluno/ava/disciplinas/:disciplinaId" element={<AvaDisciplinaPage />} />
             <Route path="/aluno/ava/disciplinas/:disciplinaId/aulas/:aulaId" element={<AvaDisciplinaPage />} />
+            <Route path="/aluno/ava/conquistas" element={<AvaConquistasPage />} />
+            <Route path="/aluno/ava/ranking" element={<AvaRankingPage />} />
           </Route>
           <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />
           <Route path="/aluno/livros" element={<ModulePlaceholderPage />} />
@@ -228,6 +250,13 @@ export const AppRoutes: React.FC = () => {
           element={<RequireRole roles={['admin', 'polo', 'escola', 'professor', 'financeiro', 'logistica']} />}
         >
           <Route path="/feed/moderacao" element={<ModeracaoFeedPage />} />
+        </Route>
+
+        {/* Treinamentos (Polos, Escolas e Professores) */}
+        <Route element={<RequireRole roles={['polo', 'escola', 'professor']} />}>
+          <Route path="/treinamentos" element={<TreinamentosCatalogoPage />} />
+          <Route path="/treinamentos/:disciplinaId" element={<TreinamentoPlayer />} />
+          <Route path="/treinamentos/:disciplinaId/aulas/:aulaId" element={<TreinamentoPlayer />} />
         </Route>
 
       </Route>

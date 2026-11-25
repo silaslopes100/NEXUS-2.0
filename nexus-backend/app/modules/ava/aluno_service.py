@@ -14,6 +14,7 @@ Pré-visualização (admin): mostra a disciplina inteira, sem travas e sem grava
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -35,6 +36,9 @@ from app.modules.ava.aluno_schemas import (
     ProgressoIn,
     ResumoAlunoOut,
 )
+from app.modules.ava.gamificacao import regras as gam
+from app.modules.ava.gamificacao.schemas import RecompensaOut
+from app.modules.ava.gamificacao.service import GamificacaoService
 from app.modules.ava.repository import PostgresAvaRepository
 from app.modules.ava.schemas import ItemOut
 from app.modules.avaliacoes.schemas import TentativaOut
@@ -44,6 +48,8 @@ from app.modules.avaliacoes.service import AvaliacoesService
 _PAGOS = {"pago", "paga", "aprovado", "aprovada", "confirmado", "confirmada", "liberado", "liberada", "concluido",
           "paid", "received", "confirmed", "received_in_cash"}
 _PERCENTUAL_CONCLUSAO = 90
+
+logger = logging.getLogger(__name__)
 
 
 def _agora() -> datetime:
@@ -65,11 +71,15 @@ def _item_publico(r: Dict[str, Any]) -> ItemOut:
 
 
 class AvaAlunoService:
+    # Dono do conteúdo (a subclasse dos treinamentos troca por "treinamento_id").
+    _DONO = "disciplina_id"
+
     def __init__(self, repo: PostgresAvaAlunoRepository, conteudo: PostgresAvaRepository,
-                 avaliacoes: AvaliacoesService) -> None:
+                 avaliacoes: AvaliacoesService, gamificacao: Optional[GamificacaoService] = None) -> None:
         self.repo = repo
         self.conteudo = conteudo
         self.avaliacoes = avaliacoes
+        self.gamificacao = gamificacao
 
     # ------------------------------------------------------------------ disciplinas
 
@@ -150,7 +160,7 @@ class AvaAlunoService:
     def _mapa(self, ctx: Dict[str, Any], d: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """(capítulos, aulas em ordem) com ``status``/``motivo_bloqueio``/``libera_em`` calculados."""
         previa = bool(ctx.get("previa"))
-        capitulos = self.conteudo.estrutura(("disciplina_id", d["id"]), somente_publicados=not previa)
+        capitulos = self.conteudo.estrutura((self._DONO, d["id"]), somente_publicados=not previa)
         aulas = [a for c in capitulos for a in c["aulas"]]
         for c in capitulos:
             for a in c["aulas"]:
@@ -218,9 +228,9 @@ class AvaAlunoService:
 
     def _aula_no_mapa(self, ctx: Dict[str, Any], aula_id: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]], int]:
         base = self.conteudo.get_aula(aula_id)
-        if not base or not base.get("disciplina_id"):
+        if not base or not base.get(self._DONO):
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aula não encontrada.")
-        d = self._linha_disciplina(ctx, str(base["disciplina_id"]))
+        d = self._linha_disciplina(ctx, str(base[self._DONO]))
         _, aulas = self._mapa(ctx, d)
         idx = next((i for i, a in enumerate(aulas) if a["id"] == aula_id), None)
         if idx is None:
@@ -266,6 +276,7 @@ class AvaAlunoService:
             if avaliacao and avaliacao.aprovado and aula["status"] != "concluida":
                 self.repo.concluir(usuario, aula_id)  # aprovada fora do fluxo (ex.: outra aba)
                 aula["status"] = "concluida"
+                self._creditar(ctx, d, aula, aulas, avaliacao)
             else:
                 self.repo.registrar_acesso(usuario, aula_id)
                 if aula["status"] == "disponivel":
@@ -299,12 +310,14 @@ class AvaAlunoService:
         d, aulas, idx = self._aula_no_mapa(ctx, aula_id)
         aula = aulas[idx]
         self._exigir_liberada(aula)
+        e = None
         if aula["tipo"] == "avaliacao":
             e = self._estado_avaliacao(ctx, aula)
             if not e or not e.aprovado:
                 raise HTTPException(status.HTTP_409_CONFLICT, detail="A aula de avaliação é concluída com a aprovação.")
         ja = self.repo.concluir(str(ctx["user"].id), aula_id)
         aula["status"] = "concluida"
+        recompensa = self._creditar(ctx, d, aula, aulas, e)
         cap = aula["_capitulo"]
         cap_ok = all(a["status"] == "concluida" for a in cap["aulas"])
         obrigatorias = [a for a in aulas if a.get("obrigatoria")] or aulas
@@ -315,7 +328,31 @@ class AvaAlunoService:
         proxima = next((a for a in novas[idx + 1:] if a["status"] != "concluida"), None)
         return ConclusaoOut(aula_id=aula_id, ja_estava_concluida=ja, capitulo_concluido=cap_ok and not ja,
                             disciplina_concluida=disc_ok and not ja, progresso_pct=_pct(feitas, len(aulas)),
-                            proxima_aula_id=proxima["id"] if proxima else None)
+                            proxima_aula_id=proxima["id"] if proxima else None, recompensa=recompensa)
+
+    def _creditar(self, ctx: Dict[str, Any], d: Dict[str, Any], aula: Dict[str, Any], aulas: List[Dict[str, Any]],
+                  avaliacao: Optional[AvaliacaoAulaOut]) -> Optional[RecompensaOut]:
+        """XP da conclusão (idempotente: repetir não credita de novo)."""
+        if not self.gamificacao or ctx.get("previa"):
+            return None
+        cap = aula["_capitulo"]
+        eventos = [("aula_concluida", aula["id"], gam.XP_AULA, aula["titulo"])]
+        if all(a["status"] == "concluida" for a in cap["aulas"]):
+            eventos.append(("capitulo_concluido", cap["id"], gam.XP_CAPITULO, cap["titulo"]))
+        obrigatorias = [a for a in aulas if a.get("obrigatoria")] or aulas
+        if all(a["status"] == "concluida" for a in obrigatorias):
+            eventos.append(("disciplina_concluida", d["id"], gam.XP_DISCIPLINA, d.get("nome")))
+        nota = None
+        if avaliacao and avaliacao.aprovado:
+            nota = avaliacao.melhor_nota
+            eventos.append(("avaliacao_aprovada", avaliacao.avaliacao_id, gam.XP_AVALIACAO, avaliacao.titulo))
+            if nota is not None and nota >= gam.NOTA_EXCELENTE:
+                eventos.append(("avaliacao_excelente", avaliacao.avaliacao_id, gam.XP_AVALIACAO_EXCELENTE, avaliacao.titulo))
+        try:
+            return self.gamificacao.registrar(str(ctx["user"].id), d.get("curso_id"), eventos, nota)
+        except Exception:  # noqa: BLE001 — a gamificação nunca impede a conclusão da aula
+            logger.exception("Falha ao creditar XP da aula %s", aula["id"])
+            return None
 
     def iniciar_avaliacao(self, ctx: Dict[str, Any], aula_id: str) -> TentativaOut:
         _, aulas, idx = self._aula_no_mapa(ctx, aula_id)

@@ -169,6 +169,9 @@ class AvaAdminService:
     def _validar_avaliacao(self, dados: AulaIn, dono_cap: Dict[str, Any]) -> Optional[str]:
         if dados.tipo != "avaliacao":
             return None
+        if dono_cap.get("treinamento_id"):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail="Treinamentos não têm aulas de avaliação.")
         if not dados.avaliacao_id:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Escolha a avaliação da aula.")
         av = self.repo.get_avaliacao(dados.avaliacao_id)
@@ -275,14 +278,20 @@ class AvaAdminService:
 
     def reordenar_disciplina(self, disciplina_id: str, dados: ReordenarIn) -> EstruturaOut:
         self._disciplina(disciplina_id)
+        self.reordenar(("disciplina_id", disciplina_id), dados)
+        return self.estrutura(disciplina_id)
+
+    def reordenar(self, dono: Dono, dados: ReordenarIn) -> None:
         for lista in (dados.capitulos, dados.aulas, dados.itens):
             if any(not uuid_valido(x.id) for x in lista):
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Identificador inválido.")
         if any(not uuid_valido(a.capitulo_id) for a in dados.aulas):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Identificador inválido.")
-        self.repo.reordenar(("disciplina_id", disciplina_id), [c.model_dump() for c in dados.capitulos],
+        self.repo.reordenar(dono, [c.model_dump() for c in dados.capitulos],
                             [a.model_dump() for a in dados.aulas], [i.model_dump() for i in dados.itens])
-        return self.estrutura(disciplina_id)
+
+    def capitulos(self, dono: Dono) -> List[CapituloOut]:
+        return [_capitulo_out(c) for c in self.repo.estrutura(dono)]
 
     def avaliacoes_do_curso(self, curso_id: str) -> List[AvaliacaoOpcaoOut]:
         if not self.repo.curso_existe(curso_id):

@@ -6,6 +6,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.modules.ava.gamificacao.schemas import RecompensaOut
 from app.modules.ava.schemas import ItemOut, TipoAula
 
 SituacaoDisciplina = Literal["liberada", "concluida", "em_breve", "bloqueada", "pagamento_pendente", "prazo_expirado"]
@@ -80,6 +81,8 @@ class DisciplinaPlayerOut(BaseModel):
     disciplina: DisciplinaAlunoOut
     sequencial: bool = False
     previa: bool = False
+    # Treinamentos: certificado pronto para baixar (concluído e com certificado ativo).
+    certificado_disponivel: bool = False
     proxima_aula_id: Optional[str] = None
     capitulos: List[CapituloAlunoOut] = Field(default_factory=list)
 
@@ -149,6 +152,7 @@ class ConclusaoOut(BaseModel):
     disciplina_concluida: bool = False
     progresso_pct: int = 0
     proxima_aula_id: Optional[str] = None
+    recompensa: Optional[RecompensaOut] = None
 
 
 class NotaAulaIn(BaseModel):

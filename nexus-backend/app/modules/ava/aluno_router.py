@@ -21,6 +21,8 @@ from app.modules.ava.aluno_schemas import (
     ProgressoIn,
 )
 from app.modules.ava.aluno_service import AvaAlunoService
+from app.modules.ava.gamificacao.repository import get_gamificacao_repository
+from app.modules.ava.gamificacao.service import GamificacaoService
 from app.modules.ava.repository import get_ava_repository
 from app.modules.avaliacoes.repository import get_avaliacoes_repository
 from app.modules.avaliacoes.schemas import TentativaOut
@@ -33,7 +35,8 @@ Ctx = Dict[str, Any]
 
 def get_service() -> AvaAlunoService:
     return AvaAlunoService(get_ava_aluno_repository(), get_ava_repository(),
-                           AvaliacoesService(get_avaliacoes_repository()))
+                           AvaliacoesService(get_avaliacoes_repository()),
+                           GamificacaoService(get_gamificacao_repository()))
 
 
 @router.get("/home", response_model=HomeOut)

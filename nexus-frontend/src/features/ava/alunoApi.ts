@@ -77,6 +77,8 @@ export interface DisciplinaPlayer {
   disciplina: DisciplinaAluno;
   sequencial: boolean;
   previa: boolean;
+  /** Treinamentos: certificado pronto para baixar. */
+  certificado_disponivel?: boolean;
   proxima_aula_id?: string | null;
   capitulos: CapituloAluno[];
 }
@@ -136,6 +138,101 @@ export interface Conclusao {
   disciplina_concluida: boolean;
   progresso_pct: number;
   proxima_aula_id?: string | null;
+  recompensa?: Recompensa | null;
+}
+
+// ---------------------------------------------------------------------------
+// Gamificação
+// ---------------------------------------------------------------------------
+
+export interface Conquista {
+  codigo: string;
+  nome: string;
+  descricao: string;
+  icone: string;
+  cor: string;
+  xp_bonus: number;
+  obtida_em?: string | null;
+}
+
+export interface EventoXp {
+  tipo: string;
+  rotulo: string;
+  xp: number;
+  descricao?: string | null;
+  criado_em?: string | null;
+}
+
+export interface Nivel {
+  nivel: number;
+  nome: string;
+  xp_total: number;
+  xp_inicio: number;
+  xp_proximo: number;
+  progresso_pct: number;
+}
+
+export interface Recompensa {
+  xp_ganho: number;
+  eventos: EventoXp[];
+  conquistas: Conquista[];
+  subiu_nivel: boolean;
+  nivel?: Nivel | null;
+  streak_atual: number;
+}
+
+export interface PerfilGamificacao {
+  nivel: Nivel;
+  xp_semana: number;
+  streak_atual: number;
+  streak_recorde: number;
+  estudou_hoje: boolean;
+  ultimo_dia?: string | null;
+  ranking_visivel: boolean;
+  conquistas: Conquista[];
+  historico: EventoXp[];
+}
+
+export interface RankingItem {
+  posicao: number;
+  usuario_id: string;
+  nome: string;
+  foto_url?: string | null;
+  xp: number;
+  nivel: number;
+  eu: boolean;
+}
+
+export interface Ranking {
+  periodo: 'semana' | 'geral';
+  curso?: { id: string; nome: string } | null;
+  cursos: { id: string; nome: string }[];
+  itens: RankingItem[];
+  minha_posicao?: RankingItem | null;
+  total_participantes: number;
+  ranking_visivel: boolean;
+}
+
+const G = '/ava/gamificacao';
+
+export const gamificacaoApi = {
+  perfil: () => apiClient.get<PerfilGamificacao>(`${G}/perfil`).then((r) => r.data),
+  ranking: (periodo: 'semana' | 'geral', cursoId?: string | null, limite = 10) =>
+    apiClient.get<Ranking>(`${G}/ranking`, { params: { periodo, curso_id: cursoId || undefined, limite } }).then((r) => r.data),
+  definirRankingVisivel: (ranking_visivel: boolean) => apiClient.put(`${G}/preferencias`, { ranking_visivel }),
+};
+
+/** Operações que o player usa (disciplina EAD ou treinamento). */
+export interface PlayerApi {
+  disciplina: (id: string) => Promise<DisciplinaPlayer>;
+  aula: (id: string) => Promise<AulaAluno>;
+  progresso: (id: string, percentual: number, posicao_seg?: number | null) => Promise<Conclusao | null>;
+  concluir: (id: string) => Promise<Conclusao>;
+  iniciarAvaliacao?: (aulaId: string) => Promise<Tentativa>;
+  avaliarAula: (id: string, nota: number) => Promise<unknown>;
+  criarAnotacao: (aulaId: string, texto: string, posicao_seg?: number | null) => Promise<Anotacao>;
+  atualizarAnotacao: (id: string, texto: string) => Promise<Anotacao>;
+  excluirAnotacao: (id: string) => Promise<unknown>;
 }
 
 const A = '/ava/aluno';
