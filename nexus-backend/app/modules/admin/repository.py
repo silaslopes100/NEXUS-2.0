@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from app.core.database import get_db_cursor
 from app.modules.admin.dashboard_repository import InMemoryDashboardMixin, PostgresDashboardMixin
+from app.modules.admin.ficha_repository import InMemoryFichaMixin, PostgresFichaMixin
 from app.modules.financeiro.schemas import FiltrosPeriodo
 
 
@@ -114,7 +115,7 @@ class AdminRepositoryInterface(Protocol):
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
 
-class PostgresAdminRepository(PostgresDashboardMixin):
+class PostgresAdminRepository(PostgresDashboardMixin, PostgresFichaMixin):
     """Implementação PostgreSQL das operações administrativas."""
 
     def get_dashboard_metrics(self) -> Dict[str, int]:
@@ -724,7 +725,7 @@ class PostgresAdminRepository(PostgresDashboardMixin):
             return total, [dict(r) for r in rows]
 
 
-class InMemoryAdminRepository(InMemoryDashboardMixin):
+class InMemoryAdminRepository(InMemoryDashboardMixin, InMemoryFichaMixin):
     """Implementação em memória para testes unitários e de integração."""
 
     def __init__(self) -> None:

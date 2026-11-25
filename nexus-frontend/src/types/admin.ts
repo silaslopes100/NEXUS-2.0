@@ -33,6 +33,14 @@ export interface UsuarioAdmin {
   transferencia_pendente?: boolean;
 }
 
+export interface TransferenciaPendenteFicha {
+  id: string;
+  tipo: string;
+  criado_em?: string | null;
+  polo_destino_nome?: string | null;
+  escola_destino_nome?: string | null;
+}
+
 export interface AlunoVinculoFicha {
   id: string;
   usuario_id?: string | null;
@@ -42,6 +50,23 @@ export interface AlunoVinculoFicha {
   data_nascimento?: string | null;
   polo_id?: string | null;
   escola_id?: string | null;
+  polo_nome?: string | null;
+  escola_nome?: string | null;
+  transferencia_pendente?: TransferenciaPendenteFicha | null;
+}
+
+export interface VinculoDocenteItem {
+  professor_disciplina_id: string;
+  turma_id?: string | null;
+  turma_nome?: string | null;
+  curso_nome?: string | null;
+  disciplina_id?: string | null;
+  disciplina_nome?: string | null;
+  carga_horaria?: number | null;
+  aulas_previstas?: number | null;
+  aulas_ministradas: number;
+  horas_ministradas: number;
+  ativo: boolean;
 }
 
 export interface ProfessorVinculoFicha {
@@ -52,29 +77,135 @@ export interface ProfessorVinculoFicha {
   quantidade_aulas: number;
   horas_totais?: number | null;
   valor_hora_aula?: number | null;
+  chave_pix?: string | null;
   status?: string | null;
   polo_id?: string | null;
   escola_id?: string | null;
+  polo_nome?: string | null;
+  escola_nome?: string | null;
+  vinculos: VinculoDocenteItem[];
+}
+
+export interface DadosCadastraisFicha {
+  data_nascimento?: string | null;
+  rg?: string | null;
+  rg_orgao_emissor?: string | null;
+  rg_uf?: string | null;
+  sexo?: string | null;
+  estado_civil?: string | null;
+  naturalidade_cidade?: string | null;
+  naturalidade_uf?: string | null;
+  nacionalidade?: string | null;
+  cep?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  contato_emergencia_nome?: string | null;
+  contato_emergencia_parentesco?: string | null;
+  contato_emergencia_telefone?: string | null;
+  inativado_em?: string | null;
+  inativado_por_nome?: string | null;
+  motivo_inativacao?: string | null;
 }
 
 export interface UsuarioFicha extends UsuarioAdmin {
+  dados: DadosCadastraisFicha;
   aluno?: AlunoVinculoFicha | null;
   professor?: ProfessorVinculoFicha | null;
 }
 
 export interface MetricasAlunoFicha {
   matriculas_total: number;
+  turmas_total: number;
   total_notas: number;
   media_notas?: number | null;
   total_presencas: number;
   presencas_positivas: number;
   percentual_presenca?: number | null;
+  frequencia_pct?: number | null;
+  frequencia_minima_pct?: number | null;
+  frequencia_em_risco: boolean;
   certificados_total: number;
 }
 
 export interface MetricasProfessorFicha {
   aulas_registradas: number;
   treinamentos_total: number;
+  turmas_total: number;
+  disciplinas_total: number;
+  horas_previstas: number;
+  horas_ministradas: number;
+}
+
+// ---------- Ficha: seções editáveis, inativação e histórico ----------
+
+export interface IdentificacaoPayload {
+  nome: string;
+  sobrenome?: string | null;
+  email: string;
+  cpf?: string | null;
+  telefone?: string | null;
+  celular?: string | null;
+}
+
+export type DadosPessoaisPayload = Pick<DadosCadastraisFicha,
+  'data_nascimento' | 'rg' | 'rg_orgao_emissor' | 'rg_uf' | 'sexo' | 'estado_civil'
+  | 'naturalidade_cidade' | 'naturalidade_uf' | 'nacionalidade'>;
+
+export type EnderecoPayload = Pick<DadosCadastraisFicha,
+  'cep' | 'logradouro' | 'numero' | 'complemento' | 'bairro' | 'cidade' | 'uf'>;
+
+export type ContatoEmergenciaPayload = Pick<DadosCadastraisFicha,
+  'contato_emergencia_nome' | 'contato_emergencia_parentesco' | 'contato_emergencia_telefone'>;
+
+export interface AcessoPayload {
+  perfil_nome: string;
+  polo_id?: string | null;
+  escola_id?: string | null;
+  permissoes: string[];
+}
+
+export interface VinculoAlunoPayload {
+  numero_matricula: string;
+  data_nascimento?: string | null;
+}
+
+export interface VinculoProfessorPayload {
+  polo_id?: string | null;
+  escola_id?: string | null;
+  valor_hora_aula?: number | null;
+  chave_pix?: string | null;
+  status: 'ativo' | 'inativo';
+}
+
+export interface PodeExcluir {
+  pode_excluir: boolean;
+  motivos: string[];
+}
+
+export type AbaHistorico = 'academico' | 'financeiro' | 'movimentacoes' | 'auditoria';
+
+export interface HistoricoItem {
+  grupo: string;
+  id?: string | null;
+  data?: string | null;
+  titulo: string;
+  detalhe?: string | null;
+  status?: string | null;
+  valor?: number | null;
+  link?: string | null;
+  extra: Record<string, any>;
+}
+
+export interface HistoricoResponse {
+  aba: AbaHistorico;
+  total: number;
+  limit: number;
+  offset: number;
+  items: HistoricoItem[];
 }
 
 export interface MetricasUnidadeFicha {

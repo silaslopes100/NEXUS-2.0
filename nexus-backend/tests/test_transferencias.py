@@ -356,7 +356,7 @@ def _headers(user_id: str, perfil: str) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_polo_nao_aprova_e_admin_nao_solicita(client, service):
+async def test_polo_nao_aprova_e_admin_solicita_pela_ficha(client, service):
     criada = service.criar(ATOR_POLO, _troca(), None)
 
     aprovar = await client.put(
@@ -371,7 +371,8 @@ async def test_polo_nao_aprova_e_admin_nao_solicita(client, service):
     )
 
     assert aprovar.status_code == 403
-    assert solicitar.status_code == 403
+    # Admin abre solicitação pela ficha do aluno; aqui o aluno já tem uma pendente.
+    assert solicitar.status_code == 409
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import close_connection_pool
 from app.modules.admin.router import router as admin_router
+from app.modules.admin.ficha_router import router as admin_ficha_router
 from app.modules.auth.router import router as auth_router
 from app.modules.aulas.router import router as aulas_router
 from app.modules.ava.admin_router import router as ava_admin_router
@@ -69,6 +70,7 @@ app.include_router(aluno_perfil_router)
 app.include_router(alunos_gestao_router)
 app.include_router(aluno_aprendizado_router)
 app.include_router(admin_router)
+app.include_router(admin_ficha_router)
 # `professores` precisa ser registrado antes de `polos_escolas` para que o
 # PUT /professores/{id} completo (retorno com dados do docente) tenha
 # precedência sobre a rota homônima legada de polos_escolas.

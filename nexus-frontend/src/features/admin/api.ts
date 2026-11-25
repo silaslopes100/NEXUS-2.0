@@ -20,7 +20,29 @@ import {
   MatriculaDashboardItem,
   OrdenacaoRanking,
   RankingPolos,
+  AbaHistorico,
+  AcessoPayload,
+  ContatoEmergenciaPayload,
+  DadosPessoaisPayload,
+  EnderecoPayload,
+  HistoricoResponse,
+  IdentificacaoPayload,
+  PodeExcluir,
+  VinculoAlunoPayload,
+  VinculoProfessorPayload,
 } from '@/types/admin';
+
+/** Seções editáveis da ficha cadastral (PUT /admin/usuarios/{id}/{secao}). */
+export type PayloadSecao = {
+  identificacao: IdentificacaoPayload;
+  'dados-pessoais': DadosPessoaisPayload;
+  endereco: EnderecoPayload;
+  'contato-emergencia': ContatoEmergenciaPayload;
+  acesso: AcessoPayload;
+  'vinculo-aluno': VinculoAlunoPayload;
+  'vinculo-professor': VinculoProfessorPayload;
+};
+export type SecaoFicha = keyof PayloadSecao;
 
 const semVazios = (filtros: FiltrosDashboard = {}) =>
   Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '' && v !== undefined && v !== null));
@@ -151,6 +173,33 @@ export const adminApi = {
     const response = await apiClient.post<{ message: string }>(`/admin/usuarios/${id}/reset-senha`, {
       nova_senha,
     });
+    return response.data;
+  },
+
+  async salvarSecaoFicha<S extends SecaoFicha>(id: string, secao: S, payload: PayloadSecao[S]): Promise<UsuarioAdmin> {
+    const response = await apiClient.put<UsuarioAdmin>(`/admin/usuarios/${id}/${secao}`, payload);
+    return response.data;
+  },
+
+  async inativarUsuario(id: string, motivo: string, status: 'inativo' | 'bloqueado'): Promise<UsuarioAdmin> {
+    const response = await apiClient.post<UsuarioAdmin>(`/admin/usuarios/${id}/inativar`, { motivo, status });
+    return response.data;
+  },
+
+  async reativarUsuario(id: string): Promise<UsuarioAdmin> {
+    const response = await apiClient.post<UsuarioAdmin>(`/admin/usuarios/${id}/reativar`);
+    return response.data;
+  },
+
+  async podeExcluirUsuario(id: string): Promise<PodeExcluir> {
+    const response = await apiClient.get<PodeExcluir>(`/admin/usuarios/${id}/pode-excluir`);
+    return response.data;
+  },
+
+  async historicoUsuario(
+    id: string, aba: AbaHistorico, params?: { limit?: number; offset?: number },
+  ): Promise<HistoricoResponse> {
+    const response = await apiClient.get<HistoricoResponse>(`/admin/usuarios/${id}/historico/${aba}`, { params });
     return response.data;
   },
 

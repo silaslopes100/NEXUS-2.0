@@ -158,6 +158,8 @@ class TransferenciasService:
         aluno = self.repo.get_aluno(str(dados.aluno_id))
         if not aluno:
             raise _erro(status.HTTP_404_NOT_FOUND, "Aluno não encontrado")
+        if ator.perfil in ("admin", "secretario_geral"):
+            return aluno
 
         escopo = self._escopo_listagem(ator)
         no_escopo = (

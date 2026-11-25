@@ -12,6 +12,12 @@ from app.modules.admin.dashboard_repository import ORDENACOES_RANKING
 from app.modules.admin.repository import AdminRepositoryInterface, get_admin_repository
 from app.modules.financeiro import exportacao as exp
 from app.modules.financeiro.schemas import FiltrosPeriodo
+from app.modules.admin.ficha_schemas import (
+    DadosCadastraisFicha,
+    TransferenciaPendenteFicha,
+    VinculoDocenteItem,
+)
+from app.modules.admin.ficha_service import FichaServiceMixin
 from app.modules.admin.schemas import (
     AlunoVinculoFicha,
     ConfiguracaoResponse,
@@ -108,7 +114,7 @@ ROTULOS_ORDENACAO = {
 }
 
 
-class AdminService:
+class AdminService(FichaServiceMixin):
     def __init__(self, repo: Optional[AdminRepositoryInterface] = None) -> None:
         self._repo = repo
 
@@ -360,37 +366,49 @@ class AdminService:
         user = self._require_user(user_id)
         perms = self.repo.get_user_permissions(user_id)
         base = self._build_user_response(user, perms)
+        dados = DadosCadastraisFicha(**{
+            k: v for k, v in {**user, **self.repo.get_dados_cadastrais(user_id)}.items()
+            if k in DadosCadastraisFicha.model_fields
+        })
 
         aluno_raw = self.repo.get_aluno_by_usuario_id(user_id)
         professor_raw = self.repo.get_professor_vinculo_by_usuario_id(user_id)
 
+        def _id(valor: Any) -> Optional[str]:
+            return str(valor) if valor else None
+
+        def _data(valor: Any) -> Any:
+            return valor.date() if isinstance(valor, datetime) else valor
+
         aluno = None
         if aluno_raw:
-            data_nasc = aluno_raw.get("data_nascimento")
-            if isinstance(data_nasc, datetime):
-                data_nasc = data_nasc.date()
+            nomes = self.repo.nomes_unidade(_id(aluno_raw.get("polo_id")), _id(aluno_raw.get("escola_id")))
+            pendente = self.repo.transferencia_pendente(str(aluno_raw["id"]))
             aluno = AlunoVinculoFicha(
                 id=str(aluno_raw["id"]),
-                usuario_id=str(aluno_raw["usuario_id"]) if aluno_raw.get("usuario_id") else None,
+                usuario_id=_id(aluno_raw.get("usuario_id")),
                 numero_matricula=aluno_raw.get("numero_matricula"),
                 modalidade=aluno_raw.get("modalidade"),
                 status=aluno_raw.get("status"),
-                data_nascimento=data_nasc,
-                polo_id=str(aluno_raw["polo_id"]) if aluno_raw.get("polo_id") else None,
-                escola_id=str(aluno_raw["escola_id"]) if aluno_raw.get("escola_id") else None,
+                data_nascimento=_data(aluno_raw.get("data_nascimento")),
+                polo_id=_id(aluno_raw.get("polo_id")),
+                escola_id=_id(aluno_raw.get("escola_id")),
+                polo_nome=nomes.get("polo_nome"),
+                escola_nome=nomes.get("escola_nome"),
+                transferencia_pendente=TransferenciaPendenteFicha(**pendente) if pendente else None,
             )
+            if dados.data_nascimento is None and aluno.data_nascimento:
+                dados.data_nascimento = aluno.data_nascimento
 
         professor = None
         if professor_raw:
-            data_inicio = professor_raw.get("data_inicio")
-            if isinstance(data_inicio, datetime):
-                data_inicio = data_inicio.date()
             horas = professor_raw.get("horas_totais")
+            nomes = self.repo.nomes_unidade(_id(professor_raw.get("polo_id")), _id(professor_raw.get("escola_id")))
             professor = ProfessorVinculoFicha(
                 id=str(professor_raw["id"]),
-                usuario_id=str(professor_raw["usuario_id"]) if professor_raw.get("usuario_id") else None,
+                usuario_id=_id(professor_raw.get("usuario_id")),
                 materias=self._coerce_materias(professor_raw.get("materias")),
-                data_inicio=data_inicio,
+                data_inicio=_data(professor_raw.get("data_inicio")),
                 quantidade_aulas=int(professor_raw.get("quantidade_aulas") or 0),
                 horas_totais=float(horas) if horas is not None else None,
                 valor_hora_aula=(
@@ -398,13 +416,18 @@ class AdminService:
                     if professor_raw.get("valor_hora_aula") is not None
                     else None
                 ),
+                chave_pix=professor_raw.get("chave_pix") or professor_raw.get("pix"),
                 status=professor_raw.get("status"),
-                polo_id=str(professor_raw["polo_id"]) if professor_raw.get("polo_id") else None,
-                escola_id=str(professor_raw["escola_id"]) if professor_raw.get("escola_id") else None,
+                polo_id=_id(professor_raw.get("polo_id")),
+                escola_id=_id(professor_raw.get("escola_id")),
+                polo_nome=nomes.get("polo_nome"),
+                escola_nome=nomes.get("escola_nome"),
+                vinculos=[VinculoDocenteItem(**v) for v in self.repo.vinculos_docentes(str(professor_raw["id"]))],
             )
 
         return UsuarioFichaResponse(
             **base.model_dump(),
+            dados=dados,
             aluno=aluno,
             professor=professor,
         )
@@ -422,8 +445,16 @@ class AdminService:
             total_presencas = int(m.get("total_presencas") or 0)
             positivas = int(m.get("presencas_positivas") or 0)
             percentual = round(positivas / total_presencas * 100.0, 1) if total_presencas > 0 else None
+            turmas = self.repo.turmas_do_aluno(str(aluno_raw["id"]))
+            frequencias = self.frequencias_do_aluno(str(aluno_raw["id"]), turmas)
+            pcts = [f["frequencia_pct"] for f in frequencias.values() if f.get("frequencia_pct") is not None]
+            minimo = next((f["minimo_pct"] for f in frequencias.values() if f.get("minimo_pct") is not None), None)
             metricas_aluno = MetricasAlunoFicha(
                 matriculas_total=int(m.get("matriculas_total") or 0),
+                turmas_total=len(turmas),
+                frequencia_pct=round(sum(pcts) / len(pcts), 1) if pcts else None,
+                frequencia_minima_pct=minimo,
+                frequencia_em_risco=any(f.get("em_risco") for f in frequencias.values()),
                 total_notas=int(m.get("total_notas") or 0),
                 media_notas=float(m["media_notas"]) if m.get("media_notas") is not None else None,
                 total_presencas=total_presencas,
@@ -435,16 +466,24 @@ class AdminService:
         metricas_professor = None
         if professor_raw:
             m = self.repo.get_metricas_professor(str(professor_raw["id"]))
+            vinculos = self.repo.vinculos_docentes(str(professor_raw["id"]))
             metricas_professor = MetricasProfessorFicha(
-                aulas_registradas=int(m.get("aulas_registradas") or 0),
+                aulas_registradas=int(m.get("aulas_registradas") or 0)
+                + sum(int(v.get("aulas_ministradas") or 0) for v in vinculos),
                 treinamentos_total=int(m.get("treinamentos_total") or 0),
+                turmas_total=len({v.get("turma_id") for v in vinculos if v.get("turma_id")}),
+                disciplinas_total=len({v.get("disciplina_id") for v in vinculos if v.get("disciplina_id")}),
+                horas_previstas=round(sum(float(v.get("carga_horaria") or 0) for v in vinculos), 2),
+                horas_ministradas=round(sum(float(v.get("horas_ministradas") or 0) for v in vinculos), 2),
             )
 
         polo_id = user.get("polo_id") or (aluno_raw or {}).get("polo_id") or (professor_raw or {}).get("polo_id")
         escola_id = user.get("escola_id") or (aluno_raw or {}).get("escola_id") or (professor_raw or {}).get("escola_id")
 
+        # O resumo da unidade só faz sentido para quem gere a unidade (perfis polo e escola).
+        perfil = str(user.get("perfil_nome") or "").lower()
         unidade = None
-        if polo_id or escola_id:
+        if perfil in ("polo", "escola") and (polo_id or escola_id):
             c = self.repo.contagens_unidade(
                 polo_id=str(polo_id) if polo_id else None,
                 escola_id=str(escola_id) if escola_id else None,
@@ -788,6 +827,8 @@ class AdminService:
                 detail="Usuário não encontrado",
             )
 
+        # A exclusão apaga em cascata aluno, notas, presenças e turmas: só sem histórico.
+        self._exigir_sem_historico(user_id)
         self.repo.delete_user(user_id)
 
         self.repo.record_audit_log(

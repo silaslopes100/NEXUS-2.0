@@ -29,7 +29,7 @@ const PERFIS_FALLBACK = [
   { value: 'logistica', label: 'Logística (envio de livros)' },
 ];
 
-const PERMISSOES_LABELS: Record<string, { label: string; desc: string }> = {
+export const PERMISSOES_LABELS: Record<string, { label: string; desc: string }> = {
   p_cadastro: { label: 'Cadastro Geral', desc: 'Permite criar novos registros no sistema' },
   p_edicao: { label: 'Edição de Dados', desc: 'Permite editar registros e cadastros existentes' },
   p_vendas: { label: 'Vendas & Licenças', desc: 'Acesso a checkout, pedidos e compra de licenças' },
@@ -43,7 +43,7 @@ const PERMISSOES_LABELS: Record<string, { label: string; desc: string }> = {
 
 const DEFAULT_PERMISSOES = ['p_cadastro', 'p_edicao', 'p_matriculas', 'p_academico', 'p_chat'];
 
-function mascaraCpf(valor: string): string {
+export function mascaraCpf(valor: string): string {
   const d = valor.replace(/\D/g, '').slice(0, 11);
   return d
     .replace(/^(\d{3})(\d)/, '$1.$2')

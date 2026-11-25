@@ -97,6 +97,23 @@ DDL: List[str] = [
     ultimo_login_em TIMESTAMPTZ""",
     ),
     "ALTER TABLE polos ADD COLUMN IF NOT EXISTS coordenador_usuario_id UUID REFERENCES usuarios(id);",
+    # Ficha cadastral (migration 031): dados pessoais, contato de emergência e inativação.
+    """ALTER TABLE usuarios
+    ADD COLUMN IF NOT EXISTS data_nascimento DATE,
+    ADD COLUMN IF NOT EXISTS rg VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS rg_orgao_emissor VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS rg_uf CHAR(2),
+    ADD COLUMN IF NOT EXISTS sexo VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS estado_civil VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS naturalidade_cidade VARCHAR(120),
+    ADD COLUMN IF NOT EXISTS naturalidade_uf CHAR(2),
+    ADD COLUMN IF NOT EXISTS nacionalidade VARCHAR(60) DEFAULT 'brasileira',
+    ADD COLUMN IF NOT EXISTS contato_emergencia_nome VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS contato_emergencia_parentesco VARCHAR(60),
+    ADD COLUMN IF NOT EXISTS contato_emergencia_telefone VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS inativado_em TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS inativado_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS motivo_inativacao TEXT;""",
     _tbl(
         "usuario_permissoes",
         """    usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,

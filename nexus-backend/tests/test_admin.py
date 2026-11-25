@@ -727,11 +727,9 @@ async def test_usuario_resumo_metricas_aluno(client: AsyncClient, repos_setup):
     assert aluno["percentual_presenca"] == 66.7
     assert aluno["certificados_total"] == 1
 
-    # Unidade derivada do polo do usuário
-    unidade = data["unidade"]
-    assert unidade is not None
-    assert unidade["escolas"] == 1
-    assert unidade["alunos"] == 1
+    assert aluno["turmas_total"] == 0
+    # O resumo da unidade (números do polo inteiro) só aparece para perfis polo/escola.
+    assert data["unidade"] is None
 
     assert data["consolidado"]["status"] == "ativo"
     assert data["consolidado"]["perfil_nome"] == "aluno"

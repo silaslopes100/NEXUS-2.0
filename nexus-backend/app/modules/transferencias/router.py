@@ -28,7 +28,8 @@ router = APIRouter(prefix="/transferencias", tags=["Transferências Acadêmicas"
 
 _APROVADORES = ["admin", "secretario_geral"]
 _UNIDADES = ["polo", "escola"]
-_SOLICITANTES = [*_UNIDADES, "aluno"]
+# Admin abre a solicitação pela ficha do aluno; ela segue o fluxo normal de aprovação.
+_SOLICITANTES = [*_UNIDADES, "aluno", "admin"]
 
 EscopoAluno = Optional[Literal["aluno"]]
 StatusTransferencia = Literal["pendente", "aprovada", "rejeitada", "churn"]

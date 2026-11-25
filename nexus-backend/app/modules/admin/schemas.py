@@ -5,6 +5,12 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.modules.admin.ficha_schemas import (
+    DadosCadastraisFicha,
+    TransferenciaPendenteFicha,
+    VinculoDocenteItem,
+)
+
 
 # ---------- Dashboard Administrativa ----------
 
@@ -243,6 +249,9 @@ class AlunoVinculoFicha(BaseModel):
     data_nascimento: Optional[date] = None
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
+    polo_nome: Optional[str] = None
+    escola_nome: Optional[str] = None
+    transferencia_pendente: Optional[TransferenciaPendenteFicha] = None
 
 
 class ProfessorVinculoFicha(BaseModel):
@@ -250,17 +259,23 @@ class ProfessorVinculoFicha(BaseModel):
 
     id: str
     usuario_id: Optional[str] = None
+    # Campos digitados à mão no cadastro antigo; a ficha usa `vinculos` (professor_disciplinas).
     materias: List[str] = Field(default_factory=list)
     data_inicio: Optional[date] = None
     quantidade_aulas: int = 0
     horas_totais: Optional[float] = None
     valor_hora_aula: Optional[float] = None
+    chave_pix: Optional[str] = None
     status: Optional[str] = None
     polo_id: Optional[str] = None
     escola_id: Optional[str] = None
+    polo_nome: Optional[str] = None
+    escola_nome: Optional[str] = None
+    vinculos: List[VinculoDocenteItem] = Field(default_factory=list)
 
 
 class UsuarioFichaResponse(UsuarioAdminResponse):
+    dados: DadosCadastraisFicha = Field(default_factory=DadosCadastraisFicha)
     aluno: Optional[AlunoVinculoFicha] = None
     professor: Optional[ProfessorVinculoFicha] = None
 
@@ -268,18 +283,27 @@ class UsuarioFichaResponse(UsuarioAdminResponse):
 # ---------- Métricas da Ficha de Usuário ----------
 
 class MetricasAlunoFicha(BaseModel):
-    matriculas_total: int = 0
+    matriculas_total: int = 0  # EAD — fora da ficha até o EAD ficar pronto
+    turmas_total: int = 0
     total_notas: int = 0
     media_notas: Optional[float] = None
     total_presencas: int = 0
     presencas_positivas: int = 0
     percentual_presenca: Optional[float] = None
+    # RN07: só atas de aula prevista e reposição; média das turmas do aluno.
+    frequencia_pct: Optional[float] = None
+    frequencia_minima_pct: Optional[float] = None
+    frequencia_em_risco: bool = False
     certificados_total: int = 0
 
 
 class MetricasProfessorFicha(BaseModel):
     aulas_registradas: int = 0
     treinamentos_total: int = 0
+    turmas_total: int = 0
+    disciplinas_total: int = 0
+    horas_previstas: float = 0.0
+    horas_ministradas: float = 0.0
 
 
 class MetricasUnidadeFicha(BaseModel):
