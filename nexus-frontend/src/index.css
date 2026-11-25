@@ -8,6 +8,19 @@
   }
 }
 
+/* Cores categóricas dos gráficos (ordem fixa, validadas para daltonismo nos
+   dois temas). O tema escuro é o padrão; o claro usa os mesmos matizes ajustados. */
+:root {
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+}
+html[data-theme='light'] {
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+}
+
 /* Tema claro: o amarelo da marca como texto/ícone fica ilegível sobre branco;
    usa um âmbar escuro. Fundos amarelos (botões) continuam iguais. */
 html[data-theme='light'] .text-nexus-yellow,

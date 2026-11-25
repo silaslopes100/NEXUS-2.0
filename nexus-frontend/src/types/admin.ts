@@ -213,3 +213,118 @@ export interface AdminDashboardMetrics {
   certificados_emitidos: number;
   licencas_em_estoque: number;
 }
+
+// ---------- Dashboard Executiva ----------
+
+export interface PeriodoResolvido {
+  inicio: string; // AAAA-MM-DD
+  fim: string;
+}
+
+export interface SerieMensalDashboard {
+  mes: string; // AAAA-MM
+  novos_alunos: number;
+  matriculas: number;
+  desistencias: number;
+}
+
+export interface DashboardExecutivo {
+  periodo: PeriodoResolvido;
+  periodo_anterior: PeriodoResolvido;
+  crescimento: {
+    alunos_ativos: number;
+    novos_alunos: number;
+    novos_alunos_anterior: number;
+    variacao_novos_alunos_pct: number | null;
+    novas_matriculas: number;
+    novas_matriculas_anterior: number;
+    variacao_matriculas_pct: number | null;
+    desistencias: number;
+    desistencias_anterior: number;
+    serie_12m: SerieMensalDashboard[];
+  };
+  academico: {
+    presenca_media_pct: number | null;
+    presenca_media_anterior_pct: number | null;
+    registros_presenca: number;
+    certificados_periodo: number;
+    certificados_anterior: number;
+  };
+  licencas: {
+    estoque_disponivel: number;
+    consumo_periodo: number;
+    consumo_anterior: number;
+    variacao_consumo_pct: number | null;
+    cobertura_dias: number | null;
+  };
+  pendencias: {
+    solicitacoes_unidade_pendentes: number;
+    transferencias_pendentes: number;
+    pedidos_aguardando_envio: number;
+    cobrancas_vencidas_qtd: number;
+    cobrancas_vencidas_valor: number;
+    estagios_em_analise: number;
+  };
+}
+
+export type OrdenacaoRanking = 'novas_licencas' | 'receita_paga' | 'alunos_ativos' | 'presenca_pct';
+
+export interface RankingPoloItem {
+  posicao: number;
+  polo_id: string;
+  polo_nome: string;
+  alunos_ativos: number;
+  escolas_ativas: number;
+  novas_licencas: number;
+  receita_paga: number;
+  presenca_pct: number | null;
+}
+
+export interface RankingPolos {
+  periodo: PeriodoResolvido;
+  ordenar_por: OrdenacaoRanking;
+  items: RankingPoloItem[];
+}
+
+export interface MatriculaDashboardItem {
+  id: string;
+  aluno_id?: string | null;
+  aluno_nome: string;
+  numero_matricula?: string | null;
+  curso_nome?: string | null;
+  polo_nome?: string | null;
+  escola_nome?: string | null;
+  data_matricula?: string | null;
+}
+
+export interface CertificadoDashboardItem {
+  id: string;
+  aluno_id?: string | null;
+  aluno_nome: string;
+  numero_matricula?: string | null;
+  curso_nome?: string | null;
+  polo_nome?: string | null;
+  emitido_em?: string | null;
+  data_estagio_teologia_ministerio?: string | null;
+  data_estagio_homiletica?: string | null;
+  url_arquivo?: string | null;
+}
+
+export interface ListaDashboard<T> {
+  total: number;
+  items: T[];
+}
+
+/** Filtros da Dashboard Executiva (mesmas chaves do PeriodoFiltros/URL). */
+export interface FiltrosDashboard {
+  data_inicio?: string;
+  data_fim?: string;
+  mes?: string;
+  semestre?: string;
+  ano?: string;
+  polo_id?: string;
+  escola_id?: string;
+  limit?: number;
+  offset?: number;
+  q?: string;
+}

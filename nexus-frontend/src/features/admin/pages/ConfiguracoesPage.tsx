@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { adminApi } from '@/features/admin/api';
 import { CHAVE_REMETENTE, RemetenteEtiquetaCard } from '@/features/admin/components/RemetenteEtiquetaCard';
+import { SegurancaSistemaCard } from '@/features/admin/components/SegurancaSistemaCard';
 import { Configuracao } from '@/types/admin';
 
 export const ConfiguracoesPage: React.FC = () => {
@@ -154,6 +155,8 @@ export const ConfiguracoesPage: React.FC = () => {
           if (!erro) loadConfiguracoes();
         }}
       />
+
+      <SegurancaSistemaCard />
 
       {/* Search & Actions */}
       <div className="glass p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 shadow-md">

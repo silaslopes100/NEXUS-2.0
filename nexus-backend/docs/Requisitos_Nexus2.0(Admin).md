@@ -110,14 +110,35 @@ preenchido e saldo disponível em `estoque_licencas`. A quantidade de matrícula
 é total geral, sem os filtros por período descritos abaixo. O Batch legado não informa
 a data de emissão dos certificados e não possui saldo inicial equivalente de estoque;
 por isso, esses dois indicadores podem retornar zero até que os dados sejam mantidos
-no novo sistema. Listagens, filtros, ranking e exportação PDF ligados a dados reais
-permanecem pendentes.
-Para demonstrações antes da conclusão das consultas, a Dashboard inclui visualizadores
-de prévia com registros fictícios no frontend. Eles simulam filtros, listas, detalhes e
-o relatório de ranking (via impressão do navegador, com opção de salvar como PDF); a
-edição nessa prévia não persiste alterações. Esses exemplos não substituem as listagens
-e consultas reais descritas abaixo e devem ser removidos ou conectados a dados reais
-antes da liberação operacional.
+no novo sistema. Esses totais alimentam os cards de "Consultas rápidas".
+
+### Dashboard Executiva (indicadores estratégicos)
+A prévia com dados fictícios foi removida; toda a Dashboard usa dados reais.
+Período: `data_inicio`/`data_fim`, ou `mes`/`semestre`/`ano`, ou (sem filtro) os
+últimos 30 dias, mais `polo_id`/`escola_id` opcionais. Cada indicador é comparado ao
+período anterior de mesma duração.
+
+- `GET /admin/dashboard/executivo`: um único retorno com
+  - **crescimento**: alunos ativos, novos alunos (cadastrados no NEXUS 2.0, sem a carga
+    migrada: `alunos.legacy_id IS NULL`), matrículas EAD (`matriculas_ead.data_matricula`;
+    o módulo EAD ainda está em implantação e retorna zero até ser alimentado),
+    desistências e série dos últimos 12 meses;
+  - **acadêmico**: presença média (%), registros de chamada e certificados emitidos;
+  - **licenças**: estoque disponível, consumo (`licencas_movimentacoes` dos tipos
+    `venda_aluno` e `reingresso_churn`) e cobertura em dias (estoque ÷ consumo médio
+    diário; nulo sem consumo, alerta abaixo de 30 dias);
+  - **pendências** (situação atual, independe do período): cobranças vencidas
+    (mesmo critério de Vendas), pedidos aguardando envio, transferências pendentes,
+    estágios em análise e solicitações de escolas aos polos.
+- Receita, a receber, vencido e ticket médio vêm de `GET /financeiro/vendas/kpis` e
+  `/vendas/serie` com o período resolvido acima, para os números baterem com a tela de Vendas.
+- `GET /admin/dashboard/ranking-polos` (`ordenar_por`: `novas_licencas` | `receita_paga` |
+  `alunos_ativos` | `presenca_pct`) e `/ranking-polos/exportar?formato=pdf|xlsx`. Novas
+  licenças e receita consideram pedidos pagos criados no período (licença + kit).
+- `GET /admin/dashboard/matriculas` e `/admin/dashboard/certificados`: listagens paginadas
+  dos visualizadores. Alunos, polos, escolas e professores reutilizam `/alunos/gestao`,
+  `/polos`, `/escolas` e `/professores`.
+- Os parâmetros técnicos de autenticação/sessão foram movidos para Configurações.
 
 ## 1. Visualizadores (cards clicáveis com contagem)
 Implementar endpoints de contagem + listagem paginada com filtros para:

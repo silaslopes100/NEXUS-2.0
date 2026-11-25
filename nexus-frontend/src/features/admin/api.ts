@@ -13,7 +13,17 @@ import {
   EtlSyncRunListResponse,
   EtlErro,
   AdminDashboardMetrics,
+  CertificadoDashboardItem,
+  DashboardExecutivo,
+  FiltrosDashboard,
+  ListaDashboard,
+  MatriculaDashboardItem,
+  OrdenacaoRanking,
+  RankingPolos,
 } from '@/types/admin';
+
+const semVazios = (filtros: FiltrosDashboard = {}) =>
+  Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '' && v !== undefined && v !== null));
 
 export interface ListUsuariosParams {
   q?: string;
@@ -38,6 +48,46 @@ export const adminApi = {
   // Dashboard
   async getDashboardMetrics(): Promise<AdminDashboardMetrics> {
     const response = await apiClient.get<AdminDashboardMetrics>('/admin/dashboard/metrics');
+    return response.data;
+  },
+
+  async getDashboardExecutivo(filtros?: FiltrosDashboard): Promise<DashboardExecutivo> {
+    const response = await apiClient.get<DashboardExecutivo>('/admin/dashboard/executivo', {
+      params: semVazios(filtros),
+    });
+    return response.data;
+  },
+
+  async getRankingPolos(filtros?: FiltrosDashboard, ordenar_por: OrdenacaoRanking = 'novas_licencas'): Promise<RankingPolos> {
+    const response = await apiClient.get<RankingPolos>('/admin/dashboard/ranking-polos', {
+      params: { ...semVazios(filtros), ordenar_por },
+    });
+    return response.data;
+  },
+
+  async exportarRankingPolos(
+    filtros: FiltrosDashboard | undefined,
+    ordenar_por: OrdenacaoRanking,
+    formato: 'pdf' | 'xlsx',
+  ): Promise<{ blob: Blob; disposition?: string }> {
+    const response = await apiClient.get<Blob>('/admin/dashboard/ranking-polos/exportar', {
+      params: { ...semVazios(filtros), ordenar_por, formato },
+      responseType: 'blob',
+    });
+    return { blob: response.data, disposition: response.headers['content-disposition'] as string | undefined };
+  },
+
+  async listMatriculasDashboard(filtros?: FiltrosDashboard): Promise<ListaDashboard<MatriculaDashboardItem>> {
+    const response = await apiClient.get<ListaDashboard<MatriculaDashboardItem>>('/admin/dashboard/matriculas', {
+      params: semVazios(filtros),
+    });
+    return response.data;
+  },
+
+  async listCertificadosDashboard(filtros?: FiltrosDashboard): Promise<ListaDashboard<CertificadoDashboardItem>> {
+    const response = await apiClient.get<ListaDashboard<CertificadoDashboardItem>>('/admin/dashboard/certificados', {
+      params: semVazios(filtros),
+    });
     return response.data;
   },
 

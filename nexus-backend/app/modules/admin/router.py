@@ -2,17 +2,22 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
+from pydantic import ValidationError
 
 from app.core.database import get_db_cursor
 from app.modules.alunos import perfil as perfil_aluno
 from app.modules.admin.dependencies import get_admin_service, require_admin_user
 from app.modules.admin.schemas import (
     AdminDashboardMetricsResponse,
+    CertificadoDashboardListResponse,
+    DashboardExecutivoResponse,
+    MatriculaDashboardListResponse,
+    RankingPolosResponse,
     ConfiguracaoBulkUpdateRequest,
     ConfiguracaoResponse,
     ConfiguracaoSetRequest,
@@ -32,6 +37,7 @@ from app.modules.admin.schemas import (
     UsuarioUpdateRequest,
 )
 from app.modules.admin.service import AdminService
+from app.modules.financeiro.schemas import FiltrosPeriodo
 from app.modules.auth.dependencies import get_client_ip
 from app.modules.auth.schemas import UserResponse
 
@@ -55,6 +61,98 @@ async def get_dashboard_metrics(
     service: AdminService = Depends(get_admin_service),
 ) -> AdminDashboardMetricsResponse:
     return service.get_dashboard_metrics()
+
+
+def filtros_dashboard(
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None,
+    mes: Optional[int] = Query(None, ge=1, le=12),
+    semestre: Optional[int] = Query(None, ge=1, le=2),
+    ano: Optional[int] = Query(None, ge=2000, le=2100),
+    polo_id: Optional[str] = None,
+    escola_id: Optional[str] = None,
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> FiltrosPeriodo:
+    """Período e unidade da Dashboard Executiva (sem período = últimos 30 dias)."""
+    try:
+        return FiltrosPeriodo(
+            data_inicio=data_inicio, data_fim=data_fim, mes=mes, semestre=semestre, ano=ano,
+            polo_id=polo_id, escola_id=escola_id, limit=limit, offset=offset,
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=[{"loc": e["loc"], "msg": e["msg"]} for e in exc.errors()],
+        ) from exc
+
+
+_ORDENAR_RANKING = Query("novas_licencas", pattern="^(novas_licencas|receita_paga|alunos_ativos|presenca_pct)$")
+
+
+@router.get(
+    "/dashboard/executivo",
+    response_model=DashboardExecutivoResponse,
+    summary="Indicadores estratégicos do período com comparação ao período anterior",
+)
+async def get_dashboard_executivo(
+    filtros: FiltrosPeriodo = Depends(filtros_dashboard),
+    service: AdminService = Depends(get_admin_service),
+) -> DashboardExecutivoResponse:
+    return service.get_dashboard_executivo(filtros)
+
+
+@router.get(
+    "/dashboard/ranking-polos",
+    response_model=RankingPolosResponse,
+    summary="Ranking de Polos no período (novas licenças, receita, alunos, presença)",
+)
+async def get_ranking_polos(
+    filtros: FiltrosPeriodo = Depends(filtros_dashboard),
+    ordenar_por: str = _ORDENAR_RANKING,
+    service: AdminService = Depends(get_admin_service),
+) -> RankingPolosResponse:
+    return service.get_ranking_polos(filtros, ordenar_por)
+
+
+@router.get(
+    "/dashboard/ranking-polos/exportar",
+    summary="Exporta o Ranking de Polos em PDF ou XLSX",
+    response_class=Response,
+)
+async def exportar_ranking_polos(
+    filtros: FiltrosPeriodo = Depends(filtros_dashboard),
+    ordenar_por: str = _ORDENAR_RANKING,
+    formato: str = Query("pdf", pattern="^(pdf|xlsx)$"),
+    service: AdminService = Depends(get_admin_service),
+) -> Response:
+    return service.exportar_ranking_polos(filtros, ordenar_por, formato)
+
+
+@router.get(
+    "/dashboard/matriculas",
+    response_model=MatriculaDashboardListResponse,
+    summary="Lista matrículas EAD por período (data da matrícula), Polo e Escola",
+)
+async def list_matriculas_dashboard(
+    filtros: FiltrosPeriodo = Depends(filtros_dashboard),
+    q: Optional[str] = Query(None, max_length=255, description="Nome do aluno ou nº de matrícula"),
+    service: AdminService = Depends(get_admin_service),
+) -> MatriculaDashboardListResponse:
+    return service.list_matriculas_dashboard(filtros, q)
+
+
+@router.get(
+    "/dashboard/certificados",
+    response_model=CertificadoDashboardListResponse,
+    summary="Lista certificados emitidos por período (data de emissão)",
+)
+async def list_certificados_dashboard(
+    filtros: FiltrosPeriodo = Depends(filtros_dashboard),
+    q: Optional[str] = Query(None, max_length=255, description="Nome do aluno ou nº de matrícula"),
+    service: AdminService = Depends(get_admin_service),
+) -> CertificadoDashboardListResponse:
+    return service.list_certificados_dashboard(filtros, q)
 
 
 # ==========================================

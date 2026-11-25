@@ -2,18 +2,34 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
 
 from app.core.security import hash_password
+from app.modules.admin.dashboard_repository import ORDENACOES_RANKING
 from app.modules.admin.repository import AdminRepositoryInterface, get_admin_repository
+from app.modules.financeiro import exportacao as exp
+from app.modules.financeiro.schemas import FiltrosPeriodo
 from app.modules.admin.schemas import (
     AlunoVinculoFicha,
     ConfiguracaoResponse,
     ConfiguracaoSetRequest,
     AdminDashboardMetricsResponse,
+    AcademicoBloco,
+    CertificadoDashboardItem,
+    CertificadoDashboardListResponse,
+    CrescimentoBloco,
+    DashboardExecutivoResponse,
+    LicencasBloco,
+    MatriculaDashboardItem,
+    MatriculaDashboardListResponse,
+    PendenciasBloco,
+    PeriodoResolvido,
+    RankingPoloItem,
+    RankingPolosResponse,
+    SerieMensalItem,
     ConsolidadoAcessoFicha,
     EtlErroResponse,
     EtlSyncRunListResponse,
@@ -36,6 +52,62 @@ from app.modules.admin.schemas import (
 )
 
 
+DIAS_PERIODO_PADRAO = 30
+
+
+def _ultimo_dia_mes(ano: int, mes: int) -> date:
+    return date(ano + (mes == 12), mes % 12 + 1, 1) - timedelta(days=1)
+
+
+def resolver_periodo(filtros: FiltrosPeriodo, hoje: Optional[date] = None) -> Tuple[date, date]:
+    """Converte os filtros (datas, mês, semestre, ano) em um intervalo fechado.
+
+    Prioridade: datas explícitas > mês/semestre/ano > últimos 30 dias.
+    Mês ou semestre sem ano usam o ano corrente.
+    """
+    hoje = hoje or date.today()
+    if filtros.data_inicio or filtros.data_fim:
+        fim = filtros.data_fim or hoje
+        inicio = filtros.data_inicio or fim - timedelta(days=DIAS_PERIODO_PADRAO - 1)
+        return inicio, fim
+    if filtros.ano or filtros.mes or filtros.semestre:
+        ano = filtros.ano or hoje.year
+        if filtros.mes:
+            return date(ano, filtros.mes, 1), _ultimo_dia_mes(ano, filtros.mes)
+        if filtros.semestre == 1:
+            return date(ano, 1, 1), date(ano, 6, 30)
+        if filtros.semestre == 2:
+            return date(ano, 7, 1), date(ano, 12, 31)
+        return date(ano, 1, 1), date(ano, 12, 31)
+    return hoje - timedelta(days=DIAS_PERIODO_PADRAO - 1), hoje
+
+
+def periodo_anterior(inicio: date, fim: date) -> Tuple[date, date]:
+    """Intervalo de mesma duração imediatamente antes de ``inicio``."""
+    dias = (fim - inicio).days + 1
+    ant_fim = inicio - timedelta(days=1)
+    return ant_fim - timedelta(days=dias - 1), ant_fim
+
+
+def variacao_pct(atual: float, anterior: float) -> Optional[float]:
+    """Variação percentual; None quando não há base de comparação."""
+    if not anterior:
+        return None
+    return round((atual - anterior) / anterior * 100, 1)
+
+
+def percentual(parte: float, total: float) -> Optional[float]:
+    return round(parte / total * 100, 1) if total else None
+
+
+ROTULOS_ORDENACAO = {
+    "novas_licencas": "Novas licenças",
+    "receita_paga": "Receita paga",
+    "alunos_ativos": "Alunos ativos",
+    "presenca_pct": "Presença média",
+}
+
+
 class AdminService:
     def __init__(self, repo: Optional[AdminRepositoryInterface] = None) -> None:
         self._repo = repo
@@ -46,6 +118,141 @@ class AdminService:
 
     def get_dashboard_metrics(self) -> AdminDashboardMetricsResponse:
         return AdminDashboardMetricsResponse(**self.repo.get_dashboard_metrics())
+
+    # ---------- Dashboard Executiva ----------
+
+    def get_dashboard_executivo(
+        self, filtros: FiltrosPeriodo, hoje: Optional[date] = None
+    ) -> DashboardExecutivoResponse:
+        inicio, fim = resolver_periodo(filtros, hoje)
+        ant_inicio, ant_fim = periodo_anterior(inicio, fim)
+        polo, escola = filtros.polo_id, filtros.escola_id
+        atual = self.repo.dashboard_contagens_periodo(inicio, fim, polo, escola)
+        anterior = self.repo.dashboard_contagens_periodo(ant_inicio, ant_fim, polo, escola)
+        foto = self.repo.dashboard_foto_atual(polo, escola)
+        serie = self.repo.dashboard_serie_mensal(fim, 12, polo, escola)
+
+        dias = (fim - inicio).days + 1
+        estoque = int(foto.get("estoque_disponivel") or 0)
+        consumo = int(atual.get("consumo_licencas") or 0)
+        consumo_ant = int(anterior.get("consumo_licencas") or 0)
+        # Quantos dias o estoque dura no ritmo de consumo do período (None = sem consumo).
+        cobertura = int(estoque * dias / consumo) if consumo else None
+
+        return DashboardExecutivoResponse(
+            periodo=PeriodoResolvido(inicio=inicio, fim=fim),
+            periodo_anterior=PeriodoResolvido(inicio=ant_inicio, fim=ant_fim),
+            crescimento=CrescimentoBloco(
+                alunos_ativos=int(foto.get("alunos_ativos") or 0),
+                novos_alunos=atual["novos_alunos"],
+                novos_alunos_anterior=anterior["novos_alunos"],
+                variacao_novos_alunos_pct=variacao_pct(atual["novos_alunos"], anterior["novos_alunos"]),
+                novas_matriculas=atual["novas_matriculas"],
+                novas_matriculas_anterior=anterior["novas_matriculas"],
+                variacao_matriculas_pct=variacao_pct(atual["novas_matriculas"], anterior["novas_matriculas"]),
+                desistencias=atual["desistencias"],
+                desistencias_anterior=anterior["desistencias"],
+                serie_12m=[SerieMensalItem(**item) for item in serie],
+            ),
+            academico=AcademicoBloco(
+                presenca_media_pct=percentual(atual["presencas_positivas"], atual["presencas_total"]),
+                presenca_media_anterior_pct=percentual(anterior["presencas_positivas"], anterior["presencas_total"]),
+                registros_presenca=atual["presencas_total"],
+                certificados_periodo=atual["certificados"],
+                certificados_anterior=anterior["certificados"],
+            ),
+            licencas=LicencasBloco(
+                estoque_disponivel=estoque,
+                consumo_periodo=consumo,
+                consumo_anterior=consumo_ant,
+                variacao_consumo_pct=variacao_pct(consumo, consumo_ant),
+                cobertura_dias=cobertura,
+            ),
+            pendencias=PendenciasBloco(
+                solicitacoes_unidade_pendentes=int(foto.get("solicitacoes_unidade_pendentes") or 0),
+                transferencias_pendentes=int(foto.get("transferencias_pendentes") or 0),
+                pedidos_aguardando_envio=int(foto.get("pedidos_aguardando_envio") or 0),
+                cobrancas_vencidas_qtd=int(foto.get("cobrancas_vencidas_qtd") or 0),
+                cobrancas_vencidas_valor=round(float(foto.get("cobrancas_vencidas_valor") or 0), 2),
+                estagios_em_analise=int(foto.get("estagios_em_analise") or 0),
+            ),
+        )
+
+    def get_ranking_polos(
+        self, filtros: FiltrosPeriodo, ordenar_por: str = "novas_licencas", hoje: Optional[date] = None
+    ) -> RankingPolosResponse:
+        if ordenar_por not in ORDENACOES_RANKING:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"ordenar_por inválido. Use: {', '.join(ORDENACOES_RANKING)}",
+            )
+        inicio, fim = resolver_periodo(filtros, hoje)
+        linhas: List[Dict[str, Any]] = []
+        for r in self.repo.dashboard_ranking_polos(inicio, fim):
+            linhas.append({
+                "polo_id": str(r["polo_id"]),
+                "polo_nome": r.get("polo_nome") or "Polo sem nome",
+                "alunos_ativos": int(r.get("alunos_ativos") or 0),
+                "escolas_ativas": int(r.get("escolas_ativas") or 0),
+                "novas_licencas": int(r.get("novas_licencas") or 0),
+                "receita_paga": round(float(r.get("receita_paga") or 0), 2),
+                "presenca_pct": percentual(
+                    int(r.get("presencas_positivas") or 0), int(r.get("presencas_total") or 0)
+                ),
+            })
+        # Decrescente pelo critério (sem dado de presença vai para o fim); empate pelo nome.
+        linhas.sort(key=lambda l: (
+            -(l[ordenar_por] if l[ordenar_por] is not None else -1),
+            l["polo_nome"].lower(),
+        ))
+        return RankingPolosResponse(
+            periodo=PeriodoResolvido(inicio=inicio, fim=fim),
+            ordenar_por=ordenar_por,
+            items=[RankingPoloItem(posicao=i + 1, **l) for i, l in enumerate(linhas)],
+        )
+
+    def exportar_ranking_polos(self, filtros: FiltrosPeriodo, ordenar_por: str, formato: str) -> Response:
+        ranking = self.get_ranking_polos(filtros, ordenar_por)
+        colunas: List[exp.Coluna] = [
+            ("Posição", 14, "C", "int"), ("Polo", 70, "L", "texto"), ("Novas licenças", 26, "R", "int"),
+            ("Receita paga", 30, "R", "moeda"), ("Alunos ativos", 24, "R", "int"),
+            ("Escolas ativas", 24, "R", "int"), ("Presença", 20, "R", "texto"),
+        ]
+        dados = [[
+            i.posicao, i.polo_nome, i.novas_licencas, i.receita_paga, i.alunos_ativos, i.escolas_ativas,
+            f"{i.presenca_pct:.1f}%".replace(".", ",") if i.presenca_pct is not None else "-",
+        ] for i in ranking.items]
+        filtros_txt = (
+            f"Período: {ranking.periodo.inicio:%d/%m/%Y} a {ranking.periodo.fim:%d/%m/%Y} | "
+            f"Ordenado por: {ROTULOS_ORDENACAO[ordenar_por]}"
+        )
+        if formato == "xlsx":
+            conteudo = exp.planilha_xlsx([("Ranking de Polos", colunas, dados)], filtros_txt)
+        else:
+            pdf = exp.RelatorioPDF("Ranking de Polos", filtros_txt, paisagem=True)
+            pdf.add_page()
+            pdf.pares([
+                ("Polos ativos", str(len(ranking.items))),
+                ("Novas licenças", str(sum(i.novas_licencas for i in ranking.items))),
+                ("Receita paga", exp.brl(sum(i.receita_paga for i in ranking.items))),
+                ("Alunos ativos", str(sum(i.alunos_ativos for i in ranking.items))),
+            ])
+            pdf.secao("Polos")
+            pdf.tabela(colunas, dados)
+            conteudo = pdf.bytes()
+        return exp.resposta_arquivo(conteudo, "ranking-polos", formato)
+
+    def list_matriculas_dashboard(
+        self, filtros: FiltrosPeriodo, q: Optional[str] = None
+    ) -> MatriculaDashboardListResponse:
+        total, itens = self.repo.dashboard_list_matriculas(filtros, q)
+        return MatriculaDashboardListResponse(total=total, items=[MatriculaDashboardItem(**i) for i in itens])
+
+    def list_certificados_dashboard(
+        self, filtros: FiltrosPeriodo, q: Optional[str] = None
+    ) -> CertificadoDashboardListResponse:
+        total, itens = self.repo.dashboard_list_certificados(filtros, q)
+        return CertificadoDashboardListResponse(total=total, items=[CertificadoDashboardItem(**i) for i in itens])
 
     def _build_user_response(
         self, user_data: Dict[str, Any], permissoes: Optional[List[str]] = None

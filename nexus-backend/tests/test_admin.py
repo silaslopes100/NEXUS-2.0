@@ -195,6 +195,170 @@ async def test_dashboard_metrics_retornam_dados_do_repositorio(client: AsyncClie
     }
 
 
+# ---------- Dashboard Executiva ----------
+
+def test_resolver_periodo_prioriza_datas_depois_mes_semestre_ano_e_padrao_30_dias():
+    from datetime import date
+    from app.modules.admin.service import periodo_anterior, resolver_periodo
+    from app.modules.financeiro.schemas import FiltrosPeriodo
+
+    hoje = date(2026, 11, 25)
+    assert resolver_periodo(FiltrosPeriodo(), hoje) == (date(2026, 10, 27), hoje)
+    assert resolver_periodo(FiltrosPeriodo(data_inicio=date(2026, 1, 5), data_fim=date(2026, 1, 9)), hoje) == (
+        date(2026, 1, 5), date(2026, 1, 9))
+    assert resolver_periodo(FiltrosPeriodo(ano=2024, mes=2), hoje) == (date(2024, 2, 1), date(2024, 2, 29))
+    assert resolver_periodo(FiltrosPeriodo(mes=12), hoje) == (date(2026, 12, 1), date(2026, 12, 31))
+    assert resolver_periodo(FiltrosPeriodo(ano=2025, semestre=2), hoje) == (date(2025, 7, 1), date(2025, 12, 31))
+    assert resolver_periodo(FiltrosPeriodo(ano=2025), hoje) == (date(2025, 1, 1), date(2025, 12, 31))
+    # Período anterior: mesma duração, encostado no início do atual.
+    assert periodo_anterior(date(2026, 11, 1), date(2026, 11, 10)) == (date(2026, 10, 22), date(2026, 10, 31))
+
+
+@pytest.mark.asyncio
+async def test_dashboard_executivo_compara_com_periodo_anterior(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    admin_repo.alunos.update({
+        "al-1": {"id": "al-1", "polo_id": "polo-a", "criado_em": "2026-11-03T08:00:00"},
+        "al-2": {"id": "al-2", "polo_id": "polo-b", "criado_em": "2026-10-30T08:00:00"},
+        # Carga migrada do legado não conta como aluno novo.
+        "al-3": {"id": "al-3", "polo_id": "polo-a", "criado_em": "2026-11-04T08:00:00", "legacy_id": 77},
+    })
+    # Período: 01-10/11/2026; anterior: 22-31/10/2026.
+    admin_repo.matriculas_ead.extend([
+        {"aluno_id": "al-1", "data_matricula": "2026-11-02T10:00:00"},
+        {"aluno_id": "al-2", "data_matricula": "2026-11-05T10:00:00"},
+        {"aluno_id": "al-1", "data_matricula": "2026-11-09T10:00:00"},
+        {"aluno_id": "al-1", "data_matricula": "2026-10-25T10:00:00"},
+        {"aluno_id": "al-2", "data_matricula": "2026-10-28T10:00:00"},
+        {"aluno_id": "al-1", "data_matricula": "2026-09-01T10:00:00"},  # fora dos dois períodos
+    ])
+    admin_repo.desistencias.append({"aluno_id": "al-2", "data_marcacao": "2026-11-03"})
+    admin_repo.presencas.extend([
+        {"aluno_id": "al-1", "data_aula": "2026-11-04", "presente": True},
+        {"aluno_id": "al-1", "data_aula": "2026-11-04", "presente": True},
+        {"aluno_id": "al-2", "data_aula": "2026-11-04", "presente": True},
+        {"aluno_id": "al-2", "data_aula": "2026-11-04", "presente": False},
+    ])
+    admin_repo.certificados.append({"aluno_id": "al-1", "emitido_em": "2026-11-08T12:00:00"})
+    admin_repo.licencas_movimentacoes.extend([
+        {"tipo": "venda_aluno", "quantidade": 20, "criado_em": "2026-11-06", "polo_id": "polo-a"},
+        {"tipo": "distribuicao_polo_escola", "quantidade": 99, "criado_em": "2026-11-06", "polo_id": "polo-a"},
+        {"tipo": "venda_aluno", "quantidade": 10, "criado_em": "2026-10-23", "polo_id": "polo-a"},
+    ])
+    admin_repo.dashboard_foto.update({
+        "alunos_ativos": 2, "estoque_disponivel": 100, "transferencias_pendentes": 3,
+        "pedidos_aguardando_envio": 4, "cobrancas_vencidas_qtd": 2, "cobrancas_vencidas_valor": 90.5,
+        "estagios_em_analise": 1, "solicitacoes_unidade_pendentes": 5,
+    })
+
+    res = await client.get(
+        "/admin/dashboard/executivo",
+        params={"data_inicio": "2026-11-01", "data_fim": "2026-11-10"},
+        headers={"Authorization": f"Bearer {_get_admin_token()}"},
+    )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["periodo"] == {"inicio": "2026-11-01", "fim": "2026-11-10"}
+    assert body["periodo_anterior"] == {"inicio": "2026-10-22", "fim": "2026-10-31"}
+    c = body["crescimento"]
+    assert (c["novas_matriculas"], c["novas_matriculas_anterior"], c["variacao_matriculas_pct"]) == (3, 2, 50.0)
+    assert (c["novos_alunos"], c["novos_alunos_anterior"], c["variacao_novos_alunos_pct"]) == (1, 1, 0.0)
+    assert c["desistencias"] == 1 and c["alunos_ativos"] == 2
+    assert len(c["serie_12m"]) == 12
+    assert c["serie_12m"][-1] == {"mes": "2026-11", "novos_alunos": 1, "matriculas": 3, "desistencias": 1}
+    assert c["serie_12m"][-2]["mes"] == "2026-10" and c["serie_12m"][-2]["matriculas"] == 2
+    a = body["academico"]
+    assert a["presenca_media_pct"] == 75.0 and a["presenca_media_anterior_pct"] is None
+    assert a["registros_presenca"] == 4 and a["certificados_periodo"] == 1
+    # 20 licenças em 10 dias = 2/dia -> 100 em estoque duram 50 dias.
+    assert body["licencas"] == {
+        "estoque_disponivel": 100, "consumo_periodo": 20, "consumo_anterior": 10,
+        "variacao_consumo_pct": 100.0, "cobertura_dias": 50,
+    }
+    assert body["pendencias"]["cobrancas_vencidas_valor"] == 90.5
+    assert body["pendencias"]["transferencias_pendentes"] == 3
+
+    # Filtro de Polo aplicado pela lotação do aluno.
+    res_polo = await client.get(
+        "/admin/dashboard/executivo",
+        params={"data_inicio": "2026-11-01", "data_fim": "2026-11-10", "polo_id": "polo-b"},
+        headers={"Authorization": f"Bearer {_get_admin_token()}"},
+    )
+    assert res_polo.json()["crescimento"]["novas_matriculas"] == 1
+    assert res_polo.json()["licencas"]["cobertura_dias"] is None  # sem consumo no polo-b
+
+
+@pytest.mark.asyncio
+async def test_dashboard_executivo_restrito_a_admin_e_valida_intervalo(client: AsyncClient):
+    res = await client.get("/admin/dashboard/executivo", headers={"Authorization": f"Bearer {_get_prof_token()}"})
+    assert res.status_code == 403
+    res = await client.get(
+        "/admin/dashboard/executivo",
+        params={"data_inicio": "2026-11-10", "data_fim": "2026-11-01"},
+        headers={"Authorization": f"Bearer {_get_admin_token()}"},
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_ranking_polos_ordena_pelo_criterio_e_exporta_pdf(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    admin_repo.ranking_polos_rows.extend([
+        {"polo_id": "p1", "polo_nome": "Polo Alfa", "alunos_ativos": 10, "escolas_ativas": 1,
+         "novas_licencas": 5, "receita_paga": 500, "presencas_total": 10, "presencas_positivas": 9},
+        {"polo_id": "p2", "polo_nome": "Polo Beta", "alunos_ativos": 30, "escolas_ativas": 2,
+         "novas_licencas": 12, "receita_paga": 300, "presencas_total": 0, "presencas_positivas": 0},
+    ])
+    headers = {"Authorization": f"Bearer {_get_admin_token()}"}
+
+    res = await client.get("/admin/dashboard/ranking-polos", headers=headers)
+    assert res.status_code == 200
+    itens = res.json()["items"]
+    assert [(i["posicao"], i["polo_nome"]) for i in itens] == [(1, "Polo Beta"), (2, "Polo Alfa")]
+    assert itens[1]["presenca_pct"] == 90.0 and itens[0]["presenca_pct"] is None
+
+    res = await client.get("/admin/dashboard/ranking-polos", params={"ordenar_por": "receita_paga"}, headers=headers)
+    assert [i["polo_nome"] for i in res.json()["items"]] == ["Polo Alfa", "Polo Beta"]
+
+    res = await client.get("/admin/dashboard/ranking-polos", params={"ordenar_por": "invalido"}, headers=headers)
+    assert res.status_code == 422
+
+    res = await client.get("/admin/dashboard/ranking-polos/exportar", params={"formato": "pdf"}, headers=headers)
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+    assert res.content.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_listagens_de_matriculas_e_certificados_filtram_e_paginam(client: AsyncClient, repos_setup):
+    _, admin_repo = repos_setup
+    admin_repo.matriculas_ead.extend([
+        {"id": f"m{i}", "aluno_id": f"al{i}", "aluno_nome": f"Aluno {i}",
+         "data_matricula": f"2026-03-{i + 10}T09:00:00"}
+        for i in range(5)
+    ])
+    admin_repo.matriculas_ead.append(
+        {"id": "m-old", "aluno_id": "al-x", "aluno_nome": "Antigo", "data_matricula": "2025-03-01T09:00:00"}
+    )
+    admin_repo.certificados.extend([
+        {"id": "c1", "aluno_id": "al1", "aluno_nome": "Aluno 1", "emitido_em": "2026-05-02T10:00:00"},
+        {"id": "c2", "aluno_id": "al2", "aluno_nome": "Aluno 2", "emitido_em": None},  # não emitido
+    ])
+    headers = {"Authorization": f"Bearer {_get_admin_token()}"}
+
+    res = await client.get("/admin/dashboard/matriculas", params={"ano": 2026, "limit": 2}, headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] == 5 and [i["id"] for i in body["items"]] == ["m4", "m3"]  # mais recentes primeiro
+
+    res = await client.get("/admin/dashboard/matriculas", params={"q": "antigo"}, headers=headers)
+    assert [i["id"] for i in res.json()["items"]] == ["m-old"]
+
+    res = await client.get("/admin/dashboard/certificados", headers=headers)
+    assert res.json()["total"] == 1 and res.json()["items"][0]["aluno_nome"] == "Aluno 1"
+
+
 # ==========================================
 # 2. CRUD Completo de Usuários Internos / Staff
 # ==========================================

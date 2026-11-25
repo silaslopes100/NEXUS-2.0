@@ -18,6 +18,121 @@ class AdminDashboardMetricsResponse(BaseModel):
     licencas_em_estoque: int
 
 
+# ---------- Dashboard Executiva (indicadores estratégicos) ----------
+
+class PeriodoResolvido(BaseModel):
+    inicio: date
+    fim: date
+
+
+class SerieMensalItem(BaseModel):
+    mes: str  # "AAAA-MM"
+    novos_alunos: int = 0
+    matriculas: int = 0  # matrículas EAD
+    desistencias: int = 0
+
+
+class CrescimentoBloco(BaseModel):
+    alunos_ativos: int = 0
+    # Alunos cadastrados no NEXUS 2.0 (exclui a carga migrada do legado: legacy_id preenchido).
+    novos_alunos: int = 0
+    novos_alunos_anterior: int = 0
+    variacao_novos_alunos_pct: Optional[float] = None
+    # Matrículas EAD (matriculas_ead.data_matricula).
+    novas_matriculas: int = 0
+    novas_matriculas_anterior: int = 0
+    variacao_matriculas_pct: Optional[float] = None
+    desistencias: int = 0
+    desistencias_anterior: int = 0
+    serie_12m: List[SerieMensalItem] = Field(default_factory=list)
+
+
+class AcademicoBloco(BaseModel):
+    presenca_media_pct: Optional[float] = None
+    presenca_media_anterior_pct: Optional[float] = None
+    registros_presenca: int = 0
+    certificados_periodo: int = 0
+    certificados_anterior: int = 0
+
+
+class LicencasBloco(BaseModel):
+    estoque_disponivel: int = 0
+    consumo_periodo: int = 0
+    consumo_anterior: int = 0
+    variacao_consumo_pct: Optional[float] = None
+    cobertura_dias: Optional[int] = None  # None = sem consumo no período
+
+
+class PendenciasBloco(BaseModel):
+    """Fila atual de trabalho (não depende do período filtrado)."""
+    solicitacoes_unidade_pendentes: int = 0
+    transferencias_pendentes: int = 0
+    pedidos_aguardando_envio: int = 0
+    cobrancas_vencidas_qtd: int = 0
+    cobrancas_vencidas_valor: float = 0.0
+    estagios_em_analise: int = 0
+
+
+class DashboardExecutivoResponse(BaseModel):
+    periodo: PeriodoResolvido
+    periodo_anterior: PeriodoResolvido
+    crescimento: CrescimentoBloco
+    academico: AcademicoBloco
+    licencas: LicencasBloco
+    pendencias: PendenciasBloco
+
+
+class RankingPoloItem(BaseModel):
+    posicao: int
+    polo_id: str
+    polo_nome: str
+    alunos_ativos: int = 0
+    escolas_ativas: int = 0
+    novas_licencas: int = 0
+    receita_paga: float = 0.0
+    presenca_pct: Optional[float] = None
+
+
+class RankingPolosResponse(BaseModel):
+    periodo: PeriodoResolvido
+    ordenar_por: str
+    items: List[RankingPoloItem]
+
+
+class MatriculaDashboardItem(BaseModel):
+    id: str
+    aluno_id: Optional[str] = None
+    aluno_nome: str
+    numero_matricula: Optional[str] = None
+    curso_nome: Optional[str] = None
+    polo_nome: Optional[str] = None
+    escola_nome: Optional[str] = None
+    data_matricula: Optional[datetime] = None
+
+
+class MatriculaDashboardListResponse(BaseModel):
+    total: int
+    items: List[MatriculaDashboardItem]
+
+
+class CertificadoDashboardItem(BaseModel):
+    id: str
+    aluno_id: Optional[str] = None
+    aluno_nome: str
+    numero_matricula: Optional[str] = None
+    curso_nome: Optional[str] = None
+    polo_nome: Optional[str] = None
+    emitido_em: Optional[datetime] = None
+    data_estagio_teologia_ministerio: Optional[date] = None
+    data_estagio_homiletica: Optional[date] = None
+    url_arquivo: Optional[str] = None
+
+
+class CertificadoDashboardListResponse(BaseModel):
+    total: int
+    items: List[CertificadoDashboardItem]
+
+
 # ---------- Perfis & Permissões ----------
 
 class PerfilItemResponse(BaseModel):

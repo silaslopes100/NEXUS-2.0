@@ -3,15 +3,33 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from app.core.database import get_db_cursor
+from app.modules.admin.dashboard_repository import InMemoryDashboardMixin, PostgresDashboardMixin
+from app.modules.financeiro.schemas import FiltrosPeriodo
 
 
 class AdminRepositoryInterface(Protocol):
     # Dashboard
     def get_dashboard_metrics(self) -> Dict[str, int]: ...
+    def dashboard_contagens_periodo(
+        self, inicio: date, fim: date, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, Any]: ...
+    def dashboard_foto_atual(
+        self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> Dict[str, Any]: ...
+    def dashboard_serie_mensal(
+        self, fim: date, meses: int = 12, polo_id: Optional[str] = None, escola_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]: ...
+    def dashboard_ranking_polos(self, inicio: date, fim: date) -> List[Dict[str, Any]]: ...
+    def dashboard_list_matriculas(
+        self, filtros: FiltrosPeriodo, q: Optional[str] = None
+    ) -> Tuple[int, List[Dict[str, Any]]]: ...
+    def dashboard_list_certificados(
+        self, filtros: FiltrosPeriodo, q: Optional[str] = None
+    ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
     # Usuários
     def list_users(
@@ -96,7 +114,7 @@ class AdminRepositoryInterface(Protocol):
     ) -> Tuple[int, List[Dict[str, Any]]]: ...
 
 
-class PostgresAdminRepository:
+class PostgresAdminRepository(PostgresDashboardMixin):
     """Implementação PostgreSQL das operações administrativas."""
 
     def get_dashboard_metrics(self) -> Dict[str, int]:
@@ -706,7 +724,7 @@ class PostgresAdminRepository:
             return total, [dict(r) for r in rows]
 
 
-class InMemoryAdminRepository:
+class InMemoryAdminRepository(InMemoryDashboardMixin):
     """Implementação em memória para testes unitários e de integração."""
 
     def __init__(self) -> None:
@@ -753,6 +771,7 @@ class InMemoryAdminRepository:
             "certificados_emitidos": 0,
             "licencas_em_estoque": 0,
         }
+        self._init_dashboard()
 
     def get_dashboard_metrics(self) -> Dict[str, int]:
         return self.dashboard_metrics.copy()

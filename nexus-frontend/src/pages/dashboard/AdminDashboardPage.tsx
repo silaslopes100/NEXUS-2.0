@@ -1,300 +1,248 @@
-import React, { useEffect, useState } from 'react';
-import { useAuthStore } from '@/stores/authStore';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Activity, CalendarRange, KeyRound, Percent, TrendingUp, Users, Wallet } from 'lucide-react';
+import { LinhaMensal } from '@/components/charts/GraficoBarrasMensal';
+import { PeriodoFiltros, useFiltrosUrl } from '@/components/filters/PeriodoFiltros';
 import { adminApi } from '@/features/admin/api';
-import { AdminDashboardMetrics } from '@/types/admin';
-import { AdminDashboardPreview } from './AdminDashboardPreview';
-import {
-  Users,
-  Building2,
-  GraduationCap,
-  CreditCard,
-  Activity,
-  KeyRound,
-  ArrowUpRight,
-  ClipboardList,
-  AlertTriangle,
-  ChevronRight,
-} from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { AtividadeDocente, aulasApi, dataLocalMenosDias } from '@/features/aulas/api';
-import { formatarData } from '@/features/turmas/api';
+import { financeiroApi } from '@/features/financeiro/api';
+import { VendasKpis, VendasSerieItem, formatBRL } from '@/features/financeiro/types';
+import { useAuthStore } from '@/stores/authStore';
+import {
+  AdminDashboardMetrics, DashboardExecutivo, FiltrosDashboard, OrdenacaoRanking, RankingPolos as Ranking,
+} from '@/types/admin';
+import { AtividadeDocentePainel, DIAS_ATIVIDADE, DIAS_SEM_REGISTRO } from './admin/AtividadeDocente';
+import { BlocoAcademico, BlocoCrescimento, BlocoLicencas, BlocoReceita } from './admin/BlocosIndicadores';
+import { CentralPendencias } from './admin/CentralPendencias';
+import { KpiVariacao } from './admin/KpiVariacao';
+import { RankingPolos } from './admin/RankingPolos';
+import { VisualizadoresReais } from './admin/VisualizadoresReais';
+import { fmtData, fmtInt, fmtPct, isoLocal, ultimos12Meses, variacaoPct } from './admin/formato';
 
-const DIAS_ATIVIDADE = 30;
-const DIAS_SEM_REGISTRO = 14;
+const CHAVES_PERIODO = ['data_inicio', 'data_fim', 'mes', 'semestre', 'ano'] as const;
+const ATALHOS = [
+  { rotulo: '30 dias', dias: 30 },
+  { rotulo: '90 dias', dias: 90 },
+  { rotulo: '12 meses', dias: 365 },
+] as const;
+
+/** Receita: mesmo endpoint e critério da tela de Vendas, no período resolvido pelo painel. */
+interface Receita {
+  atual: VendasKpis;
+  anterior: VendasKpis;
+  serie: LinhaMensal[];
+}
 
 export const AdminDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
+  const { filtros: filtrosUrl } = useFiltrosUrl();
+  const [params, setParams] = useSearchParams();
+
+  const filtros: FiltrosDashboard = useMemo(() => ({
+    data_inicio: filtrosUrl.data_inicio, data_fim: filtrosUrl.data_fim, mes: filtrosUrl.mes,
+    semestre: filtrosUrl.semestre, ano: filtrosUrl.ano, polo_id: filtrosUrl.polo_id, escola_id: filtrosUrl.escola_id,
+  }), [filtrosUrl]);
+  const chaveFiltros = JSON.stringify(filtros);
+  const filtrosPeriodo: FiltrosDashboard = useMemo(() => ({
+    data_inicio: filtros.data_inicio, data_fim: filtros.data_fim, mes: filtros.mes, semestre: filtros.semestre, ano: filtros.ano,
+  }), [chaveFiltros]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [metrics, setMetrics] = useState<AdminDashboardMetrics | null>(null);
-  const [metricsError, setMetricsError] = useState(false);
+  const [executivo, setExecutivo] = useState<DashboardExecutivo | null>(null);
+  const [erroExecutivo, setErroExecutivo] = useState(false);
+  const [receita, setReceita] = useState<Receita | null>(null);
+  const [erroReceita, setErroReceita] = useState(false);
+  const [ranking, setRanking] = useState<Ranking | null>(null);
+  const [erroRanking, setErroRanking] = useState(false);
+  const [carregandoRanking, setCarregandoRanking] = useState(false);
+  const [ordenarPor, setOrdenarPor] = useState<OrdenacaoRanking>('novas_licencas');
   const [atividade, setAtividade] = useState<AtividadeDocente | null>(null);
-  const [atividadeErro, setAtividadeErro] = useState(false);
+  const [erroAtividade, setErroAtividade] = useState(false);
 
+  // Totais gerais (cards de consulta) e atividade docente: independem do filtro.
   useEffect(() => {
-    let ativo = true;
-    aulasApi
-      .atividade(DIAS_ATIVIDADE, DIAS_SEM_REGISTRO)
-      .then((dados) => ativo && setAtividade(dados))
-      .catch(() => ativo && setAtividadeErro(true));
-    return () => {
-      ativo = false;
-    };
+    let vivo = true;
+    adminApi.getDashboardMetrics().then((d) => vivo && setMetrics(d)).catch(() => undefined);
+    aulasApi.atividade(DIAS_ATIVIDADE, DIAS_SEM_REGISTRO)
+      .then((d) => vivo && setAtividade(d))
+      .catch(() => vivo && setErroAtividade(true));
+    return () => { vivo = false; };
   }, []);
 
-  const inicioPeriodo = dataLocalMenosDias(DIAS_ATIVIDADE);
-
+  // Indicadores do período + receita (precisa do período resolvido pelo backend).
   useEffect(() => {
-    let isMounted = true;
-
-    adminApi.getDashboardMetrics()
-      .then((data) => {
-        if (isMounted) setMetrics(data);
+    let vivo = true;
+    setErroExecutivo(false);
+    setErroReceita(false);
+    adminApi.getDashboardExecutivo(filtros)
+      .then(async (exec) => {
+        if (!vivo) return;
+        setExecutivo(exec);
+        const unidade = { polo_id: filtros.polo_id, escola_id: filtros.escola_id };
+        const meses = ultimos12Meses(exec.periodo.fim);
+        try {
+          const [atual, anterior, serie] = await Promise.all([
+            financeiroApi.vendasKpis({ ...unidade, data_inicio: exec.periodo.inicio, data_fim: exec.periodo.fim }),
+            financeiroApi.vendasKpis({ ...unidade, data_inicio: exec.periodo_anterior.inicio, data_fim: exec.periodo_anterior.fim }),
+            financeiroApi.vendasSerie({ ...unidade, data_inicio: `${meses[0]}-01`, data_fim: exec.periodo.fim }),
+          ]);
+          if (!vivo) return;
+          const porMes = new Map<string, VendasSerieItem>(serie.map((s) => [s.mes, s]));
+          setReceita({
+            atual,
+            anterior,
+            serie: meses.map((mes) => ({ mes, receita: 0, pedidos: 0, pedidos_pagos: 0, ...porMes.get(mes) })),
+          });
+        } catch {
+          if (vivo) setErroReceita(true);
+        }
       })
-      .catch((error: unknown) => {
-        console.error('Erro ao carregar indicadores da Dashboard administrativa:', error);
-        if (isMounted) setMetricsError(true);
-      });
+      .catch(() => { if (vivo) { setErroExecutivo(true); setErroReceita(true); } });
+    return () => { vivo = false; };
+  }, [chaveFiltros]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // Ranking: um item por polo, então usa só o período (não a unidade).
+  useEffect(() => {
+    let vivo = true;
+    setCarregandoRanking(true);
+    setErroRanking(false);
+    adminApi.getRankingPolos(filtrosPeriodo, ordenarPor)
+      .then((r) => vivo && setRanking(r))
+      .catch(() => vivo && setErroRanking(true))
+      .finally(() => vivo && setCarregandoRanking(false));
+    return () => { vivo = false; };
+  }, [filtrosPeriodo, ordenarPor]);
 
-  const formatMetric = (value: number | undefined) =>
-    value === undefined ? '—' : new Intl.NumberFormat('pt-BR').format(value);
+  const aplicarAtalho = (dias: number) => {
+    const next = new URLSearchParams(params);
+    CHAVES_PERIODO.forEach((k) => next.delete(k));
+    const hoje = new Date();
+    const inicio = new Date(hoje);
+    inicio.setDate(hoje.getDate() - (dias - 1));
+    next.set('data_inicio', isoLocal(inicio));
+    next.set('data_fim', isoLocal(hoje));
+    setParams(next);
+  };
+  const atalhoAtivo = (dias: number) => {
+    if (!filtros.data_inicio || !filtros.data_fim || filtros.mes || filtros.semestre || filtros.ano) return false;
+    const inicio = new Date(); inicio.setDate(inicio.getDate() - (dias - 1));
+    return filtros.data_inicio === isoLocal(inicio) && filtros.data_fim === isoLocal(new Date());
+  };
+  const semFiltroPeriodo = CHAVES_PERIODO.every((k) => !filtros[k]);
 
-  const stats = [
-    {
-      label: 'Alunos Ativos / Matrículas EAD',
-      val: metrics ? `${formatMetric(metrics.alunos_ativos)} / ${formatMetric(metrics.matriculas_total)}` : '—',
-      icon: Users,
-      change: metricsError ? 'Dados indisponíveis' : 'Alunos ativos / matrículas EAD migradas',
-      color: 'text-blue-400',
-      to: '/admin/alunos',
-    },
-    {
-      label: 'Polos / Escolas Ativas',
-      val: metrics ? `${formatMetric(metrics.polos_ativos)} / ${formatMetric(metrics.escolas_ativas)}` : '—',
-      icon: Building2,
-      change: metricsError ? 'Dados indisponíveis' : 'Polos ativos / escolas ativas',
-      color: 'text-nexus-yellow',
-      to: '/admin/polos-escolas',
-    },
-    {
-      label: 'Professores / Certificados',
-      val: metrics ? `${formatMetric(metrics.professores_ativos)} / ${formatMetric(metrics.certificados_emitidos)}` : '—',
-      icon: GraduationCap,
-      change: metricsError ? 'Dados indisponíveis' : 'Professores ativos / certificados emitidos',
-      color: 'text-emerald-400',
-      to: '/admin/professores',
-    },
-    {
-      label: 'Licenças em Estoque',
-      val: metrics ? formatMetric(metrics.licencas_em_estoque) : '—',
-      icon: CreditCard,
-      change: metricsError ? 'Dados indisponíveis' : 'Quantidade disponível no estoque geral',
-      color: 'text-purple-400',
-      to: '/admin/licencas',
-    },
-    {
-      label: `Aulas registradas (${DIAS_ATIVIDADE} dias)`,
-      val: atividade ? formatMetric(atividade.aulas_registradas) : '—',
-      icon: ClipboardList,
-      change: atividadeErro
-        ? 'Dados indisponíveis'
-        : atividade
-          ? `${formatMetric(atividade.disciplinas_com_aula)} disciplinas · ${formatMetric(atividade.polos_com_aula)} polos`
-          : 'Carregando...',
-      color: 'text-cyan-400',
-      to: `/admin/aulas?de=${inicioPeriodo}`,
-    },
-  ];
+  const cresc = executivo?.crescimento;
+  const acad = executivo?.academico;
+  const lic = executivo?.licencas;
+  const carteira = receita ? receita.atual.receita_paga + receita.atual.a_receber : 0;
+  const inadimplencia = receita && carteira ? (receita.atual.vencido / carteira) * 100 : null;
+  const carteiraAnt = receita ? receita.anterior.receita_paga + receita.anterior.a_receber : 0;
+  const inadimplenciaAnt = receita && carteiraAnt ? (receita.anterior.vencido / carteiraAnt) * 100 : null;
+  const deltaPresenca = acad && acad.presenca_media_pct !== null && acad.presenca_media_anterior_pct !== null
+    ? Math.round((acad.presenca_media_pct - acad.presenca_media_anterior_pct) * 10) / 10 : null;
+  const deltaInadimplencia = inadimplencia !== null && inadimplenciaAnt !== null
+    ? Math.round((inadimplencia - inadimplenciaAnt) * 10) / 10 : null;
 
   return (
-    <div className="space-y-8 max-w-7xl">
-      {/* Welcome Banner */}
-      <div className="glass p-8 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 border border-slate-800 shadow-2xl relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="max-w-7xl space-y-6">
+      {/* Banner */}
+      <div className="glass relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900/90 to-blue-950/40 p-8 shadow-2xl">
+        <div className="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-center">
           <div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">
-              Bem-vindo, {user?.nome || 'Administrador'}!
-            </h1>
-            <p className="text-sm text-slate-400 mt-1 max-w-xl">
-              Visão executiva em tempo real de acessos, segurança, matrículas e finanças do ecossistema.
+            <h1 className="text-3xl font-extrabold tracking-tight text-white">Bem-vindo, {user?.nome || 'Administrador'}!</h1>
+            <p className="mt-1 max-w-xl text-sm text-slate-400">
+              Visão executiva do ecossistema: crescimento, receita, licenças, qualidade acadêmica e o que precisa de ação.
             </p>
           </div>
-
           <div className="flex items-center gap-3">
-            <Link
-              to="/admin/usuarios"
-              className="py-2.5 px-4 bg-nexus-yellow hover:bg-nexus-yellow-hover text-ink font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-1.5"
-            >
-              <Users className="w-4 h-4" />
-              Gerenciar Usuários
+            <Link to="/admin/usuarios" className="flex items-center gap-1.5 rounded-xl bg-nexus-yellow px-4 py-2.5 text-xs font-bold text-ink shadow-lg transition-colors hover:bg-nexus-yellow-hover">
+              <Users className="h-4 w-4" /> Gerenciar Usuários
             </Link>
-            <Link
-              to="/admin/auditoria"
-              className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 transition-colors flex items-center gap-1.5"
-            >
-              <Activity className="w-4 h-4 text-nexus-yellow" />
-              Logs de Auditoria
+            <Link to="/admin/auditoria" className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700">
+              <Activity className="h-4 w-4 text-nexus-yellow" /> Logs de Auditoria
             </Link>
           </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
-        {stats.map((s, idx) => {
-          const Icon = s.icon;
-          return (
-            <Link
-              key={idx}
-              to={s.to}
-              className="glass block p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-md hover:border-nexus-yellow/40 hover:bg-slate-900 transition-all"
+      {/* Período */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="flex items-center gap-2 text-sm text-slate-300">
+          <CalendarRange className="h-4 w-4 text-nexus-yellow" />
+          {executivo ? (
+            <span>
+              <strong className="text-white">{fmtData(executivo.periodo.inicio)} a {fmtData(executivo.periodo.fim)}</strong>
+              <span className="text-slate-500"> · comparado a {fmtData(executivo.periodo_anterior.inicio)} a {fmtData(executivo.periodo_anterior.fim)}</span>
+              {semFiltroPeriodo && <span className="text-slate-500"> (padrão: últimos 30 dias)</span>}
+            </span>
+          ) : 'Carregando período...'}
+        </p>
+        <div className="flex gap-2" role="group" aria-label="Atalhos de período">
+          {ATALHOS.map((a) => (
+            <button
+              key={a.dias}
+              type="button"
+              onClick={() => aplicarAtalho(a.dias)}
+              aria-pressed={atalhoAtivo(a.dias)}
+              className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${atalhoAtivo(a.dias) ? 'border-nexus-yellow bg-nexus-yellow/10 text-nexus-yellow' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  {s.label}
-                </span>
-                <div className={`p-2 rounded-xl bg-slate-950 border border-slate-800 ${s.color}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="text-2xl font-black text-white mt-3">{s.val}</div>
-              <div className="flex items-center gap-1 text-xs text-slate-400 mt-2">
-                <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{s.change}</span>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-
-      <AtividadeDocentePainel atividade={atividade} erro={atividadeErro} inicioPeriodo={inicioPeriodo} />
-
-      <AdminDashboardPreview />
-
-      {/* Quick Security & Architecture Facts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
-          <div className="flex items-center gap-2 mb-4 text-nexus-yellow">
-            <KeyRound className="w-5 h-5" />
-            <h2 className="text-base font-bold text-white">Status da Autenticação</h2>
-          </div>
-          <div className="space-y-3 text-sm text-slate-300">
-            <div className="flex justify-between items-center py-2 border-b border-slate-800">
-              <span className="text-slate-400">Algoritmo de Senha Ativo</span>
-              <span className="font-mono text-xs bg-slate-950 px-2.5 py-1 rounded-md text-nexus-yellow border border-slate-800">
-                Argon2id (com Lazy Rehash)
-              </span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b border-slate-800">
-              <span className="text-slate-400">Tempo de Expiração do Access Token</span>
-              <span className="font-semibold text-white">15 minutos</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b border-slate-800">
-              <span className="text-slate-400">Validade do Refresh Token (Uso Único)</span>
-              <span className="font-semibold text-white">7 dias</span>
-            </div>
-            <div className="flex justify-between items-center py-2">
-              <span className="text-slate-400">Bloqueio Preventivo de Força Bruta</span>
-              <span className="text-emerald-400 font-semibold">Ativo (5 tentativas / 15 min)</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
-          <div className="flex items-center gap-2 mb-4 text-blue-400">
-            <Activity className="w-5 h-5" />
-            <h2 className="text-base font-bold text-white">Sessão em Memória</h2>
-          </div>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            O NEXUS 2.0 armazena o access_token estritamente na memória da aplicação (Zustand authStore).
-            Isso elimina vulnerabilidades de persistência no <code>localStorage</code> contra ataques XSS e garante renovação automática via Axios Interceptor.
-          </p>
-          <div className="mt-4 p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-400">
-            <p><strong>Usuário Logado:</strong> {user?.email || '-'}</p>
-            <p><strong>ID:</strong> {user?.id || '-'}</p>
-          </div>
+              {a.rotulo}
+            </button>
+          ))}
         </div>
       </div>
+      <PeriodoFiltros />
+
+      {/* KPIs com tendência */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <KpiVariacao
+          rotulo="Novos alunos" icone={TrendingUp} carregando={!cresc && !erroExecutivo}
+          valor={erroExecutivo ? '—' : fmtInt(cresc?.novos_alunos)} variacao={cresc?.variacao_novos_alunos_pct}
+          detalhe={cresc ? `${fmtInt(cresc.alunos_ativos)} alunos ativos hoje` : undefined} to="/admin/alunos"
+        />
+        <KpiVariacao
+          rotulo="Receita paga" icone={Wallet} carregando={!receita && !erroReceita}
+          valor={receita ? formatBRL(receita.atual.receita_paga) : '—'}
+          variacao={receita ? variacaoPct(receita.atual.receita_paga, receita.anterior.receita_paga) : undefined}
+          detalhe={receita ? `ticket médio ${formatBRL(receita.atual.ticket_medio)}` : undefined} to="/admin/vendas"
+        />
+        <KpiVariacao
+          rotulo="Inadimplência" icone={Percent} carregando={!receita && !erroReceita} subirEhRuim unidadeVariacao="p.p."
+          valor={receita ? fmtPct(inadimplencia) : '—'} variacao={receita ? deltaInadimplencia : undefined}
+          detalhe={receita ? `${formatBRL(receita.atual.vencido)} vencido` : undefined} to="/admin/financeiro?status=vencido"
+        />
+        <KpiVariacao
+          rotulo="Presença média" icone={Activity} carregando={!acad && !erroExecutivo} unidadeVariacao="p.p."
+          valor={erroExecutivo ? '—' : fmtPct(acad?.presenca_media_pct)} variacao={acad ? deltaPresenca : undefined}
+          detalhe={acad ? `${fmtInt(acad.registros_presenca)} registro(s) de chamada` : undefined} to="/admin/presencas"
+        />
+        <KpiVariacao
+          rotulo="Licenças consumidas" icone={KeyRound} carregando={!lic && !erroExecutivo}
+          valor={erroExecutivo ? '—' : fmtInt(lic?.consumo_periodo)} variacao={lic?.variacao_consumo_pct}
+          detalhe={lic ? (lic.cobertura_dias === null ? `${fmtInt(lic.estoque_disponivel)} em estoque` : `estoque para ${fmtInt(lic.cobertura_dias)} dias`) : undefined}
+          to="/admin/licencas"
+        />
+      </div>
+
+      <CentralPendencias pendencias={executivo?.pendencias || null} erro={erroExecutivo} />
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <BlocoCrescimento dados={cresc || null} erro={erroExecutivo} />
+        <BlocoReceita kpis={receita?.atual || null} serie={receita?.serie || []} erro={erroReceita} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <BlocoLicencas dados={lic || null} erro={erroExecutivo} />
+        <BlocoAcademico dados={acad || null} atividade={atividade} erro={erroExecutivo} />
+      </div>
+
+      <AtividadeDocentePainel atividade={atividade} erro={erroAtividade} inicioPeriodo={dataLocalMenosDias(DIAS_ATIVIDADE)} />
+
+      <RankingPolos
+        ranking={ranking} erro={erroRanking} carregando={carregandoRanking}
+        ordenarPor={ordenarPor} onOrdenar={setOrdenarPor} filtros={filtrosPeriodo}
+      />
+
+      <VisualizadoresReais metrics={metrics} executivo={executivo} ranking={ranking} filtros={filtros} />
     </div>
   );
 };
-
-/** Painel "Atividade docente": leva direto para a auditoria de aulas já filtrada. */
-const AtividadeDocentePainel: React.FC<{
-  atividade: AtividadeDocente | null;
-  erro: boolean;
-  inicioPeriodo: string;
-}> = ({ atividade, erro, inicioPeriodo }) => (
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <section className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <h2 className="flex items-center gap-2 text-base font-bold text-white">
-          <ClipboardList className="w-5 h-5 text-cyan-400" />
-          Disciplinas com mais aulas ({DIAS_ATIVIDADE} dias)
-        </h2>
-        <Link to={`/admin/aulas?de=${inicioPeriodo}`} className="text-xs font-semibold text-nexus-yellow hover:underline">
-          Ver todas
-        </Link>
-      </div>
-      {erro ? (
-        <p className="text-sm text-slate-500">Dados indisponíveis no momento.</p>
-      ) : !atividade ? (
-        <p className="text-sm text-slate-500">Carregando...</p>
-      ) : atividade.top_disciplinas.length === 0 ? (
-        <p className="text-sm text-slate-500">Nenhuma aula registrada no período.</p>
-      ) : (
-        <ul className="divide-y divide-slate-800">
-          {atividade.top_disciplinas.map((d) => (
-            <li key={d.id}>
-              <Link
-                to={`/admin/aulas?disciplina=${d.id}&de=${inicioPeriodo}`}
-                className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-300 hover:text-white"
-              >
-                <span className="truncate">{d.nome}</span>
-                <span className="flex shrink-0 items-center gap-1 font-semibold text-white">
-                  {d.total_aulas} aula(s)
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-
-    <section className="glass p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
-      <h2 className="flex items-center gap-2 mb-1 text-base font-bold text-white">
-        <AlertTriangle className="w-5 h-5 text-amber-400" />
-        Polos sem aula registrada há {DIAS_SEM_REGISTRO} dias
-      </h2>
-      <p className="mb-4 text-xs text-slate-500">Polos com turma e professor vinculados, mas sem registro recente.</p>
-      {erro ? (
-        <p className="text-sm text-slate-500">Dados indisponíveis no momento.</p>
-      ) : !atividade ? (
-        <p className="text-sm text-slate-500">Carregando...</p>
-      ) : atividade.polos_sem_registro.length === 0 ? (
-        <p className="text-sm text-emerald-300">Todos os polos com turma registraram aulas recentemente.</p>
-      ) : (
-        <ul className="divide-y divide-slate-800">
-          {atividade.polos_sem_registro.map((p) => (
-            <li key={p.id}>
-              <Link
-                to={`/admin/aulas?polo=${p.id}`}
-                className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-300 hover:text-white"
-              >
-                <span className="truncate">{p.nome}</span>
-                <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500">
-                  {p.ultima_aula ? `última em ${formatarData(p.ultima_aula)}` : 'nenhuma aula'}
-                  <ChevronRight className="w-4 h-4" />
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  </div>
-);
