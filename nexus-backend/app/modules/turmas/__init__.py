@@ -1,4 +1,4 @@
-"""Módulo de Turmas e Calendários Oficiais do NEXUS 2.0."""
+"""Módulo de Turmas do NEXUS 2.0 (o calendário vem do Calendário Acadêmico do curso)."""
 from __future__ import annotations
 
 import uuid
@@ -32,7 +32,6 @@ class TurmaSchema(BaseModel):
     nome: str
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
-    calendario_oficial_id: Optional[str] = None
 
 
 class TurmaDetalheSchema(TurmaSchema):
@@ -49,7 +48,6 @@ class TurmaWriteSchema(BaseModel):
     nome: NomeTurma
     data_inicio: Optional[date] = None
     data_fim: Optional[date] = None
-    calendario_oficial_id: Optional[uuid.UUID] = None
 
 
 class TurmasPaginaSchema(BaseModel):
@@ -75,50 +73,23 @@ class AlunosTurmaPaginaSchema(BaseModel):
     offset: int
 
 
-class CalendarioSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: Optional[str] = None
-    curso_id: Optional[str] = None
-    disciplina_id: Optional[str] = None
-    data_liberacao: Optional[date] = None
-    data_encerramento: Optional[date] = None
-    curso_nome: Optional[str] = None
-    disciplina_nome: Optional[str] = None
-
-
-class CalendarioWriteSchema(BaseModel):
-    curso_id: Optional[uuid.UUID] = None
-    disciplina_id: Optional[uuid.UUID] = None
-    data_liberacao: Optional[date] = None
-    data_encerramento: Optional[date] = None
-
-
 class CursoDetalhesSchema(BaseModel):
     disciplinas: List[Dict[str, Any]]
     turmas: List[TurmaSchema]
 
 
 _turmas_db: Dict[str, Dict[str, Any]] = {}
-_calendarios_db: Dict[str, Dict[str, Any]] = {}
 _turma_alunos_db: List[Dict[str, Any]] = []
 
 _TURMA_SELECT = """
     SELECT t.id, t.curso_id, t.polo_id, t.escola_id, t.nome, t.data_inicio,
-           t.data_fim, t.calendario_oficial_id,
+           t.data_fim,
            c.nome AS curso_nome, p.nome AS polo_nome, e.nome AS escola_nome,
            (SELECT COUNT(*) FROM turma_alunos ta WHERE ta.turma_id = t.id) AS total_alunos
     FROM turmas t
     LEFT JOIN cursos c ON c.id = t.curso_id
     LEFT JOIN polos p ON p.id = t.polo_id
     LEFT JOIN escolas e ON e.id = t.escola_id
-"""
-
-_CALENDARIO_SELECT = """
-    SELECT co.id, co.curso_id, co.disciplina_id, co.data_liberacao, co.data_encerramento,
-           c.nome AS curso_nome, d.nome AS disciplina_nome
-    FROM calendarios_oficiais co
-    LEFT JOIN cursos c ON c.id = co.curso_id
-    LEFT JOIN disciplinas d ON d.id = co.disciplina_id
 """
 
 _ALUNO_NOME_SQL = "trim(concat(u.nome, ' ', u.sobrenome))"
@@ -219,12 +190,6 @@ def _buscar_turma(cur: Any, turma_id: str, bloquear: bool = False) -> Optional[D
     return dict(row) if row else None
 
 
-def _buscar_calendario(cur: Any, calendario_id: str, bloquear: bool = False) -> Optional[Dict[str, Any]]:
-    cur.execute(_CALENDARIO_SELECT + " WHERE co.id = %s" + (" FOR UPDATE OF co" if bloquear else ""), (calendario_id,))
-    row = cur.fetchone()
-    return dict(row) if row else None
-
-
 def _turma_memoria(turma_id: str) -> Optional[Dict[str, Any]]:
     turma = _turmas_db.get(turma_id)
     if turma is None:
@@ -291,7 +256,7 @@ async def list_turmas(
     with get_db_cursor() as cur:
         cur.execute(
             "SELECT t.id, t.curso_id, t.polo_id, t.escola_id, t.nome, t.data_inicio, "
-            "t.data_fim, t.calendario_oficial_id FROM turmas t" + where + " ORDER BY t.nome, t.id",
+            "t.data_fim FROM turmas t" + where + " ORDER BY t.nome, t.id",
             tuple(params),
         )
         return [dict(r) for r in cur.fetchall()]
@@ -331,150 +296,6 @@ async def list_turmas_paginadas(
             tuple(params + [limit, offset]),
         )
         return {"items": [dict(r) for r in cur.fetchall()], "total": total, "limit": limit, "offset": offset}
-
-
-@router.get(
-    "/calendarios",
-    response_model=List[CalendarioSchema],
-    dependencies=[Depends(require_role(_PERFIS_TURMA))],
-)
-async def list_calendarios(curso_id: Optional[uuid.UUID] = None):
-    curso_filtro = _texto(curso_id)
-    if not settings.PG_DSN:
-        return [c for c in _calendarios_db.values() if not curso_filtro or c.get("curso_id") == curso_filtro]
-
-    sql = _CALENDARIO_SELECT
-    params: Tuple[Any, ...] = ()
-    if curso_filtro:
-        sql += " WHERE co.curso_id = %s"
-        params = (curso_filtro,)
-    with get_db_cursor() as cur:
-        cur.execute(sql + " ORDER BY co.data_liberacao NULLS LAST, co.id", params)
-        return [dict(r) for r in cur.fetchall()]
-
-
-def _dados_calendario(dados: CalendarioWriteSchema) -> Dict[str, Any]:
-    _validar_periodo(dados.data_liberacao, dados.data_encerramento, "data_encerramento anterior a data_liberacao")
-    return {
-        "curso_id": _texto(dados.curso_id),
-        "disciplina_id": _texto(dados.disciplina_id),
-        "data_liberacao": dados.data_liberacao,
-        "data_encerramento": dados.data_encerramento,
-    }
-
-
-def _validar_referencias_calendario(cur: Any, valores: Dict[str, Any]) -> None:
-    _validar_existencia(
-        cur,
-        [
-            ("cursos", valores["curso_id"], "Curso não encontrado"),
-            ("disciplinas", valores["disciplina_id"], "Disciplina não encontrada"),
-        ],
-    )
-
-
-@router.post(
-    "/calendarios",
-    response_model=CalendarioSchema,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_role(["admin"]))],
-)
-async def create_calendario(
-    dados: CalendarioWriteSchema,
-    current_user: UserResponse = Depends(get_current_user),
-    ip: Optional[str] = Depends(get_client_ip),
-):
-    new_id = str(uuid.uuid4())
-    valores = _dados_calendario(dados)
-    if not settings.PG_DSN:
-        _calendarios_db[new_id] = {"id": new_id, **valores}
-        return _calendarios_db[new_id]
-
-    with get_db_cursor() as cur:
-        _validar_referencias_calendario(cur, valores)
-        cur.execute(
-            """
-            INSERT INTO calendarios_oficiais (
-                id, curso_id, disciplina_id, data_liberacao, data_encerramento, criado_em, atualizado_em
-            )
-            VALUES (%s, %s, %s, %s, %s, now(), now())
-            """,
-            (new_id, valores["curso_id"], valores["disciplina_id"], valores["data_liberacao"], valores["data_encerramento"]),
-        )
-        calendario = _buscar_calendario(cur, new_id)
-    _auditar(current_user, "calendario_criado", "calendarios_oficiais", new_id, ip, depois=calendario)
-    return calendario
-
-
-@router.put(
-    "/calendarios/{calendario_id}",
-    response_model=CalendarioSchema,
-    dependencies=[Depends(require_role(["admin"]))],
-)
-async def update_calendario(
-    calendario_id: uuid.UUID,
-    dados: CalendarioWriteSchema,
-    current_user: UserResponse = Depends(get_current_user),
-    ip: Optional[str] = Depends(get_client_ip),
-):
-    uid = str(calendario_id)
-    valores = _dados_calendario(dados)
-    if not settings.PG_DSN:
-        atual = _calendarios_db.get(uid)
-        if atual is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Calendário não encontrado")
-        atual.update(valores)
-        return atual
-
-    with get_db_cursor() as cur:
-        antes = _buscar_calendario(cur, uid, bloquear=True)
-        if antes is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Calendário não encontrado")
-        _validar_referencias_calendario(cur, valores)
-        cur.execute(
-            """
-            UPDATE calendarios_oficiais
-            SET curso_id = %s, disciplina_id = %s, data_liberacao = %s,
-                data_encerramento = %s, atualizado_em = now()
-            WHERE id = %s
-            """,
-            (valores["curso_id"], valores["disciplina_id"], valores["data_liberacao"], valores["data_encerramento"], uid),
-        )
-        depois = _buscar_calendario(cur, uid)
-    _auditar(current_user, "calendario_atualizado", "calendarios_oficiais", uid, ip, antes=antes, depois=depois)
-    return depois
-
-
-@router.delete(
-    "/calendarios/{calendario_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_role(["admin"]))],
-)
-async def delete_calendario(
-    calendario_id: uuid.UUID,
-    current_user: UserResponse = Depends(get_current_user),
-    ip: Optional[str] = Depends(get_client_ip),
-) -> Response:
-    uid = str(calendario_id)
-    mensagem_conflito = "Não é possível excluir um calendário vinculado a turmas."
-    if not settings.PG_DSN:
-        if uid not in _calendarios_db:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Calendário não encontrado")
-        if any(turma.get("calendario_oficial_id") == uid for turma in _turmas_db.values()):
-            raise HTTPException(status.HTTP_409_CONFLICT, detail=mensagem_conflito)
-        del _calendarios_db[uid]
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    with get_db_cursor() as cur:
-        antes = _buscar_calendario(cur, uid, bloquear=True)
-        if antes is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Calendário não encontrado")
-        cur.execute("SELECT EXISTS (SELECT 1 FROM turmas WHERE calendario_oficial_id = %s) AS em_uso", (uid,))
-        if cur.fetchone()["em_uso"]:
-            raise HTTPException(status.HTTP_409_CONFLICT, detail=mensagem_conflito)
-        cur.execute("DELETE FROM calendarios_oficiais WHERE id = %s", (uid,))
-    _auditar(current_user, "calendario_excluido", "calendarios_oficiais", uid, ip, antes=antes)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
@@ -533,8 +354,7 @@ async def get_detalhes_curso(
 
         cur.execute(
             """
-            SELECT id, curso_id, polo_id, escola_id, nome, data_inicio,
-                   data_fim, calendario_oficial_id
+            SELECT id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim
             FROM turmas
             WHERE """
             + " AND ".join(turma_conditions),
@@ -561,7 +381,6 @@ def _dados_turma(user: UserResponse, dados: TurmaWriteSchema) -> Dict[str, Any]:
         "nome": dados.nome,
         "data_inicio": dados.data_inicio,
         "data_fim": dados.data_fim,
-        "calendario_oficial_id": _texto(dados.calendario_oficial_id),
     }
 
 
@@ -571,7 +390,6 @@ def _validar_referencias_turma(cur: Any, valores: Dict[str, Any]) -> None:
         [
             ("cursos", valores["curso_id"], "Curso não encontrado"),
             ("polos", valores["polo_id"], "Polo não encontrado"),
-            ("calendarios_oficiais", valores["calendario_oficial_id"], "Calendário não encontrado"),
         ],
     )
     _validar_vigencia_calendario(cur, valores)
@@ -624,9 +442,9 @@ async def create_turma(
             """
             INSERT INTO turmas (
                 id, curso_id, polo_id, escola_id, nome, data_inicio, data_fim,
-                calendario_oficial_id, criado_em, atualizado_em
+                criado_em, atualizado_em
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())
             """,
             (
                 new_id,
@@ -636,7 +454,6 @@ async def create_turma(
                 valores["nome"],
                 valores["data_inicio"],
                 valores["data_fim"],
-                valores["calendario_oficial_id"],
             ),
         )
         turma = _buscar_turma(cur, new_id)
@@ -685,7 +502,7 @@ async def update_turma(
             """
             UPDATE turmas
             SET curso_id = %s, polo_id = %s, escola_id = %s, nome = %s, data_inicio = %s,
-                data_fim = %s, calendario_oficial_id = %s, atualizado_em = now()
+                data_fim = %s, atualizado_em = now()
             WHERE id = %s
             """,
             (
@@ -695,7 +512,6 @@ async def update_turma(
                 valores["nome"],
                 valores["data_inicio"],
                 valores["data_fim"],
-                valores["calendario_oficial_id"],
                 uid,
             ),
         )

@@ -1335,7 +1335,6 @@ class PolosEscolasService:
                     nome=t["nome"],
                     data_inicio=t.get("data_inicio"),
                     data_fim=t.get("data_fim"),
-                    calendario_oficial_id=str(t["calendario_oficial_id"]) if t.get("calendario_oficial_id") else None,
                     total_alunos=int(t.get("total_alunos") or 0),
                     criado_em=t.get("criado_em"),
                 )

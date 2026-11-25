@@ -8,7 +8,6 @@ export interface Turma {
   nome: string;
   data_inicio?: string | null;
   data_fim?: string | null;
-  calendario_oficial_id?: string | null;
   curso_nome?: string | null;
   polo_nome?: string | null;
   escola_nome?: string | null;
@@ -22,7 +21,6 @@ export interface TurmaInput {
   escola_id: string | null;
   data_inicio: string | null;
   data_fim: string | null;
-  calendario_oficial_id: string | null;
 }
 
 export interface TurmasPagina {
@@ -46,23 +44,6 @@ export interface AlunosTurmaPagina {
   total: number;
   limit: number;
   offset: number;
-}
-
-export interface Calendario {
-  id: string;
-  curso_id?: string | null;
-  disciplina_id?: string | null;
-  data_liberacao?: string | null;
-  data_encerramento?: string | null;
-  curso_nome?: string | null;
-  disciplina_nome?: string | null;
-}
-
-export interface CalendarioInput {
-  curso_id: string | null;
-  disciplina_id: string | null;
-  data_liberacao: string | null;
-  data_encerramento: string | null;
 }
 
 export const turmasApi = {
@@ -115,24 +96,6 @@ export const turmasApi = {
     await apiClient.delete(`/turmas/${turmaId}/alunos/${alunoId}`);
   },
 
-  listarCalendarios: async (): Promise<Calendario[]> => {
-    const { data } = await apiClient.get<Calendario[]>('/turmas/calendarios');
-    return data;
-  },
-
-  criarCalendario: async (payload: CalendarioInput): Promise<Calendario> => {
-    const { data } = await apiClient.post<Calendario>('/turmas/calendarios', payload);
-    return data;
-  },
-
-  atualizarCalendario: async (calendarioId: string, payload: CalendarioInput): Promise<Calendario> => {
-    const { data } = await apiClient.put<Calendario>(`/turmas/calendarios/${calendarioId}`, payload);
-    return data;
-  },
-
-  excluirCalendario: async (calendarioId: string): Promise<void> => {
-    await apiClient.delete(`/turmas/calendarios/${calendarioId}`);
-  },
 };
 
 /** Formata 'AAAA-MM-DD' sem passar por Date, evitando deslocamento de fuso. */

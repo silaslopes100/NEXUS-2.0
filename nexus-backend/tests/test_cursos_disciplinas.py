@@ -167,7 +167,7 @@ async def test_delete_disciplina_checks_database_references(
         assert "disciplina_conteudos" in reference_sql
         assert "pedidos_itens" in reference_sql
         assert "licencas_estoque" in reference_sql
-        assert params == (str(disciplina_id),) * 11
+        assert params == (str(disciplina_id),) * 10
     assert (cursor.executions[-1][0].startswith("DELETE")) is delete_expected
 
 
@@ -407,9 +407,9 @@ async def test_delete_course_checks_database_references(
 
     assert "FOR UPDATE" in cursor.executions[0][0]
     reference_sql, params = cursor.executions[1]
-    for table in ("disciplinas", "turmas", "calendarios_oficiais", "matriculas_ead", "certificados"):
+    for table in ("disciplinas", "turmas", "matriculas_ead", "certificados"):
         assert f"FROM {table} " in reference_sql
-    assert params == (str(COURSE_ID),) * 5
+    assert params == (str(COURSE_ID),) * 4
     assert cursor.executions[-1][0].startswith("DELETE") is delete_expected
 
 
