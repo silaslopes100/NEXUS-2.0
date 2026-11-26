@@ -6,7 +6,21 @@ import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, LogIn, ShieldAlert, KeyR
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { loginSchema, LoginFormData } from '@/features/auth/schemas';
 import { authApi } from '@/features/auth/api';
-import { dashboardDoPerfil, useAuthStore } from '@/stores/authStore';
+import { dashboardDoPerfil, normalizeUserRole, useAuthStore } from '@/stores/authStore';
+
+// Áreas exclusivas de um perfil (/admin/..., /polo/... etc.). As demais rotas (feed, chat, treinamentos...)
+// são compartilhadas.
+const PREFIXOS_DE_PERFIL = ['admin', 'polo', 'escola', 'professor', 'aluno', 'financeiro', 'logistica'];
+
+/**
+ * A rota guardada antes do login (state.from) serve para o perfil que entrou?
+ * Evita mandar o novo usuário para a tela do usuário anterior (ex.: Polo caindo em /admin → "Acesso Não Autorizado").
+ */
+const rotaDoPerfil = (rota: string, perfil: string, tambemAluno: boolean): boolean => {
+  const prefixo = rota.split('/')[1] || '';
+  if (!PREFIXOS_DE_PERFIL.includes(prefixo)) return true;
+  return prefixo === perfil || (prefixo === 'aluno' && tambemAluno);
+};
 
 /** "nx 2a3b c4d5" -> "NX-2A3B-C4D5" enquanto o aluno digita. */
 const mascararLicenca = (valor: string): string => {
@@ -167,7 +181,7 @@ const LoginEmailSenha: React.FC<{ onLicenca: () => void }> = ({ onLicenca }) => 
 
       // 4. Redireciona para rota anterior solicitada ou dashboard específico do perfil
       const from = (location.state as { from?: { pathname?: string } })?.from?.pathname;
-      if (from && !from.startsWith('/auth')) {
+      if (from && !from.startsWith('/auth') && rotaDoPerfil(from, normalizeUserRole(userRole) || userRole, !!response.usuario.tambem_aluno)) {
         navigate(from, { replace: true });
         return;
       }

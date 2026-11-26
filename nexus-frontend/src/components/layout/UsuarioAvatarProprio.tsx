@@ -19,7 +19,8 @@ export const UsuarioAvatarProprio: React.FC<UsuarioAvatarProprioProps> = ({
   const inicial = nomeExibido.charAt(0).toUpperCase();
 
   useEffect(() => {
-    if (!usuarioId) {
+    // Sem foto cadastrada não há o que buscar (evita o 404 de /auth/me/foto).
+    if (!usuarioId || !fotoUrl) {
       setFoto(null);
       return;
     }

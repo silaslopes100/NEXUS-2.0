@@ -109,8 +109,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } catch (e) {
       // Limpeza local mesmo se a requisição falhar
     }
+    // Vai para o login antes de limpar a sessão: assim os guards não guardam a tela atual como
+    // "rota pretendida" (o próximo usuário, de outro perfil, cairia nela com "Acesso Não Autorizado").
+    navigate('/auth/login', { replace: true, state: null });
     logout();
-    navigate('/auth/login', { replace: true });
   };
 
   const renderBadge = (item: MenuItem) => {
