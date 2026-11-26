@@ -9,6 +9,7 @@ import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { AppBackdrop } from '@/components/layout/AppBackdrop';
 import { UsuarioAvatarProprio } from '@/components/layout/UsuarioAvatarProprio';
 import { BarraInferiorAluno } from '@/components/layout/BarraInferiorAluno';
+import { NexusLogo } from '@/components/brand/NexusLogo';
 import { AvisosPopupHost } from '@/features/comunicacao/components/AvisosPopupHost';
 
 const CHAVE_RECOLHIDO = 'nexus:menu-recolhido';
@@ -80,7 +81,7 @@ export const AppLayout: React.FC = () => {
                 <span>/</span>
                 <span className="text-nexus-yellow font-medium capitalize">{roleName}</span>
               </div>
-              <span className="sm:hidden font-display font-black text-lg text-nexus-yellow">NEXUS</span>
+              <NexusLogo size="sm" className="sm:hidden !items-start [&>img]:h-7" />
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-3.5">

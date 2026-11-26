@@ -234,7 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <div className="w-full flex justify-center">
-              <span className="font-display font-black text-2xl text-nexus-yellow">N</span>
+              <img src="/icons/favicon-64.png" alt="NEXUS" draggable={false} className="h-9 w-9 rounded-lg" />
             </div>
           )}
 
