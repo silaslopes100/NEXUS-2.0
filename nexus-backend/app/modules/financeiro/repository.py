@@ -34,7 +34,7 @@ COLUNAS_PRODUTO = (
     "altura_cm", "largura_cm", "comprimento_cm", "ativo",
 )
 COLUNAS_PEDIDO = (
-    "tipo", "polo_id", "escola_id", "solicitante_id", "status", "valor_bruto",
+    "tipo", "polo_id", "escola_id", "aluno_id", "solicitante_id", "status", "valor_bruto",
     "desconto", "valor_total", "cupom_id", "fornecedor",
     "entrega_nome", "entrega_cep", "entrega_logradouro", "entrega_numero",
     "entrega_complemento", "entrega_bairro", "entrega_cidade", "entrega_uf",
@@ -72,7 +72,7 @@ COLUNAS_PAGAMENTO = (
     "asaas_payment_id", "billing_type", "valor", "valor_liquido", "status",
     "parcelas", "boleto_url", "invoice_url", "linha_digitavel", "nosso_numero",
     "pix_copia_cola", "pix_qrcode_base64", "vencimento_em", "pago_em",
-    "cancelado_em", "descricao",
+    "cancelado_em", "descricao", "compra_disciplina_ead_id",
 )
 
 
@@ -152,7 +152,7 @@ def where_periodo(
             params.append(filtros.status)
     if filtros.tipo and coluna_tipo:
         if filtros.tipo == "com_envio":  # livro + kit + troca (logística)
-            conds.append(f"{coluna_tipo} IN ('livro', 'kit', 'troca')")
+            conds.append(f"{coluna_tipo} IN ('livro', 'kit', 'troca', 'ead_livro')")
         else:
             conds.append(f"{coluna_tipo} = %s")
             params.append(filtros.tipo)
@@ -246,6 +246,9 @@ class FinanceiroRepositoryInterface(Protocol):
     def marcar_teste_gateway(self, gateway: str, ambiente: str, ok: bool) -> None: ...
     def get_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str) -> Optional[Dict[str, Any]]: ...
     def salvar_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str, customer_id: str, documento: str) -> None: ...
+    def get_cliente_gateway_aluno(self, gateway: str, ambiente: str, aluno_id: str) -> Optional[Dict[str, Any]]: ...
+    def salvar_cliente_gateway_aluno(self, gateway: str, ambiente: str, aluno_id: str, customer_id: str,
+                                     documento: str) -> None: ...
     def get_pagamento_pendente_do_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]: ...
     def list_pagamentos_para_reconciliar(self, limite: int = 50) -> List[Dict[str, Any]]: ...
     # webhooks
@@ -262,18 +265,27 @@ class FinanceiroRepositoryInterface(Protocol):
 # PostgreSQL
 # =============================================================================
 
-_SELECT_PEDIDO = """
-    SELECT p.*, po.nome AS polo_nome, e.nome AS escola_nome
+# Pedido do aluno EAD não tem Polo: as telas mostram "Aluno EAD — nome" no lugar do Polo.
+_NOME_ALUNO_EAD = "('Aluno EAD — ' || TRIM(CONCAT(ua.nome, ' ', ua.sobrenome)))"
+
+_SELECT_PEDIDO = f"""
+    SELECT p.*, COALESCE(po.nome, CASE WHEN p.aluno_id IS NOT NULL THEN {_NOME_ALUNO_EAD} END) AS polo_nome,
+           e.nome AS escola_nome, TRIM(CONCAT(ua.nome, ' ', ua.sobrenome)) AS aluno_nome
       FROM pedidos p
       LEFT JOIN polos po ON po.id = p.polo_id
       LEFT JOIN escolas e ON e.id = p.escola_id
+      LEFT JOIN alunos al ON al.id = p.aluno_id
+      LEFT JOIN usuarios ua ON ua.id = al.usuario_id
 """
 
-_SELECT_PAGAMENTO = """
-    SELECT pg.*, p.numero AS pedido_numero, po.nome AS polo_nome
+_SELECT_PAGAMENTO = f"""
+    SELECT pg.*, p.numero AS pedido_numero,
+           COALESCE(po.nome, CASE WHEN pg.aluno_id IS NOT NULL THEN {_NOME_ALUNO_EAD} END) AS polo_nome
       FROM pagamentos pg
       LEFT JOIN pedidos p ON p.id = pg.pedido_id
       LEFT JOIN polos po ON po.id = pg.polo_id
+      LEFT JOIN alunos al ON al.id = pg.aluno_id
+      LEFT JOIN usuarios ua ON ua.id = al.usuario_id
 """
 
 
@@ -1017,6 +1029,28 @@ class PostgresFinanceiroRepository:
                 (gateway, ambiente, str(polo_id), customer_id, documento),
             )
 
+    def get_cliente_gateway_aluno(self, gateway: str, ambiente: str, aluno_id: str) -> Optional[Dict[str, Any]]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT * FROM gateway_clientes WHERE gateway = %s AND ambiente = %s AND aluno_id = %s",
+                (gateway, ambiente, str(aluno_id)),
+            )
+            return _limpar(cur.fetchone())
+
+    def salvar_cliente_gateway_aluno(self, gateway: str, ambiente: str, aluno_id: str, customer_id: str,
+                                     documento: str) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO gateway_clientes (gateway, ambiente, aluno_id, customer_id, documento_fiscal)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (gateway, ambiente, aluno_id) WHERE aluno_id IS NOT NULL DO UPDATE
+                   SET customer_id = EXCLUDED.customer_id, documento_fiscal = EXCLUDED.documento_fiscal,
+                       atualizado_em = now()
+                """,
+                (gateway, ambiente, str(aluno_id), customer_id, documento),
+            )
+
     def get_pagamento_pendente_do_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]:
         with get_db_cursor() as cur:
             cur.execute(
@@ -1162,7 +1196,7 @@ def _casa_periodo(
     elif filtros.status and campo_status and registro.get(campo_status) != filtros.status:
         return False
     if filtros.tipo == "com_envio":
-        if tipo not in ("livro", "kit", "troca"):
+        if tipo not in ("livro", "kit", "troca", "ead_livro"):
             return False
     elif filtros.tipo and tipo != filtros.tipo:
         return False
@@ -1668,6 +1702,16 @@ class InMemoryFinanceiroRepository:
 
     def salvar_cliente_gateway(self, gateway: str, ambiente: str, polo_id: str, customer_id: str, documento: str) -> None:
         self.gateway_clientes[(gateway, ambiente, str(polo_id))] = {
+            "customer_id": customer_id, "documento_fiscal": documento,
+        }
+
+    def get_cliente_gateway_aluno(self, gateway: str, ambiente: str, aluno_id: str) -> Optional[Dict[str, Any]]:
+        c = self.gateway_clientes.get((gateway, ambiente, f"aluno:{aluno_id}"))
+        return dict(c) if c else None
+
+    def salvar_cliente_gateway_aluno(self, gateway: str, ambiente: str, aluno_id: str, customer_id: str,
+                                     documento: str) -> None:
+        self.gateway_clientes[(gateway, ambiente, f"aluno:{aluno_id}")] = {
             "customer_id": customer_id, "documento_fiscal": documento,
         }
 

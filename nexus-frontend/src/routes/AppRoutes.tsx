@@ -55,7 +55,9 @@ import { SolicitacoesEscolaPage } from '@/features/solicitacoes/pages/Solicitaco
 import { SolicitacoesPoloPage } from '@/features/solicitacoes/pages/SolicitacoesPoloPage';
 import { NotasProfessorPage } from '@/features/notas_historico/pages/NotasProfessorPage';
 import { HistoricoAlunoPage } from '@/features/notas_historico/pages/HistoricoAlunoPage';
-import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
+import { LojaEadPage } from '@/features/ead_vendas/pages/LojaEadPage';
+import { TurmaEadPage } from '@/features/ead_vendas/pages/TurmaEadPage';
+import { VitrineEadPage } from '@/features/ead_vendas/pages/VitrineEadPage';
 import { GatewaysPage } from '@/features/financeiro/pages/GatewaysPage';
 import { PagamentosPage } from '@/features/financeiro/pages/PagamentosPage';
 import { MeusPedidosPage } from '@/features/financeiro/pages/MeusPedidosPage';
@@ -104,6 +106,10 @@ export const AppRoutes: React.FC = () => {
       {/* Validação pública de certificado (fora do layout logado) */}
       <Route path="/certificados/validar" element={<ValidarCertificadoPage />} />
       <Route path="/certificados/validar/:codigo" element={<ValidarCertificadoPage />} />
+
+      {/* Página pública de vendas do EAD: Turmas EAD abertas e inscrição gratuita */}
+      <Route path="/matricula-ead" element={<VitrineEadPage />} />
+      <Route path="/matricula-ead/:turmaId" element={<TurmaEadPage />} />
 
       {/* Rotas Protegidas - Layout Principal */}
       <Route element={<AppLayout />}>
@@ -237,7 +243,9 @@ export const AppRoutes: React.FC = () => {
           </Route>
           <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />
           <Route path="/aluno/livros" element={<ModulePlaceholderPage />} />
-          <Route path="/aluno/compras" element={<ComprasEadPage />} />
+          <Route element={<RequireAlunoEad />}>
+            <Route path="/aluno/compras" element={<LojaEadPage />} />
+          </Route>
         </Route>
 
         {/* Chat Interno (todos os perfis) */}

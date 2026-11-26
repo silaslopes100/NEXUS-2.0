@@ -8,9 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # "kit" = Disciplina (livro + licença), produto vendido a partir da migração 021.
 # "troca" = solicitação de troca de licença/livro feita pelo Polo/Escola (migração 026).
-TipoPedido = Literal["livro", "licenca", "kit", "troca"]
+# "ead" / "ead_livro" = compra do aluno EAD (disciplina, com ou sem livro físico) — migração 035.
+TipoPedido = Literal["livro", "licenca", "kit", "troca", "ead", "ead_livro"]
 # Filtro de listagem: além dos tipos, "com_envio" = livro + kit + troca (telas de logística).
-TipoFiltro = Literal["livro", "licenca", "kit", "troca", "com_envio"]
+TipoFiltro = Literal["livro", "licenca", "kit", "troca", "ead", "ead_livro", "com_envio"]
 StatusPedido = Literal[
     "aguardando_pagamento",
     "pago_aguardando_envio",
@@ -188,6 +189,8 @@ class PedidoResponse(BaseModel):
     polo_nome: Optional[str] = None
     escola_id: Optional[str] = None
     escola_nome: Optional[str] = None
+    aluno_id: Optional[str] = None
+    aluno_nome: Optional[str] = None
     solicitante_id: Optional[str] = None
     valor_bruto: float = 0
     desconto: float = 0

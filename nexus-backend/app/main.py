@@ -23,6 +23,7 @@ from app.modules.comunicacao import router as comunicacao_router
 from app.modules.cupons import router as cupons_router
 from app.modules.cursos_disciplinas import router as cursos_disciplinas_router
 from app.modules.ead import router as ead_router
+from app.modules.ead_vendas.router import loja_router as ead_loja_router, vitrine_router as ead_vitrine_router
 from app.modules.estagios import router as estagios_router
 from app.modules.financeiro import router as financeiro_router
 from app.modules.avaliacoes import router as avaliacoes_router
@@ -84,6 +85,8 @@ app.include_router(cursos_disciplinas_router)
 app.include_router(carga_horaria_router)
 app.include_router(turmas_router)
 app.include_router(ead_router)
+app.include_router(ead_vitrine_router)
+app.include_router(ead_loja_router)
 app.include_router(notas_historico_router)
 app.include_router(cupons_router)
 app.include_router(financeiro_router)

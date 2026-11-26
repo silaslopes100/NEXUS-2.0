@@ -182,6 +182,10 @@ class AuthService:
             ip=client_ip,
         )
 
+        return self.emitir_sessao(user, client_ip)
+
+    def emitir_sessao(self, user: Dict[str, Any], client_ip: Optional[str] = None) -> LoginResponse:
+        """Gera access + refresh token para um usuário já autenticado (login e inscrição pública EAD)."""
         # 6. Carrega permissões e monta o usuário
         permissoes = self.repo.get_usuario_permissoes(str(user["id"]))
         user_response = self._build_user_response(user, permissoes)

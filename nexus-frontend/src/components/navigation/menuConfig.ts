@@ -630,7 +630,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Cursos & Matrículas EAD',
           path: '/aluno/compras',
           icon: CreditCard,
-          isPlaceholder: true,
+          somenteEad: true,
         },
         {
           title: 'Minhas Transferências',

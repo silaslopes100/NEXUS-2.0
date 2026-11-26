@@ -61,7 +61,10 @@ class PostgresAvaAlunoRepository:
             LEFT JOIN LATERAL (
                 SELECT c.* FROM compras_disciplina_ead c
                  WHERE c.aluno_id = %(a)s AND c.disciplina_id = d.id
-                 ORDER BY (c.liberada_em IS NOT NULL) DESC, c.criado_em DESC NULLS LAST LIMIT 1
+                   AND COALESCE(c.status_pagamento, '') NOT IN ('cancelado', 'cancelada')
+                 -- a liberada mais recente vale (recompra depois do prazo vencido); senão, a pendente mais nova
+                 ORDER BY (c.liberada_em IS NOT NULL) DESC, c.liberada_em DESC NULLS LAST,
+                          c.criado_em DESC NULLS LAST LIMIT 1
             ) compra ON true
             LEFT JOIN LATERAL (
                 SELECT l.ativada_em FROM licencas_alunos l

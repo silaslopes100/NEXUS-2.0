@@ -122,10 +122,15 @@ class OperacaoService:
         observacao = None
         if pedido.status == "pago_aguardando_envio":
             observacao = "Pedido já pago: estorno manual necessário no gateway."
-        return self.pedidos.alterar_status(
+        cancelado = self.pedidos.alterar_status(
             pedido.id, "cancelado", user.id, observacao=observacao,
             campos={"motivo_cancelamento": motivo},
         )
+        if regras_pedido.eh_ead(pedido.tipo):  # a compra pendente do aluno EAD sai junto
+            from app.modules.ead_vendas.repository import get_vendas_ead_repository
+
+            get_vendas_ead_repository().cancelar_compra_do_pedido(str(pedido.id))
+        return cancelado
 
     def baixa_manual(self, pedido_id: str, para: str, observacao: Optional[str], user: UserResponse) -> PedidoResponse:
         """Pagamento recebido fora do gateway (ex.: PIX manual).
@@ -142,6 +147,10 @@ class OperacaoService:
         pagou = pedido.status == "aguardando_pagamento" and para in ("concluido", "pago_aguardando_envio")
         if pagou and regras_pedido.credita_licenca(pedido.tipo):  # licença avulsa ou kit
             self.cobranca.creditar_licencas(self.repo.get_pedido(pedido.id), user.id)
+        if pagou and regras_pedido.eh_ead(pedido.tipo):  # aluno EAD: libera a disciplina no AVA
+            from app.modules.ead_vendas.repository import get_vendas_ead_repository
+
+            get_vendas_ead_repository().liberar_compra_do_pedido(str(pedido.id), None, float(pedido.valor_total))
         return atualizado
 
     def editar_pedido(self, pedido_id: str, payload: PedidoUpdate, user: UserResponse) -> PedidoResponse:

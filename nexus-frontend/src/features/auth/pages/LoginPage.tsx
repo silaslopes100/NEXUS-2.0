@@ -320,6 +320,13 @@ const LoginEmailSenha: React.FC<{ onLicenca: () => void }> = ({ onLicenca }) => 
           Entrar com número da licença
         </button>
 
+        <p className="text-center text-sm text-slate-400">
+          Ainda não é aluno?{' '}
+          <Link to="/matricula-ead" className="font-semibold text-nexus-yellow hover:text-nexus-yellow-hover">
+            Quero me matricular no EAD
+          </Link>
+        </p>
+
         <div className="pt-2 text-center text-xs text-slate-500">
           Protegido com tecnologia Argon2id e controle ativo de sessões.
         </div>

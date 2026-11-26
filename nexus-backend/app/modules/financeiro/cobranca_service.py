@@ -268,6 +268,34 @@ class CobrancaService:
 
     def gerar_cobranca(self, pedido_id: str, meio: str, user: UserResponse, gateway: Optional[str] = None) -> PagamentoResponse:
         pedido = self.pedidos.get_pedido(pedido_id, user)  # valida escopo (404 fora dele)
+        polo_id = str(pedido.polo_id)
+        return self._emitir(
+            pedido, meio, gateway,
+            pagador=lambda: self._pagador(polo_id),
+            cliente_get=lambda g, a: self.repo.get_cliente_gateway(g, a, polo_id),
+            cliente_set=lambda g, a, cid, doc: self.repo.salvar_cliente_gateway(g, a, polo_id, cid, doc),
+        )
+
+    def gerar_cobranca_aluno(self, pedido_id: str, meio: str, pagador: Pagador, aluno_id: str,
+                             extras_pagamento: Optional[Dict[str, Any]] = None) -> PagamentoResponse:
+        """Cobrança de um pedido do próprio aluno EAD (pagador pessoa física, sem Polo)."""
+        from app.modules.financeiro.service import pedido_response
+
+        bruto = self.repo.get_pedido(pedido_id)
+        if not bruto or str(bruto.get("aluno_id")) != str(aluno_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido não encontrado")
+        return self._emitir(
+            pedido_response(bruto), meio, None,
+            pagador=lambda: pagador,
+            cliente_get=lambda g, a: self.repo.get_cliente_gateway_aluno(g, a, aluno_id),
+            cliente_set=lambda g, a, cid, doc: self.repo.salvar_cliente_gateway_aluno(g, a, aluno_id, cid, doc),
+            extras_pagamento={"aluno_id": aluno_id, **(extras_pagamento or {})},
+        )
+
+    def _emitir(self, pedido, meio: str, gateway: Optional[str], pagador: Callable[[], Pagador],
+                cliente_get: Callable[[str, str], Optional[Dict[str, Any]]],
+                cliente_set: Callable[[str, str, str, str], None],
+                extras_pagamento: Optional[Dict[str, Any]] = None) -> PagamentoResponse:
         if pedido.status != "aguardando_pagamento":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pedido não está aguardando pagamento")
         if self.repo.get_pagamento_pendente_do_pedido(pedido.id):
@@ -287,7 +315,7 @@ class CobrancaService:
             )
         nome_gateway = gateway or self._gateway_da_regra(regra, ambiente) or self.gateway_padrao(ambiente)
         adapter = self._adapter(nome_gateway, ambiente)
-        pagador = self._pagador(str(pedido.polo_id))
+        pagador = pagador()
         vencimento = hoje_brasil() + timedelta(days=int(regra.get("dias_vencimento") or DIAS_VENCIMENTO_PADRAO))
         encargos = Encargos(
             multa_pct=float(regra.get("multa_pct") or 0),
@@ -296,11 +324,11 @@ class CobrancaService:
         )
 
         try:
-            cache = self.repo.get_cliente_gateway(nome_gateway, ambiente, str(pedido.polo_id))
+            cache = cliente_get(nome_gateway, ambiente)
             usa_cache = cache and cache.get("documento_fiscal") == pagador.documento
             customer_id = adapter.obter_ou_criar_cliente(pagador, cache["customer_id"] if usa_cache else None)
             if not usa_cache:
-                self.repo.salvar_cliente_gateway(nome_gateway, ambiente, str(pedido.polo_id), customer_id, pagador.documento)
+                cliente_set(nome_gateway, ambiente, customer_id, pagador.documento)
             cobranca = adapter.criar_cobranca(
                 customer_id=customer_id,
                 pagador=pagador,
@@ -339,6 +367,7 @@ class CobrancaService:
             "pix_qrcode_base64": cobranca.pix_qrcode_base64,
             "vencimento_em": cobranca.vencimento,
             "descricao": f"Pedido {pedido.numero}",
+            **(extras_pagamento or {}),
         })
         return PagamentoResponse(**self.repo.get_pagamento(pagamento_id))
 
@@ -399,6 +428,11 @@ class CobrancaService:
             )
             if regras.credita_licenca(pedido["tipo"]):  # licença avulsa ou kit (livro + licença)
                 self.creditar_licencas(pedido, None)
+            if regras.eh_ead(pedido["tipo"]):  # aluno EAD: libera a disciplina no AVA
+                from app.modules.ead_vendas.repository import get_vendas_ead_repository
+
+                get_vendas_ead_repository().liberar_compra_do_pedido(str(pedido_id), pagamento["id"],
+                                                                     pagamento.get("valor"))
         elif alvo == "estornado" and pedido["status"] not in ("cancelado",):
             logger.warning("Pagamento estornado no pedido %s (status %s)", pedido.get("numero"), pedido["status"])
         return True

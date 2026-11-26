@@ -13,6 +13,10 @@ from app.modules.auth.dependencies import get_current_user, require_role
 
 router = APIRouter(prefix="/ead", tags=["Educação a Distância (EAD)"])
 
+# Legado: matrícula/compra manual sem checagem de dono nem de pagamento. Só o admin usa;
+# o aluno compra pela loja (/ead/loja), com cobrança no gateway (app.modules.ead_vendas).
+_SO_ADMIN = [Depends(require_role(["admin"]))]
+
 
 class MatriculaEadSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -64,7 +68,7 @@ def _bloquear_aluno_em_churn(aluno_id: str) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=MENSAGEM_REGULARIZACAO)
 
 
-@router.get("/matriculas", response_model=List[MatriculaEadSchema], dependencies=[Depends(require_role(["admin", "aluno", "polo"]))])
+@router.get("/matriculas", response_model=List[MatriculaEadSchema], dependencies=_SO_ADMIN)
 async def list_matriculas_ead(aluno_id: Optional[str] = None):
     try:
         with get_db_cursor() as cur:
@@ -82,7 +86,7 @@ async def list_matriculas_ead(aluno_id: Optional[str] = None):
         return mats
 
 
-@router.post("/matriculas", response_model=MatriculaEadSchema, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(["admin", "polo", "aluno"]))])
+@router.post("/matriculas", response_model=MatriculaEadSchema, status_code=status.HTTP_201_CREATED, dependencies=_SO_ADMIN)
 async def create_matricula_ead(dados: MatriculaEadSchema):
     _bloquear_aluno_em_churn(dados.aluno_id)
     new_id = str(uuid.uuid4())
@@ -98,7 +102,7 @@ async def create_matricula_ead(dados: MatriculaEadSchema):
     return m_dict
 
 
-@router.get("/compras", response_model=List[CompraDisciplinaEadSchema], dependencies=[Depends(require_role(["admin", "aluno", "polo"]))])
+@router.get("/compras", response_model=List[CompraDisciplinaEadSchema], dependencies=_SO_ADMIN)
 async def list_compras_ead(aluno_id: Optional[str] = None):
     try:
         with get_db_cursor() as cur:
@@ -113,7 +117,7 @@ async def list_compras_ead(aluno_id: Optional[str] = None):
         return list(_compras_ead_db.values())
 
 
-@router.post("/compras", response_model=CompraDisciplinaEadSchema, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(["admin", "aluno", "polo"]))])
+@router.post("/compras", response_model=CompraDisciplinaEadSchema, status_code=status.HTTP_201_CREATED, dependencies=_SO_ADMIN)
 async def create_compra_ead(dados: CompraDisciplinaEadSchema):
     _bloquear_aluno_em_churn(dados.aluno_id)
     new_id = str(uuid.uuid4())

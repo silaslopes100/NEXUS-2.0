@@ -76,9 +76,9 @@ const CardDisciplina: React.FC<{ d: DisciplinaAluno }> = ({ d }) => {
                   : d.situacao === 'prazo_expirado' ? 'O prazo de conclusão terminou.'
                     : 'Libere esta disciplina para começar a estudar.'}
             </p>
-            {(d.situacao === 'bloqueada' || d.situacao === 'prazo_expirado') && (
-              <Link to="/aluno/compras" className="block w-full rounded-xl border border-nexus-yellow/50 py-2.5 text-center text-sm font-bold text-nexus-yellow hover:bg-nexus-yellow/10">
-                Liberar disciplina
+            {(d.situacao === 'bloqueada' || d.situacao === 'prazo_expirado' || d.situacao === 'pagamento_pendente') && (
+              <Link to={`/aluno/compras?disciplina=${d.id}`} className="block w-full rounded-xl border border-nexus-yellow/50 py-2.5 text-center text-sm font-bold text-nexus-yellow hover:bg-nexus-yellow/10">
+                {d.situacao === 'pagamento_pendente' ? 'Ver pagamento' : 'Liberar disciplina'}
               </Link>
             )}
           </div>

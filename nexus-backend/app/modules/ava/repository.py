@@ -47,6 +47,11 @@ def _coluna(dono: Dono) -> str:
     return dono[0]
 
 
+# Preço padrão da disciplina para o aluno EAD e do upsell do livro físico (sem licença).
+VALOR_EAD_PADRAO = 45.00
+VALOR_LIVRO_EAD_PADRAO = 25.00
+
+
 class PostgresAvaRepository:
     # ------------------------------------------------------------------ disciplinas
 
@@ -55,6 +60,8 @@ class PostgresAvaRepository:
                COALESCE(d.ativo, true) AS ativo,
                cfg.capa_url, COALESCE(cfg.publicado, false) AS publicado,
                COALESCE(cfg.sequencial, false) AS sequencial, cfg.atualizado_em,
+               COALESCE(cfg.valor_ead, 45.00) AS valor_ead, COALESCE(cfg.livro_disponivel, false) AS livro_disponivel,
+               COALESCE(cfg.valor_livro_ead, 25.00) AS valor_livro_ead,
                (SELECT COUNT(*) FROM ava_capitulos cap WHERE cap.disciplina_id = d.id) AS total_capitulos,
                (SELECT COUNT(*) FROM ava_aulas a JOIN ava_capitulos cap ON cap.id = a.capitulo_id
                  WHERE cap.disciplina_id = d.id) AS total_aulas
@@ -86,17 +93,23 @@ class PostgresAvaRepository:
             cur.execute("SELECT * FROM ava_disciplina_config WHERE disciplina_id = %s", (disciplina_id,))
             row = _limpar(cur.fetchone())
         return row or {"disciplina_id": disciplina_id, "capa_url": None, "descricao_ava": None,
-                       "sequencial": False, "publicado": False}
+                       "sequencial": False, "publicado": False,
+                       "valor_ead": VALOR_EAD_PADRAO, "livro_disponivel": False, "valor_livro_ead": VALOR_LIVRO_EAD_PADRAO}
 
     def salvar_config(self, disciplina_id: str, dados: Dict[str, Any]) -> None:
         with get_db_cursor() as cur:
             cur.execute(
-                """INSERT INTO ava_disciplina_config (disciplina_id, capa_url, descricao_ava, sequencial, publicado)
-                   VALUES (%(d)s, %(capa_url)s, %(descricao_ava)s, %(sequencial)s, %(publicado)s)
+                """INSERT INTO ava_disciplina_config (disciplina_id, capa_url, descricao_ava, sequencial, publicado,
+                                                     valor_ead, livro_disponivel, valor_livro_ead)
+                   VALUES (%(d)s, %(capa_url)s, %(descricao_ava)s, %(sequencial)s, %(publicado)s,
+                           %(valor_ead)s, %(livro_disponivel)s, %(valor_livro_ead)s)
                    ON CONFLICT (disciplina_id) DO UPDATE SET
                      capa_url = EXCLUDED.capa_url, descricao_ava = EXCLUDED.descricao_ava,
-                     sequencial = EXCLUDED.sequencial, publicado = EXCLUDED.publicado, atualizado_em = now()""",
-                {"d": disciplina_id, **dados},
+                     sequencial = EXCLUDED.sequencial, publicado = EXCLUDED.publicado,
+                     valor_ead = EXCLUDED.valor_ead, livro_disponivel = EXCLUDED.livro_disponivel,
+                     valor_livro_ead = EXCLUDED.valor_livro_ead, atualizado_em = now()""",
+                {"d": disciplina_id, "valor_ead": VALOR_EAD_PADRAO, "livro_disponivel": False,
+                 "valor_livro_ead": VALOR_LIVRO_EAD_PADRAO, **dados},
             )
 
     # ------------------------------------------------------------------ estrutura
