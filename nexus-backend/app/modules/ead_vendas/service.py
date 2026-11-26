@@ -64,8 +64,9 @@ def _vagas_restantes(t: Dict[str, Any]) -> Optional[int]:
 
 
 def _turma_vitrine(t: Dict[str, Any]) -> TurmaVitrineOut:
-    return TurmaVitrineOut(**{k: t.get(k) for k in TurmaVitrineOut.model_fields if k in t},
-                           vagas_restantes=_vagas_restantes(t), total_disciplinas=int(t.get("total_disciplinas") or 0))
+    dados = {k: t.get(k) for k in TurmaVitrineOut.model_fields if k in t}
+    dados.update(vagas_restantes=_vagas_restantes(t), total_disciplinas=int(t.get("total_disciplinas") or 0))
+    return TurmaVitrineOut(**dados)
 
 
 class VendasEadService:
