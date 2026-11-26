@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS ava_treinamento_conclusoes (
 -- O motor de conteúdo criado na 030 passa a apontar para os treinamentos.
 DO $$
 BEGIN
+    -- Recria se faltar ou se apontar para outra tabela (ex.: a legada "treinamentos").
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ava_capitulos_treinamento'
+                AND confrelid <> 'ava_treinamentos'::regclass) THEN
+        ALTER TABLE ava_capitulos DROP CONSTRAINT fk_ava_capitulos_treinamento;
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ava_capitulos_treinamento') THEN
         ALTER TABLE ava_capitulos
             ADD CONSTRAINT fk_ava_capitulos_treinamento
