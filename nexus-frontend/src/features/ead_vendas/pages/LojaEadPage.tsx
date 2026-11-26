@@ -63,7 +63,10 @@ const CardDisciplina: React.FC<{ d: DisciplinaLoja; onComprar: () => void; onPag
               <Receipt size={16} /> Ver pagamento
             </button>
           )}
-          {(d.estado === 'comprada' || d.estado === 'concluida') && (
+          {d.estado === 'encerrada' && (
+            <p className="rounded-xl border border-red-500/30 py-2.5 text-center text-xs text-red-200">Prazo encerrado — fale com a secretaria</p>
+          )}
+          {(d.estado === 'comprada' || d.estado === 'concluida' || d.estado === 'bolsa') && (
             <button type="button" onClick={() => navigate(`/aluno/ava/disciplinas/${d.id}`)}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white hover:bg-emerald-400">
               <PlayCircle size={16} /> {d.estado === 'concluida' ? 'Revisar' : 'Estudar'}
@@ -196,7 +199,7 @@ export const LojaEadPage: React.FC = () => {
   const resumo = useMemo(() => {
     const l = turma?.disciplinas ?? [];
     return {
-      liberadas: l.filter((d) => d.estado === 'comprada' || d.estado === 'concluida').length,
+      liberadas: l.filter((d) => d.estado === 'comprada' || d.estado === 'concluida' || d.estado === 'bolsa').length,
       disponiveis: l.filter((d) => d.estado === 'disponivel' || d.estado === 'recompra').length,
       total: l.length,
     };
@@ -280,6 +283,11 @@ export const LojaEadPage: React.FC = () => {
             <p className="flex items-center gap-2 text-sm font-semibold text-nexus-yellow"><Sparkles size={16} /> Cursos & Matrículas EAD</p>
             <h1 className="text-3xl font-extrabold text-white">{turma ? turma.nome : 'Minhas matrículas'}</h1>
             {turma && <p className="text-slate-300">{turma.curso_nome}</p>}
+            {turma?.bolsista && (
+              <span className="inline-block rounded-full bg-violet-500/20 px-3 py-1 text-xs font-bold text-violet-200">
+                Bolsista — as disciplinas são liberadas sem custo, conforme o calendário
+              </span>
+            )}
             {loja.turmas.length > 1 && (
               <div className="flex flex-wrap gap-2 pt-2">
                 {loja.turmas.map((t) => (

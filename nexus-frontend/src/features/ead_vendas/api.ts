@@ -52,7 +52,8 @@ export interface InscricaoPayload {
   site?: string;
 }
 
-export type EstadoDisciplina = 'disponivel' | 'aguardando' | 'em_breve' | 'pendente' | 'comprada' | 'concluida' | 'recompra';
+export type EstadoDisciplina =
+  | 'disponivel' | 'aguardando' | 'em_breve' | 'pendente' | 'comprada' | 'concluida' | 'recompra' | 'bolsa' | 'encerrada';
 
 export interface DisciplinaLoja {
   id: string;
@@ -75,6 +76,7 @@ export interface DisciplinaLoja {
 
 export interface TurmaLoja {
   id: string;
+  bolsista?: boolean;
   nome: string;
   codigo?: string | null;
   curso_id: string;
@@ -164,6 +166,8 @@ export const ESTADO: Record<EstadoDisciplina, { rotulo: string; classe: string }
   comprada: { rotulo: 'Liberada', classe: 'bg-emerald-500/15 text-emerald-300' },
   concluida: { rotulo: 'Concluída', classe: 'bg-emerald-500/90 text-white' },
   recompra: { rotulo: 'Prazo encerrado', classe: 'bg-red-500/15 text-red-300' },
+  bolsa: { rotulo: 'Bolsa', classe: 'bg-violet-500/90 text-white' },
+  encerrada: { rotulo: 'Prazo encerrado', classe: 'bg-red-500/15 text-red-300' },
 };
 
 export const STATUS_PEDIDO: Record<string, string> = {

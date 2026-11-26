@@ -174,7 +174,7 @@ class VendasEadService:
 
     @staticmethod
     def _estado(d: Dict[str, Any], linha: Dict[str, Any], compra: Optional[Dict[str, Any]], ao_vencer: str,
-                hoje: date) -> Dict[str, Any]:
+                hoje: date, bolsista: bool = False) -> Dict[str, Any]:
         prazo_dias = linha.get("prazo_dias")
         saida: Dict[str, Any] = {"libera_em": linha.get("liberada_em"), "data_limite": linha.get("data_limite"),
                                  "prazo_dias": prazo_dias}
@@ -191,6 +191,16 @@ class VendasEadService:
                 saida["data_limite"] = limite
             vencida = bool(limite and hoje > limite and ao_vencer != "alertar") or bool(compra.get("reprovado_por_prazo"))
             return {**saida, "estado": "recompra" if vencida else "comprada"}
+        if bolsista:  # bolsa integral: segue o calendário, sem compra
+            if linha.get("situacao") == "concluida":
+                return {**saida, "estado": "concluida"}
+            if linha.get("situacao") == "aguardando":
+                return {**saida, "estado": "aguardando"}
+            if not d.get("publicado") or not int(d.get("total_aulas") or 0):
+                return {**saida, "estado": "em_breve"}
+            limite = linha.get("data_limite")
+            vencida = bool(limite and hoje > limite and ao_vencer != "alertar")
+            return {**saida, "estado": "encerrada" if vencida else "bolsa"}
         if compra and compra.get("status_pagamento") == "pendente" and compra.get("pagamento_status") == "pendente":
             return {**saida, "estado": "pendente", "pedido_id": compra.get("pedido_id"),
                     "com_livro": bool(compra.get("com_livro"))}
@@ -217,14 +227,15 @@ class VendasEadService:
             crono, regras = self._cronograma(t["id"], t["curso_id"], inicio, conclusoes, hoje)
             itens = []
             for d in disciplinas:
-                estado = self._estado(d, crono.get(d["id"], {}), compras.get(d["id"]), regras.ead_ao_vencer, hoje)
+                estado = self._estado(d, crono.get(d["id"], {}), compras.get(d["id"]), regras.ead_ao_vencer, hoje,
+                                      bolsista=bool(t.get("bolsista")))
                 itens.append(DisciplinaLojaOut(
                     id=d["id"], nome=d["nome"], semestre=d.get("semestre"), carga_horaria=int(d.get("carga_horaria") or 0),
                     capa_url=d.get("capa_url"), descricao=d.get("descricao_ava"), total_aulas=int(d.get("total_aulas") or 0),
                     valor_ead=float(d["valor_ead"]), livro_disponivel=bool(d["livro_disponivel"]),
                     valor_livro_ead=float(d["valor_livro_ead"]), **estado,
                 ))
-            saida.append(TurmaLojaOut(id=t["id"], nome=t["nome"], codigo=t.get("codigo"), curso_id=t["curso_id"],
+            saida.append(TurmaLojaOut(id=t["id"], bolsista=bool(t.get("bolsista")), nome=t["nome"], codigo=t.get("codigo"), curso_id=t["curso_id"],
                                       curso_nome=t["curso_nome"], data_inicio=t.get("data_inicio"),
                                       data_fim=t.get("data_fim"), disciplinas=itens))
         return saida
@@ -283,6 +294,8 @@ class VendasEadService:
             "concluida": "Você já concluiu esta disciplina.",
             "aguardando": "Esta disciplina ainda não foi liberada pelo calendário da sua turma.",
             "em_breve": "O conteúdo desta disciplina ainda não foi publicado. Ela fica à venda assim que for.",
+            "bolsa": "Você é bolsista: esta disciplina já está liberada sem custo.",
+            "encerrada": "O prazo desta disciplina terminou. Fale com a secretaria para reabrir.",
         }
         if d.estado not in ("disponivel", "recompra"):
             raise HTTPException(status.HTTP_409_CONFLICT, detail=mensagens.get(d.estado, "Disciplina indisponível."))

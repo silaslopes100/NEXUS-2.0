@@ -97,7 +97,7 @@ class AvaAlunoService:
     def _situacao(cls, d: Dict[str, Any]) -> str:
         if d.get("ead_aguardando"):  # turma EAD: a disciplina ainda não foi liberada pela sequência
             return "bloqueada"
-        pago = bool(d.get("liberada_em") or d.get("licenca_em")
+        pago = bool(d.get("liberada_em") or d.get("licenca_em") or d.get("bolsista")
                     or (d.get("status_pagamento") or "").strip().lower() in _PAGOS)
         prazo = _dt(d.get("prazo_conclusao"))
         vencido = bool(prazo and prazo < _agora()) and not d.get("ead_prazo_alerta")

@@ -33,6 +33,8 @@ from app.modules.admin.schemas import (
     MatriculaDashboardListResponse,
     PendenciasBloco,
     PeriodoResolvido,
+    PesosRanking,
+    PesosRankingOut,
     RankingPoloItem,
     RankingPolosResponse,
     SerieMensalItem,
@@ -107,6 +109,9 @@ def percentual(parte: float, total: float) -> Optional[float]:
 
 
 ROTULOS_ORDENACAO = {
+    "indice": "Índice de desempenho",
+    "notas_media": "Média das notas",
+    "compras_qtd": "Compras (licenças e livros)",
     "novas_licencas": "Novas licenças",
     "receita_paga": "Receita paga",
     "alunos_ativos": "Alunos ativos",
@@ -186,16 +191,22 @@ class AdminService(FichaServiceMixin):
         )
 
     def get_ranking_polos(
-        self, filtros: FiltrosPeriodo, ordenar_por: str = "novas_licencas", hoje: Optional[date] = None
+        self, filtros: FiltrosPeriodo, ordenar_por: str = "indice", hoje: Optional[date] = None
     ) -> RankingPolosResponse:
+        from app.modules.admin.ranking_config import indice
+
         if ordenar_por not in ORDENACOES_RANKING:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"ordenar_por inválido. Use: {', '.join(ORDENACOES_RANKING)}",
             )
         inicio, fim = resolver_periodo(filtros, hoje)
+        pesos = self.repo.pesos_ranking()
         linhas: List[Dict[str, Any]] = []
         for r in self.repo.dashboard_ranking_polos(inicio, fim):
+            compras_polo = int(r.get("compras_polo") or 0)
+            solicitacoes = int(r.get("solicitacoes_escolas") or 0)
+            notas = r.get("notas_media")
             linhas.append({
                 "polo_id": str(r["polo_id"]),
                 "polo_nome": r.get("polo_nome") or "Polo sem nome",
@@ -206,8 +217,21 @@ class AdminService(FichaServiceMixin):
                 "presenca_pct": percentual(
                     int(r.get("presencas_positivas") or 0), int(r.get("presencas_total") or 0)
                 ),
+                "notas_media": round(float(notas), 2) if notas is not None else None,
+                "compras_polo": compras_polo,
+                "solicitacoes_escolas": solicitacoes,
+                "compras_qtd": compras_polo + solicitacoes,
             })
-        # Decrescente pelo critério (sem dado de presença vai para o fim); empate pelo nome.
+        # Compras: em relação ao Polo que mais comprou no período (100%).
+        maior = max((l["compras_qtd"] for l in linhas), default=0)
+        for l in linhas:
+            l["compras_pct"] = round(l["compras_qtd"] * 100 / maior, 1) if maior else None
+            l["indice"] = indice({
+                "notas": l["notas_media"] * 10 if l["notas_media"] is not None else None,
+                "frequencia": l["presenca_pct"],
+                "compras": l["compras_pct"],
+            }, pesos)
+        # Decrescente pelo critério (sem dado vai para o fim); empate pelo nome.
         linhas.sort(key=lambda l: (
             -(l[ordenar_por] if l[ordenar_por] is not None else -1),
             l["polo_nome"].lower(),
@@ -215,18 +239,29 @@ class AdminService(FichaServiceMixin):
         return RankingPolosResponse(
             periodo=PeriodoResolvido(inicio=inicio, fim=fim),
             ordenar_por=ordenar_por,
+            pesos=PesosRankingOut(**pesos),
             items=[RankingPoloItem(posicao=i + 1, **l) for i, l in enumerate(linhas)],
         )
+
+    def pesos_ranking(self) -> PesosRankingOut:
+        return PesosRankingOut(**self.repo.pesos_ranking())
+
+    def salvar_pesos_ranking(self, pesos: PesosRanking, usuario_id: Optional[str]) -> PesosRankingOut:
+        return PesosRankingOut(**self.repo.salvar_pesos_ranking(pesos.model_dump(), usuario_id))
 
     def exportar_ranking_polos(self, filtros: FiltrosPeriodo, ordenar_por: str, formato: str) -> Response:
         ranking = self.get_ranking_polos(filtros, ordenar_por)
         colunas: List[exp.Coluna] = [
-            ("Posição", 14, "C", "int"), ("Polo", 70, "L", "texto"), ("Novas licenças", 26, "R", "int"),
+            ("Posição", 14, "C", "int"), ("Polo", 60, "L", "texto"), ("Índice", 18, "R", "texto"),
+            ("Média notas", 22, "R", "texto"), ("Compras", 20, "R", "int"), ("Novas licenças", 26, "R", "int"),
             ("Receita paga", 30, "R", "moeda"), ("Alunos ativos", 24, "R", "int"),
             ("Escolas ativas", 24, "R", "int"), ("Presença", 20, "R", "texto"),
         ]
         dados = [[
-            i.posicao, i.polo_nome, i.novas_licencas, i.receita_paga, i.alunos_ativos, i.escolas_ativas,
+            i.posicao, i.polo_nome,
+            f"{i.indice:.1f}".replace(".", ",") if i.indice is not None else "-",
+            f"{i.notas_media:.2f}".replace(".", ",") if i.notas_media is not None else "-",
+            i.compras_qtd, i.novas_licencas, i.receita_paga, i.alunos_ativos, i.escolas_ativas,
             f"{i.presenca_pct:.1f}%".replace(".", ",") if i.presenca_pct is not None else "-",
         ] for i in ranking.items]
         filtros_txt = (

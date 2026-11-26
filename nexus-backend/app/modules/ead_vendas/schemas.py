@@ -7,7 +7,9 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 # Estado da disciplina na loja do aluno.
-EstadoDisciplina = Literal["disponivel", "aguardando", "em_breve", "pendente", "comprada", "concluida", "recompra"]
+# "bolsa" = bolsista com a disciplina liberada sem custo; "encerrada" = bolsista com o prazo vencido.
+EstadoDisciplina = Literal["disponivel", "aguardando", "em_breve", "pendente", "comprada", "concluida", "recompra",
+                           "bolsa", "encerrada"]
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +110,7 @@ class DisciplinaLojaOut(BaseModel):
 
 class TurmaLojaOut(BaseModel):
     id: str
+    bolsista: bool = False
     nome: str
     codigo: Optional[str] = None
     curso_id: str

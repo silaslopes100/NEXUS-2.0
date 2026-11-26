@@ -44,9 +44,14 @@ interface Props {
   tipoOpcoes?: Opcao[];
   /** Filtros adicionais (ex.: gateway e meio na tela de Boletos). */
   extras?: { chave: ChaveFiltro; label: string; opcoes: Opcao[] }[];
+  /** Inclui no seletor de Polo a opção dos alunos EAD (pedidos sem Polo). */
+  opcaoAlunosEad?: boolean;
 }
 
-export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusOpcoes, tipoOpcoes, extras = [] }) => {
+/** Valor do filtro de Polo para os pedidos dos alunos EAD (backend: FILTRO_ALUNOS_EAD). */
+export const FILTRO_ALUNOS_EAD = '__ead';
+
+export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusOpcoes, tipoOpcoes, extras = [], opcaoAlunosEad = false }) => {
   const [params, setParams] = useSearchParams();
   const [polos, setPolos] = useState<Opcao[]>([]);
   const [escolas, setEscolas] = useState<Opcao[]>([]);
@@ -61,6 +66,7 @@ export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusO
 
   useEffect(() => {
     if (!mostrarUnidade) return;
+    if (poloId === FILTRO_ALUNOS_EAD) { setEscolas([]); return; }
     polosEscolasApi.listarEscolas({ polo_id: poloId || undefined, limit: 200 })
       .then((data: any) => setEscolas((data?.items || data || []).map((e: any) => ({ value: e.id, label: e.nome }))))
       .catch(() => setEscolas([]));
@@ -116,7 +122,7 @@ export const PeriodoFiltros: React.FC<Props> = ({ mostrarUnidade = true, statusO
         {select('mes', 'Mês', MESES.map((m, i) => ({ value: String(i + 1), label: m })))}
         {select('semestre', 'Semestre', [{ value: '1', label: '1º semestre' }, { value: '2', label: '2º semestre' }])}
         {select('ano', 'Ano', anos.map((a) => ({ value: a, label: a })))}
-        {mostrarUnidade && select('polo_id', 'Polo', polos)}
+        {mostrarUnidade && select('polo_id', 'Polo', opcaoAlunosEad ? [{ value: FILTRO_ALUNOS_EAD, label: 'Alunos EAD (sem Polo)' }, ...polos] : polos)}
         {mostrarUnidade && select('escola_id', 'Escola', escolas, 'Todas')}
         {statusOpcoes && select('status', 'Status', statusOpcoes)}
         {tipoOpcoes && select('tipo', 'Tipo', tipoOpcoes)}

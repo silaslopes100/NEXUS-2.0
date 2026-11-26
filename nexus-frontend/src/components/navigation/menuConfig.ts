@@ -50,6 +50,8 @@ export interface MenuItem {
   contador?: 'estagios' | 'feed_moderacao';
   /** Só aparece para alunos EAD (AVA). */
   somenteEad?: boolean;
+  /** Some para o aluno EAD (itens só do presencial: presença, material do Polo). */
+  ocultarEad?: boolean;
 }
 
 export interface MenuGroup {
@@ -134,6 +136,11 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Conteúdo EAD (AVA)',
           path: '/admin/ava',
           icon: Laptop,
+        },
+        {
+          title: 'Matrículas EAD',
+          path: '/admin/ead/matriculas',
+          icon: UserCheck,
         },
         {
           title: 'Treinamentos',
@@ -613,6 +620,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           title: 'Frequência & Presença',
           path: '/aluno/presenca',
           icon: Clock,
+          ocultarEad: true,
         },
         {
           title: 'Central de Estágio',
@@ -625,6 +633,7 @@ export const menuByRole: Record<UserRole, MenuGroup[]> = {
           path: '/aluno/livros',
           icon: BookMarked,
           isPlaceholder: true,
+          ocultarEad: true,
         },
         {
           title: 'Cursos & Matrículas EAD',

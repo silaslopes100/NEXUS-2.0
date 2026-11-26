@@ -20,9 +20,10 @@ import {
 import { TurmaAlunosPanel } from '@/features/turmas/components/TurmaAlunosPanel';
 import { inputCls, TurmaFormModal, useOpcoesTurma } from '@/features/turmas/components/TurmaFormModal';
 import { TurmaProfessoresPanel } from '@/features/turmas/components/TurmaProfessoresPanel';
+import { TurmaHistoricoPanel } from '@/features/turmas/components/TurmaHistoricoPanel';
 import { baseTurmas, SeloSituacao } from '@/features/turmas/pages/TurmasPage';
 
-type Aba = 'dados' | 'alunos' | 'professores' | 'carga' | 'prazos';
+type Aba = 'dados' | 'alunos' | 'professores' | 'carga' | 'prazos' | 'historico';
 
 const Dado: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
@@ -193,6 +194,7 @@ export const TurmaDetalhePage: React.FC = () => {
     { id: 'professores', rotulo: 'Professores' },
     { id: 'carga', rotulo: 'Cronograma, andamento e frequência' },
     ...(ead ? [{ id: 'prazos' as Aba, rotulo: 'Prazos EAD' }] : []),
+    { id: 'historico', rotulo: 'Histórico' },
   ];
   const abaParam = params.get('aba') as Aba | null;
   const aba: Aba = abas.some((a) => a.id === abaParam) ? (abaParam as Aba) : 'dados';
@@ -366,6 +368,11 @@ export const TurmaDetalhePage: React.FC = () => {
             podeConcluir={isAdmin && !leitura}
             onAlterado={() => void carregar()}
           />
+        )}
+        {aba === 'historico' && (
+          <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+            <TurmaHistoricoPanel turmaId={turma.id} turmaNome={turma.nome} />
+          </section>
         )}
         {aba === 'prazos' && ead && (
           <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5">

@@ -104,8 +104,13 @@ class PostgresVendasEadRepository:
             return int(cur.fetchone()["n"] or 0)
 
     @staticmethod
-    def _vincular_turma(cur, aluno_id: str, turma_id: str) -> None:
-        """Matrícula no curso (matriculas_ead) + vaga na turma, conferindo as vagas com a turma travada."""
+    def _vincular_turma(cur, aluno_id: str, turma_id: str, *, origem: str = "site", tipo: Optional[str] = None,
+                        criado_por: Optional[str] = None, observacao: Optional[str] = None,
+                        conferir_vagas: bool = True) -> str:
+        """Matrícula no curso (matriculas_ead) + vaga na turma, conferindo as vagas com a turma travada.
+
+        Devolve o id da matrícula. Matrícula já existente no curso (ex.: cancelada) é reativada nesta turma.
+        """
         cur.execute(
             """SELECT t.id, t.curso_id, t.vagas FROM turmas t
                 WHERE t.id = %s AND t.modalidade = 'ead' AND t.cancelada_em IS NULL AND t.concluida_em IS NULL
@@ -119,7 +124,7 @@ class PostgresVendasEadRepository:
         vinculo = cur.fetchone()
         if vinculo and (vinculo["status"] or "ativo") == "ativo":
             raise JaInscrito()
-        if turma["vagas"]:
+        if turma["vagas"] and conferir_vagas:
             cur.execute("SELECT COUNT(*) AS n FROM turma_alunos WHERE turma_id = %s AND COALESCE(status, 'ativo') = 'ativo'",
                         (turma_id,))
             if int(cur.fetchone()["n"]) >= int(turma["vagas"]):
@@ -133,16 +138,29 @@ class PostgresVendasEadRepository:
                    VALUES (%s, %s, %s, now(), 'ativo', now(), now())""",
                 (str(uuid.uuid4()), turma_id, aluno_id),
             )
-        cur.execute("SELECT 1 FROM matriculas_ead WHERE aluno_id = %s AND curso_id = %s", (aluno_id, turma["curso_id"]))
-        if not cur.fetchone():
+        cur.execute("SELECT id FROM matriculas_ead WHERE aluno_id = %s AND curso_id = %s ORDER BY data_matricula DESC NULLS LAST LIMIT 1",
+                    (aluno_id, turma["curso_id"]))
+        existente = cur.fetchone()
+        if existente:
             cur.execute(
-                """INSERT INTO matriculas_ead (id, aluno_id, curso_id, ativa_automaticamente, data_matricula,
-                                                criado_em, atualizado_em)
-                   VALUES (%s, %s, %s, true, now(), now(), now())""",
-                (str(uuid.uuid4()), aluno_id, turma["curso_id"]),
+                """UPDATE matriculas_ead
+                      SET status = 'ativa', turma_id = %s, tipo = COALESCE(%s, tipo),
+                          observacao = COALESCE(%s, observacao), cancelada_em = NULL, cancelada_por = NULL,
+                          motivo_cancelamento = NULL, atualizado_em = now()
+                    WHERE id = %s""",
+                (turma_id, tipo, observacao, existente["id"]),
             )
+            return str(existente["id"])
+        matricula_id = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO matriculas_ead (id, aluno_id, curso_id, ativa_automaticamente, data_matricula, tipo, origem,
+                                            status, turma_id, observacao, criado_por, criado_em, atualizado_em)
+               VALUES (%s, %s, %s, true, now(), %s, %s, 'ativa', %s, %s, %s, now(), now())""",
+            (matricula_id, aluno_id, turma["curso_id"], tipo or "regular", origem, turma_id, observacao, criado_por),
+        )
+        return matricula_id
 
-    def criar_aluno_inscrito(self, dados: Dict[str, Any], turma_id: str) -> Dict[str, str]:
+    def criar_aluno_inscrito(self, dados: Dict[str, Any], turma_id: str, **matricula: Any) -> Dict[str, str]:
         """Cria usuário + aluno EAD (sem Polo) e já o matricula na turma, numa transação."""
         usuario_id, aluno_id = str(uuid.uuid4()), str(uuid.uuid4())
         with get_db_cursor() as cur:
@@ -161,12 +179,12 @@ class PostgresVendasEadRepository:
                            %s, 'ativo', now(), now(), now())""",
                 (aluno_id, usuario_id, dados["data_nascimento"]),
             )
-            self._vincular_turma(cur, aluno_id, turma_id)
-        return {"usuario_id": usuario_id, "aluno_id": aluno_id}
+            matricula_id = self._vincular_turma(cur, aluno_id, turma_id, **matricula)
+        return {"usuario_id": usuario_id, "aluno_id": aluno_id, "matricula_id": matricula_id}
 
-    def inscrever_aluno(self, aluno_id: str, turma_id: str) -> None:
+    def inscrever_aluno(self, aluno_id: str, turma_id: str, **matricula: Any) -> str:
         with get_db_cursor() as cur:
-            self._vincular_turma(cur, aluno_id, turma_id)
+            return self._vincular_turma(cur, aluno_id, turma_id, **matricula)
 
     # ------------------------------------------------------------------ loja
 
@@ -174,7 +192,9 @@ class PostgresVendasEadRepository:
         with get_db_cursor() as cur:
             cur.execute(
                 """SELECT t.id, t.nome, t.codigo, t.data_inicio, t.data_fim, t.curso_id, cu.nome AS curso_nome,
-                          ta.data_matricula
+                          ta.data_matricula,
+                          EXISTS (SELECT 1 FROM matriculas_ead m WHERE m.aluno_id = ta.aluno_id AND m.curso_id = t.curso_id
+                                     AND m.status = 'ativa' AND m.tipo = 'bolsista') AS bolsista
                      FROM turma_alunos ta
                      JOIN turmas t ON t.id = ta.turma_id
                      JOIN cursos cu ON cu.id = t.curso_id
@@ -248,9 +268,9 @@ class PostgresVendasEadRepository:
         with get_db_cursor() as cur:
             cur.execute(
                 """INSERT INTO compras_disciplina_ead (id, aluno_id, disciplina_id, valor_pago, status_pagamento,
-                                                      pedido_id, turma_id, com_livro, reprovado_por_prazo,
+                                                      pedido_id, turma_id, com_livro, reprovado_por_prazo, origem,
                                                       criado_em, atualizado_em)
-                   VALUES (%s, %s, %s, %s, 'pendente', %s, %s, %s, false, now(), now())""",
+                   VALUES (%s, %s, %s, %s, 'pendente', %s, %s, %s, false, 'loja', now(), now())""",
                 (compra_id, dados["aluno_id"], dados["disciplina_id"], dados["valor"], dados["pedido_id"],
                  dados.get("turma_id"), dados["com_livro"]),
             )

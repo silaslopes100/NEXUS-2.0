@@ -399,7 +399,16 @@ export interface DashboardExecutivo {
   };
 }
 
-export type OrdenacaoRanking = 'novas_licencas' | 'receita_paga' | 'alunos_ativos' | 'presenca_pct';
+export type OrdenacaoRanking =
+  | 'indice' | 'notas_media' | 'compras_qtd' | 'novas_licencas' | 'receita_paga' | 'alunos_ativos' | 'presenca_pct';
+
+/** Pesos do índice de desempenho (notas, frequência, compras). */
+export interface PesosRanking {
+  peso_notas: number;
+  peso_frequencia: number;
+  peso_compras: number;
+  atualizado_em?: string | null;
+}
 
 export interface RankingPoloItem {
   posicao: number;
@@ -410,11 +419,18 @@ export interface RankingPoloItem {
   novas_licencas: number;
   receita_paga: number;
   presenca_pct: number | null;
+  notas_media?: number | null;
+  compras_qtd: number;
+  compras_polo: number;
+  solicitacoes_escolas: number;
+  compras_pct?: number | null;
+  indice?: number | null;
 }
 
 export interface RankingPolos {
   periodo: PeriodoResolvido;
   ordenar_por: OrdenacaoRanking;
+  pesos?: PesosRanking | null;
   items: RankingPoloItem[];
 }
 

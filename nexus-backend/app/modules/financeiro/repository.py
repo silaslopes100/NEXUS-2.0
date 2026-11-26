@@ -95,6 +95,10 @@ def _filtrar_colunas(dados: Dict[str, Any], permitidas: Iterable[str]) -> Dict[s
     return {k: v for k, v in dados.items() if k in permitidas}
 
 
+# Valor especial do filtro de Polo: pedidos dos alunos EAD (sem Polo), como o FILTRO_EAD de Alunos.
+FILTRO_ALUNOS_EAD = "__ead"
+
+
 def where_periodo(
     filtros: FiltrosPeriodo,
     escopo: Escopo,
@@ -135,7 +139,9 @@ def where_periodo(
     polo_id = escopo.polo_id or filtros.polo_id
     if escopo.polo_id and filtros.polo_id and filtros.polo_id != escopo.polo_id:
         conds.append("FALSE")  # pediu um polo fora do próprio escopo
-    if polo_id:
+    if polo_id == FILTRO_ALUNOS_EAD and not escopo.polo_id:  # pedidos do próprio aluno EAD (sem Polo)
+        conds.append(f"{alias}.polo_id IS NULL AND {alias}.aluno_id IS NOT NULL")
+    elif polo_id:
         conds.append(f"{alias}.polo_id = %s")
         params.append(polo_id)
     escola_id = escopo.escola_id or filtros.escola_id
@@ -147,12 +153,19 @@ def where_periodo(
     if filtros.status and coluna_status:
         if filtros.status == "fila_envio":  # Pendentes de envio: venda paga ou troca solicitada
             conds.append(f"{coluna_status} IN ('pago_aguardando_envio', 'troca_solicitada')")
+        elif filtros.status == "pagos":  # vendas pagas (qualquer etapa depois do pagamento)
+            prefixo = coluna_status.split(".")[0]
+            conds.append(f"{prefixo}.pago_em IS NOT NULL AND {coluna_status} <> 'cancelado'")
         else:
             conds.append(f"{coluna_status} = %s")
             params.append(filtros.status)
     if filtros.tipo and coluna_tipo:
         if filtros.tipo == "com_envio":  # livro + kit + troca (logística)
             conds.append(f"{coluna_tipo} IN ('livro', 'kit', 'troca', 'ead_livro')")
+        elif filtros.tipo == "ead_todos":  # vendas para alunos EAD (com ou sem livro)
+            conds.append(f"{coluna_tipo} IN ('ead', 'ead_livro')")
+        elif filtros.tipo == "polos":  # vendas aos Polos/Escolas: licença, livro e kit
+            conds.append(f"{coluna_tipo} IN ('licenca', 'livro', 'kit')")
         else:
             conds.append(f"{coluna_tipo} = %s")
             params.append(filtros.tipo)
@@ -415,6 +428,22 @@ class PostgresFinanceiroRepository:
                 (pedido["id"],),
             )
             pedido["envios"] = [_limpar(r) for r in cur.fetchall()]
+            if pedido.get("tipo") in ("ead", "ead_livro"):
+                cur.execute(
+                    """
+                    SELECT d.nome AS disciplina_nome, c.disciplina_id, t.nome AS turma_nome, c.status_pagamento,
+                           c.liberada_em, a.numero_matricula, u.email AS aluno_email
+                      FROM compras_disciplina_ead c
+                      LEFT JOIN disciplinas d ON d.id = c.disciplina_id
+                      LEFT JOIN turmas t ON t.id = c.turma_id
+                      LEFT JOIN alunos a ON a.id = c.aluno_id
+                      LEFT JOIN usuarios u ON u.id = a.usuario_id
+                     WHERE c.pedido_id = %s
+                     ORDER BY c.criado_em DESC LIMIT 1
+                    """,
+                    (pedido["id"],),
+                )
+                pedido["ead"] = _limpar(cur.fetchone())
             if pedido.get("tipo") == "troca":
                 cur.execute(
                     """
@@ -902,7 +931,10 @@ class PostgresFinanceiroRepository:
                        COALESCE(SUM(p.valor_total) FILTER (WHERE p.status = 'aguardando_pagamento'), 0) AS a_receber,
                        COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'licenca'), 0) AS receita_licencas,
                        COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'livro'), 0) AS receita_livros,
-                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'kit'), 0) AS receita_kits
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo = 'kit'), 0) AS receita_kits,
+                       COALESCE(SUM(p.valor_total) FILTER (WHERE {pago} AND p.tipo IN ('ead', 'ead_livro')), 0) AS receita_ead,
+                       COUNT(*) FILTER (WHERE {pago} AND p.tipo IN ('ead', 'ead_livro')) AS vendas_ead,
+                       COUNT(*) FILTER (WHERE {pago} AND p.tipo = 'ead_livro') AS vendas_ead_livro
                   FROM pedidos p {where}
                 """,
                 tuple(params),
@@ -935,12 +967,12 @@ class PostgresFinanceiroRepository:
             por_status = [_limpar(r) for r in cur.fetchall()]
             cur.execute(
                 f"""
-                SELECT p.polo_id, po.nome AS polo_nome,
+                SELECT p.polo_id, COALESCE(po.nome, CASE WHEN p.aluno_id IS NOT NULL THEN 'Alunos EAD' END) AS polo_nome,
                        COUNT(*) FILTER (WHERE {pago}) AS pedidos_pagos,
                        COALESCE(SUM(p.valor_total) FILTER (WHERE {pago}), 0) AS receita
                   FROM pedidos p LEFT JOIN polos po ON po.id = p.polo_id
                   {where}
-                 GROUP BY p.polo_id, po.nome
+                 GROUP BY p.polo_id, 2
                 HAVING COUNT(*) FILTER (WHERE {pago}) > 0
                  ORDER BY receita DESC LIMIT 10
                 """,
@@ -1183,7 +1215,10 @@ def _casa_periodo(
     if escopo.polo_id and filtros.polo_id and filtros.polo_id != escopo.polo_id:
         return False
     polo_id = escopo.polo_id or filtros.polo_id
-    if polo_id and registro.get("polo_id") != polo_id:
+    if polo_id == FILTRO_ALUNOS_EAD and not escopo.polo_id:
+        if registro.get("polo_id") or not registro.get("aluno_id"):
+            return False
+    elif polo_id and registro.get("polo_id") != polo_id:
         return False
     if escopo.escola_id and filtros.escola_id and filtros.escola_id != escopo.escola_id:
         return False
@@ -1193,10 +1228,19 @@ def _casa_periodo(
     if filtros.status == "fila_envio" and campo_status:
         if registro.get(campo_status) not in ("pago_aguardando_envio", "troca_solicitada"):
             return False
+    elif filtros.status == "pagos" and campo_status:
+        if not registro.get("pago_em") or registro.get(campo_status) == "cancelado":
+            return False
     elif filtros.status and campo_status and registro.get(campo_status) != filtros.status:
         return False
     if filtros.tipo == "com_envio":
         if tipo not in ("livro", "kit", "troca", "ead_livro"):
+            return False
+    elif filtros.tipo == "ead_todos":
+        if tipo not in ("ead", "ead_livro"):
+            return False
+    elif filtros.tipo == "polos":
+        if tipo not in ("licenca", "livro", "kit"):
             return False
     elif filtros.tipo and tipo != filtros.tipo:
         return False
@@ -1648,6 +1692,9 @@ class InMemoryFinanceiroRepository:
             "receita_licencas": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "licenca"),
             "receita_livros": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "livro"),
             "receita_kits": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] == "kit"),
+            "receita_ead": sum(float(p["valor_total"] or 0) for p in pagos if p["tipo"] in ("ead", "ead_livro")),
+            "vendas_ead": sum(1 for p in pagos if p["tipo"] in ("ead", "ead_livro")),
+            "vendas_ead_livro": sum(1 for p in pagos if p["tipo"] == "ead_livro"),
             "vencido": sum(float(pg["valor"] or 0) for pg in self.pagamentos.values()
                            if pg.get("status") == "vencido" and pg.get("pedido_id") in aguardando),
             "licencas_vendidas": quantidades.get("licenca", 0) + quantidades.get("kit", 0),

@@ -152,7 +152,35 @@ export const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho'
 export const fmtHoras = (h?: number | null) =>
   h === undefined || h === null ? '—' : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(h)} h`;
 
+export interface HistoricoTurma {
+  turma_id: string;
+  modalidade: string;
+  frequencia_aplica: boolean;
+  peso_notas: number;
+  peso_frequencia: number;
+  resumo: {
+    alunos: number;
+    media_geral?: number | null;
+    aprovacao_pct?: number | null;
+    notas_lancadas: number;
+    frequencia_media?: number | null;
+    abaixo_minimo: number;
+    minimo_pct: number;
+    indice?: number | null;
+  };
+  disciplinas: {
+    disciplina_id: string; nome: string; semestre?: number | null; media?: number | null;
+    aprovados: number; reprovados: number; sem_nota: number; frequencia_media?: number | null;
+  }[];
+  alunos: {
+    aluno_id: string; nome: string; numero_matricula?: string | null; media?: number | null; aprovadas: number;
+    reprovadas: number; frequencia_pct?: number | null; em_risco: boolean; situacao: 'bom' | 'atencao' | 'sem_dados';
+  }[];
+  evolucao: { mes: string; media: number; notas: number }[];
+}
+
 export const cargaHorariaApi = {
+  historico: async (turmaId: string) => (await apiClient.get<HistoricoTurma>(`/turmas/${turmaId}/historico`)).data,
   regrasPadrao: async () => (await apiClient.get<RegrasCalendario>('/calendarios-academicos/regras-padrao')).data,
   listarCalendarios: async () => (await apiClient.get<Calendario[]>('/calendarios-academicos')).data,
   criarCalendario: async (dados: CalendarioInput) => (await apiClient.post<Calendario>('/calendarios-academicos', dados)).data,

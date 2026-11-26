@@ -983,6 +983,40 @@ async def list_alunos_disponiveis(
         return [dict(r) for r in cur.fetchall()]
 
 
+def _sincronizar_matricula_ead(cur: Any, turma: Dict[str, Any], aluno_id: str, usuario_id: str, ativa: bool) -> None:
+    """Turma EAD: a vaga na turma anda junto com a matrícula EAD do curso (matriculas_ead), que libera o AVA
+    e aparece na Gestão de Matrículas EAD. Entrar = matrícula ativa (manual); sair = matrícula cancelada."""
+    if not turma.get("curso_id"):
+        return
+    cur.execute(
+        "SELECT id, status FROM matriculas_ead WHERE aluno_id::text = %s AND curso_id = %s "
+        "ORDER BY data_matricula DESC NULLS LAST LIMIT 1",
+        (aluno_id, turma["curso_id"]),
+    )
+    existente = cur.fetchone()
+    if ativa:
+        if existente:
+            cur.execute(
+                """UPDATE matriculas_ead SET status = 'ativa', turma_id = %s, cancelada_em = NULL, cancelada_por = NULL,
+                          motivo_cancelamento = NULL, atualizado_em = now() WHERE id = %s""",
+                (turma["id"], existente["id"]),
+            )
+        else:
+            cur.execute(
+                """INSERT INTO matriculas_ead (id, aluno_id, curso_id, ativa_automaticamente, data_matricula, tipo, origem,
+                                                status, turma_id, criado_por, criado_em, atualizado_em)
+                   VALUES (%s, %s, %s, true, now(), 'regular', 'manual', 'ativa', %s, %s, now(), now())""",
+                (str(uuid.uuid4()), aluno_id, turma["curso_id"], turma["id"], usuario_id),
+            )
+    elif existente and existente["status"] == "ativa":
+        cur.execute(
+            """UPDATE matriculas_ead SET status = 'cancelada', cancelada_em = now(), cancelada_por = %s,
+                      motivo_cancelamento = 'Removido da Turma EAD', atualizado_em = now()
+                WHERE id = %s AND (turma_id IS NULL OR turma_id = %s)""",
+            (usuario_id, existente["id"], turma["id"]),
+        )
+
+
 def _mensagem_lotada(vagas: int) -> HTTPException:
     return HTTPException(status.HTTP_409_CONFLICT, detail=f"Turma lotada ({vagas} vagas).")
 
@@ -1041,6 +1075,8 @@ async def matricular_aluno_turma(
             """,
             (str(uuid.uuid4()), uid, str(aluno["id"])),
         )
+        if turma.get("modalidade") == "ead":
+            _sincronizar_matricula_ead(cur, turma, str(aluno["id"]), str(current_user.id), ativa=True)
     _auditar(current_user, "turma_aluno_matriculado", "turmas", uid, ip, depois={"aluno_id": aluno_id})
     return mensagem
 
@@ -1066,12 +1102,15 @@ async def remover_aluno_turma(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     with get_db_cursor() as cur:
-        regras.exigir_turma_editavel(_exigir_no_escopo(_buscar_turma(cur, uid), current_user))
+        turma = _exigir_no_escopo(_buscar_turma(cur, uid), current_user)
+        regras.exigir_turma_editavel(turma)
         cur.execute(
             "DELETE FROM turma_alunos WHERE turma_id = %s AND aluno_id::text = %s RETURNING id",
             (uid, aluno_id),
         )
         if cur.fetchone() is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aluno não matriculado nesta turma")
+        if turma.get("modalidade") == "ead":
+            _sincronizar_matricula_ead(cur, turma, aluno_id, str(current_user.id), ativa=False)
     _auditar(current_user, "turma_aluno_removido", "turmas", uid, ip, antes={"aluno_id": aluno_id})
     return Response(status_code=status.HTTP_204_NO_CONTENT)

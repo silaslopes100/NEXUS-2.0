@@ -18,6 +18,7 @@ from app.modules.carga_horaria.schemas import (
     CronogramaResponse,
     DatasLetivasResponse,
     FrequenciaResponse,
+    HistoricoTurmaResponse,
     PrazosEadResponse,
     RegrasCalendario,
 )
@@ -161,6 +162,17 @@ async def obter_frequencia(
     service: CargaHorariaService = Depends(get_carga_horaria_service),
 ):
     return service.frequencia(current_user, str(turma_id))
+
+
+@router.get("/turmas/{turma_id}/historico", response_model=HistoricoTurmaResponse,
+            dependencies=[Depends(require_role(_LEITURA))])
+async def obter_historico(
+    turma_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+    service: CargaHorariaService = Depends(get_carga_horaria_service),
+):
+    """Desempenho da turma: notas finais, frequência e índice (pesos da configuração do ranking)."""
+    return service.historico(current_user, str(turma_id))
 
 
 @router.post("/turmas/{turma_id}/concluir", response_model=ConclusaoResponse,

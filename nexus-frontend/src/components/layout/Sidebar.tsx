@@ -85,7 +85,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Itens do AVA (somenteEad) só aparecem para o aluno EAD.
   const alunoEad = !!user?.aluno_ead && !user?.tambem_aluno;
   const menuBase: MenuGroup[] = (menuByRole[activeRole] || menuByRole.aluno)
-    .map((group) => ({ ...group, items: group.items.filter((item) => !item.somenteEad || alunoEad) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => (!item.somenteEad || alunoEad) && !(item.ocultarEad && alunoEad)),
+    }))
     .filter((group) => group.items.length > 0);
   const menuGroups: MenuGroup[] = viaLicenca
     ? menuBase

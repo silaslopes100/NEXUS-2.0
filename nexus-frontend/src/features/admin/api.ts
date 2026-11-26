@@ -19,6 +19,7 @@ import {
   ListaDashboard,
   MatriculaDashboardItem,
   OrdenacaoRanking,
+  PesosRanking,
   RankingPolos,
   AbaHistorico,
   AcessoPayload,
@@ -80,7 +81,15 @@ export const adminApi = {
     return response.data;
   },
 
-  async getRankingPolos(filtros?: FiltrosDashboard, ordenar_por: OrdenacaoRanking = 'novas_licencas'): Promise<RankingPolos> {
+  async getPesosRanking(): Promise<PesosRanking> {
+    return (await apiClient.get<PesosRanking>('/admin/dashboard/ranking-polos/config')).data;
+  },
+
+  async salvarPesosRanking(pesos: Omit<PesosRanking, 'atualizado_em'>): Promise<PesosRanking> {
+    return (await apiClient.put<PesosRanking>('/admin/dashboard/ranking-polos/config', pesos)).data;
+  },
+
+  async getRankingPolos(filtros?: FiltrosDashboard, ordenar_por: OrdenacaoRanking = 'indice'): Promise<RankingPolos> {
     const response = await apiClient.get<RankingPolos>('/admin/dashboard/ranking-polos', {
       params: { ...semVazios(filtros), ordenar_por },
     });

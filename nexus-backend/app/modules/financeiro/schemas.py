@@ -11,7 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # "ead" / "ead_livro" = compra do aluno EAD (disciplina, com ou sem livro físico) — migração 035.
 TipoPedido = Literal["livro", "licenca", "kit", "troca", "ead", "ead_livro"]
 # Filtro de listagem: além dos tipos, "com_envio" = livro + kit + troca (telas de logística).
-TipoFiltro = Literal["livro", "licenca", "kit", "troca", "ead", "ead_livro", "com_envio"]
+# "ead_todos" = ead + ead_livro (vendas para alunos EAD); "polos" = licenca + livro + kit.
+TipoFiltro = Literal["livro", "licenca", "kit", "troca", "ead", "ead_livro", "ead_todos", "polos", "com_envio"]
 StatusPedido = Literal[
     "aguardando_pagamento",
     "pago_aguardando_envio",
@@ -180,6 +181,17 @@ class EnvioResponse(BaseModel):
     observacao: Optional[str] = None
 
 
+class PedidoEadInfo(BaseModel):
+    """Compra de disciplina do aluno EAD ligada ao pedido (tipos ead / ead_livro)."""
+    disciplina_id: Optional[str] = None
+    disciplina_nome: Optional[str] = None
+    turma_nome: Optional[str] = None
+    status_pagamento: Optional[str] = None
+    liberada_em: Optional[datetime] = None
+    numero_matricula: Optional[str] = None
+    aluno_email: Optional[str] = None
+
+
 class PedidoResponse(BaseModel):
     id: str
     numero: str
@@ -212,6 +224,7 @@ class PedidoResponse(BaseModel):
     troca_motivo: Optional[str] = None
     troca_descricao: Optional[str] = None
     troca_itens: List["TrocaItemResponse"] = Field(default_factory=list)
+    ead: Optional[PedidoEadInfo] = None
 
 
 class PedidoListResponse(BaseModel):
@@ -518,6 +531,9 @@ class VendasKpisResponse(BaseModel):
     receita_licencas: float
     receita_livros: float
     receita_kits: float = 0  # Disciplinas (livro + licença)
+    receita_ead: float = 0  # vendas para alunos EAD (disciplina, com ou sem livro)
+    vendas_ead: int = 0
+    vendas_ead_livro: int = 0
     licencas_vendidas: int
     livros_vendidos: int
     por_status: List[VendasStatusItem]

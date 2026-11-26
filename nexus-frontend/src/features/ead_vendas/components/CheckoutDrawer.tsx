@@ -100,19 +100,18 @@ export const CheckoutDrawer: React.FC<Props> = ({ turma, disciplina: d, endereco
                 </p>
               )}
 
-              {d.livro_disponivel && (
-                <button type="button" onClick={() => setComLivro((v) => !v)}
-                  className={`flex w-full items-start gap-3 rounded-2xl border-2 p-4 text-left transition ${comLivro ? 'border-nexus-yellow bg-nexus-yellow/10' : 'border-dashed border-slate-700 hover:border-nexus-yellow/50'}`}>
-                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${comLivro ? 'border-nexus-yellow bg-nexus-yellow text-ink' : 'border-slate-600'}`}>
-                    {comLivro && <Check size={13} />}
-                  </span>
-                  <span className="flex-1">
-                    <span className="flex items-center gap-2 font-bold text-white"><BookMarked size={16} className="text-nexus-yellow" /> Quero também o livro físico</span>
-                    <span className="mt-0.5 block text-xs text-slate-400">Material impresso da disciplina, enviado para o seu endereço.</span>
-                  </span>
-                  <span className="shrink-0 font-extrabold text-nexus-yellow">+ {brl(d.valor_livro_ead)}</span>
-                </button>
-              )}
+              <section className="space-y-2">
+                <p className="text-sm font-bold text-white">Forma de pagamento</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([['PIX', 'Pix', 'Liberação em minutos', QrCode], ['BOLETO', 'Boleto', 'Até 3 dias úteis', Barcode]] as const).map(([v, r, a, Icone]) => (
+                    <button key={v} type="button" onClick={() => setMeio(v)}
+                      className={`rounded-2xl border-2 p-3 text-left transition ${meio === v ? 'border-nexus-yellow bg-nexus-yellow/10' : 'border-slate-800 hover:border-slate-600'}`}>
+                      <span className="flex items-center gap-2 font-bold text-white"><Icone size={16} className="text-nexus-yellow" /> {r}</span>
+                      <span className="text-[11px] text-slate-400">{a}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
               {comLivro && (
                 <section className="space-y-3 rounded-2xl border border-slate-800 p-4">
@@ -135,19 +134,6 @@ export const CheckoutDrawer: React.FC<Props> = ({ turma, disciplina: d, endereco
                 </section>
               )}
 
-              <section className="space-y-2">
-                <p className="text-sm font-bold text-white">Forma de pagamento</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {([['PIX', 'Pix', 'Liberação em minutos', QrCode], ['BOLETO', 'Boleto', 'Até 3 dias úteis', Barcode]] as const).map(([v, r, a, Icone]) => (
-                    <button key={v} type="button" onClick={() => setMeio(v)}
-                      className={`rounded-2xl border-2 p-3 text-left transition ${meio === v ? 'border-nexus-yellow bg-nexus-yellow/10' : 'border-slate-800 hover:border-slate-600'}`}>
-                      <span className="flex items-center gap-2 font-bold text-white"><Icone size={16} className="text-nexus-yellow" /> {r}</span>
-                      <span className="text-[11px] text-slate-400">{a}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
               {erro && <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{erro}</p>}
             </>
           )}
@@ -155,6 +141,21 @@ export const CheckoutDrawer: React.FC<Props> = ({ turma, disciplina: d, endereco
 
         {!pedido && (
           <footer className="space-y-3 border-t border-slate-800 px-6 py-4">
+            {d.livro_disponivel && (
+              <button type="button" onClick={() => setComLivro((v) => !v)}
+                className={`flex w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition ${comLivro ? 'border-nexus-yellow bg-nexus-yellow/10' : 'border-dashed border-nexus-yellow/40 hover:border-nexus-yellow'}`}>
+                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${comLivro ? 'border-nexus-yellow bg-nexus-yellow text-ink' : 'border-slate-600'}`}>
+                  {comLivro && <Check size={13} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-sm font-bold text-white"><BookMarked size={15} className="text-nexus-yellow" /> Incluir o livro físico</span>
+                  <span className="block text-[11px] text-slate-400">
+                    {comLivro ? 'Preencha o endereço de entrega acima.' : 'Material impresso da disciplina, entregue no seu endereço.'}
+                  </span>
+                </span>
+                <span className="shrink-0 font-extrabold text-nexus-yellow">+ {brl(d.valor_livro_ead)}</span>
+              </button>
+            )}
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-slate-300"><span>Disciplina</span><span>{brl(d.valor_ead)}</span></div>
               {comLivro && <div className="flex justify-between text-slate-300"><span>Livro físico</span><span>{brl(d.valor_livro_ead)}</span></div>}

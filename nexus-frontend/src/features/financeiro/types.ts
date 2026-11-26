@@ -131,6 +131,18 @@ export interface Pedido {
   troca_motivo?: MotivoTroca | null;
   troca_descricao?: string | null;
   troca_itens?: TrocaItem[];
+  /** Pedido do aluno EAD (tipos ead / ead_livro). */
+  aluno_id?: string | null;
+  aluno_nome?: string | null;
+  ead?: {
+    disciplina_id?: string | null;
+    disciplina_nome?: string | null;
+    turma_nome?: string | null;
+    status_pagamento?: string | null;
+    liberada_em?: string | null;
+    numero_matricula?: string | null;
+    aluno_email?: string | null;
+  } | null;
 }
 
 export interface Envio {
@@ -207,6 +219,10 @@ export interface VendasKpis {
   ticket_medio: number;
   receita_licencas: number;
   receita_livros: number;
+  receita_kits?: number;
+  receita_ead: number;
+  vendas_ead: number;
+  vendas_ead_livro: number;
   licencas_vendidas: number;
   livros_vendidos: number;
   por_status: { status: string; pedidos: number; valor: number }[];
