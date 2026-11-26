@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
@@ -41,20 +42,26 @@ export const ProfessoresPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [offset, setOffset] = useState(0);
 
+  // ?polo_id / ?escola_id chegam dos indicadores da tela de Polos e já disparam a busca.
+  const [searchParams] = useSearchParams();
+  const poloDaUrl = searchParams.get('polo_id') || '';
+  const escolaDaUrl = searchParams.get('escola_id') || '';
+  const filtroDaUrl = Boolean(poloDaUrl || escolaDaUrl);
+
   // Indica se o usuário já acionou a busca (nenhum dado é carregado antes disso)
-  const [searchTriggered, setSearchTriggered] = useState(false);
-  const searchTriggeredRef = useRef(false);
+  const [searchTriggered, setSearchTriggered] = useState(filtroDaUrl);
+  const searchTriggeredRef = useRef(filtroDaUrl);
 
   // Filtros digitados (staged) e filtros efetivamente aplicados (após Buscar/Enter)
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPolo, setSelectedPolo] = useState('');
-  const [selectedEscola, setSelectedEscola] = useState('');
+  const [selectedPolo, setSelectedPolo] = useState(poloDaUrl);
+  const [selectedEscola, setSelectedEscola] = useState(escolaDaUrl);
   const [disciplina, setDisciplina] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [applied, setApplied] = useState({
     search: '',
-    polo_id: '',
-    escola_id: '',
+    polo_id: poloDaUrl,
+    escola_id: escolaDaUrl,
     disciplina: '',
     status: '',
   });

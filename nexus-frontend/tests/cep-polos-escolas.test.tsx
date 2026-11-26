@@ -121,7 +121,7 @@ describe('consulta de CEP', () => {
 });
 
 it('cria polo com usuário existente e atualiza a listagem', async () => {
-  render(<PolosEscolasPage />);
+  render(<MemoryRouter><PolosEscolasPage /></MemoryRouter>);
   fireEvent.click(screen.getByText('Novo polo'));
   fireEvent.change(screen.getByPlaceholderText('Nome da unidade'), { target: { value: 'Polo novo' } });
   fireEvent.change(screen.getByPlaceholderText('Cidade'), { target: { value: 'São Paulo' } });
@@ -139,7 +139,7 @@ it('mostra erro de criação dentro do formulário', async () => {
   vi.mocked(polosEscolasApi.criarPolo).mockRejectedValueOnce({
     response: { data: { detail: 'Usuário já é coordenador de outro polo' } },
   });
-  render(<PolosEscolasPage />);
+  render(<MemoryRouter><PolosEscolasPage /></MemoryRouter>);
   fireEvent.click(screen.getByText('Novo polo'));
   fireEvent.change(screen.getByPlaceholderText('Nome da unidade'), { target: { value: 'Polo novo' } });
   fireEvent.change(screen.getByPlaceholderText('Cidade'), { target: { value: 'São Paulo' } });
@@ -151,7 +151,7 @@ it('mostra erro de criação dentro do formulário', async () => {
 
 describe.each([
   ['polos e escolas', async () => {
-    render(<PolosEscolasPage />);
+    render(<MemoryRouter><PolosEscolasPage /></MemoryRouter>);
     fireEvent.click(screen.getByText('Nova escola'));
     fireEvent.change(screen.getByPlaceholderText('Nome da unidade'), { target: { value: 'Escola nova' } });
     fireEvent.change(screen.getByPlaceholderText('Cidade'), { target: { value: 'Recife' } });
@@ -211,11 +211,11 @@ it('permite tentar novamente quando a consulta de usuários falha', async () => 
 
 describe.each([
   ['cadastro de polo', () => {
-    render(<PolosEscolasPage />);
+    render(<MemoryRouter><PolosEscolasPage /></MemoryRouter>);
     fireEvent.click(screen.getByText('Novo polo'));
   }, false],
   ['cadastro de escola no polo', () => {
-    render(<PolosEscolasPage />);
+    render(<MemoryRouter><PolosEscolasPage /></MemoryRouter>);
     fireEvent.click(screen.getByText('Nova escola'));
   }, false],
   ['cadastro na página de escolas', () => {

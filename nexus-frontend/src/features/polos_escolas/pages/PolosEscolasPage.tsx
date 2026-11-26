@@ -1,32 +1,32 @@
 import { PoloEditModal } from '@/features/polos_escolas/components/PoloEditModal';
 import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
 import { SecretarioEscolaFields } from '@/features/polos_escolas/components/SecretarioEscolaFields';
+import { IndicadoresEscola, IndicadoresPolo } from '@/features/polos_escolas/components/IndicadoresUnidade';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft,
-  ArrowLeftRight,
-  BadgeCheck,
-  BookOpen,
+  AlertCircle,
   Building2,
   CheckCircle2,
+  ChevronRight,
   Edit2,
-  FileText,
-  Library,
+  LayoutGrid,
+  List,
   Loader2,
+  Mail,
   MapPin,
-  Package,
   Plus,
   RefreshCw,
   School,
   Search,
-  ShoppingCart,
   UserCheck,
-  Users,
   X,
 } from 'lucide-react';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
 import { useCepAddress } from '@/features/polos_escolas/useCepAddress';
+import { areaDoPerfil, formatarEndereco } from '@/features/polos_escolas/indicadores';
 import {
+  EnderecoCompleto,
   EscolaCreatePayload,
   EscolaItem,
   PoloCreatePayload,
@@ -38,13 +38,37 @@ import { useAuthStore } from '@/stores/authStore';
 
 const emptyAddress = { logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: 'SP', cep: '' };
 const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500';
+const selectClass = 'rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500';
+const LIMITE_POLOS = 200;
+const DEBOUNCE_BUSCA_MS = 300;
 
-const debounce = <T extends (value: string) => void>(fn: T, ms: number) => {
-  let timeoutId: ReturnType<typeof setTimeout>;
-  return (value: string) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(value), ms);
-  };
+type Visualizacao = 'cards' | 'tabela';
+const CHAVE_VISUALIZACAO = 'nexus.polos.visualizacao';
+
+const lerVisualizacao = (): Visualizacao => {
+  try {
+    return localStorage.getItem(CHAVE_VISUALIZACAO) === 'tabela' ? 'tabela' : 'cards';
+  } catch {
+    return 'cards';
+  }
+};
+
+const salvarVisualizacao = (valor: Visualizacao) => {
+  try {
+    localStorage.setItem(CHAVE_VISUALIZACAO, valor);
+  } catch {
+    // Armazenamento indisponível (aba anônima, bloqueio): a escolha vale só nesta visita.
+  }
+};
+
+const cidadeUf = (endereco?: EnderecoCompleto | null) =>
+  [endereco?.cidade, endereco?.estado].filter(Boolean).join(' / ') || 'Cidade não informada';
+
+type Feedback = { tipo: 'ok' | 'erro'; texto: string } | null;
+
+const mensagemErro = (error: any, padrao: string) => {
+  const detail = error?.response?.data?.detail;
+  return typeof detail === 'string' ? detail : padrao;
 };
 
 // =========================================================================
@@ -66,34 +90,39 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 };
 
 const InfoField: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
-  <div>
+  <div className="min-w-0">
     <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
-    <span className="mt-1 block text-sm text-slate-200">{value || '—'}</span>
+    <span className="mt-1 block break-words text-sm text-slate-200">{value || '—'}</span>
   </div>
 );
 
-interface KpiCardProps {
-  label: string;
-  value: number | string;
-  icon: React.ReactNode;
-  accent?: 'blue' | 'emerald' | 'amber' | 'indigo';
-}
-
-const kpiAccent = {
-  blue: 'text-blue-400',
-  emerald: 'text-emerald-400',
-  amber: 'text-amber-300',
-  indigo: 'text-indigo-400',
+const Endereco: React.FC<{ endereco?: EnderecoCompleto | null }> = ({ endereco }) => {
+  const texto = formatarEndereco(endereco);
+  return (
+    <p className="flex items-start gap-2 text-sm text-slate-300">
+      <MapPin size={16} className="mt-0.5 shrink-0 text-slate-500" />
+      <span>{texto || 'Endereço não informado'}</span>
+    </p>
+  );
 };
 
-const KpiCard: React.FC<KpiCardProps> = ({ label, value, icon, accent = 'blue' }) => (
-  <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-4 transition-colors hover:bg-slate-900">
-    <div className="flex items-center justify-between text-slate-500">
-      <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
-      <span className={kpiAccent[accent]}>{icon}</span>
-    </div>
-    <strong className={`mt-2 block text-2xl font-black text-white ${kpiAccent[accent]}`}>{value}</strong>
-  </div>
+const BotaoVisualizacao: React.FC<{
+  ativo: boolean;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}> = ({ ativo, label, icon, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={ativo}
+    title={label}
+    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+      ativo ? 'bg-blue-600 text-on-accent' : 'text-slate-400 hover:text-white'
+    }`}
+  >
+    {icon} {label}
+  </button>
 );
 
 // =========================================================================
@@ -104,17 +133,25 @@ export const PolosEscolasPage: React.FC = () => {
   const { user } = useAuthStore();
   const role = user?.perfil?.nome?.toLowerCase() || '';
   const isAdmin = role === 'admin';
+  const area = areaDoPerfil(role);
+
+  // O polo aberto fica na URL (?polo=<id>): voltar de um indicador reabre o detalhe.
+  const [params, setParams] = useSearchParams();
+  const poloAberto = params.get('polo') || '';
+  const view: 'lista' | 'detalhe' = poloAberto ? 'detalhe' : 'lista';
 
   // ---------- Estado: lista de polos ----------
   const [polos, setPolos] = useState<PoloItem[]>([]);
+  const [totalPolos, setTotalPolos] = useState(0);
   const [query, setQuery] = useState('');
-  const [searchTriggered, setSearchTriggered] = useState(false);
-  const searchTriggeredRef = useRef(false);
-  const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState('');
+  const [statusFiltro, setStatusFiltro] = useState('');
+  const [ufFiltro, setUfFiltro] = useState('');
+  const [visualizacao, setVisualizacao] = useState<Visualizacao>(lerVisualizacao);
+  const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const requisicaoListaRef = useRef(0);
 
   // ---------- Estado: detalhe do polo ----------
-  const [view, setView] = useState<'lista' | 'detalhe'>('lista');
   const [selectedPolo, setSelectedPolo] = useState<PoloItem | null>(null);
   const [resumoPolo, setResumoPolo] = useState<ResumoOperacionalPolo | null>(null);
   const [escolas, setEscolas] = useState<EscolaItem[]>([]);
@@ -177,37 +214,69 @@ export const PolosEscolasPage: React.FC = () => {
     );
   }, [usuariosDisponiveis, buscaUsuario]);
 
+  // ---------- Lista de polos ----------
   const loadPolos = useCallback(async (searchQuery = '') => {
-    if (!searchTriggeredRef.current) return;
+    const requisicao = ++requisicaoListaRef.current;
     setLoading(true);
     try {
       const poloResponse = isAdmin
-        ? await polosEscolasApi.listarPolos({ limit: 50, offset: 0, search: searchQuery })
+        ? await polosEscolasApi.listarPolos({ limit: LIMITE_POLOS, offset: 0, search: searchQuery || undefined })
         : user?.polo_id
           ? { total: 1, items: [await polosEscolasApi.obterPolo(user.polo_id)], limit: 1, offset: 0 }
-          : await polosEscolasApi.listarPolos({ limit: 50, offset: 0, search: searchQuery });
-      setPolos(poloResponse.items);
+          : await polosEscolasApi.listarPolos({ limit: LIMITE_POLOS, offset: 0, search: searchQuery || undefined });
+      // Ignora respostas de buscas já substituídas por outra mais recente.
+      if (requisicao !== requisicaoListaRef.current) return;
+      const items: PoloItem[] = poloResponse.items || [];
+      setPolos(items);
+      setTotalPolos(poloResponse.total ?? items.length);
     } catch (error: any) {
-      setFeedback(error.response?.data?.detail || 'Não foi possível carregar os polos.');
-    } finally { setLoading(false); }
+      if (requisicao !== requisicaoListaRef.current) return;
+      setFeedback({ tipo: 'erro', texto: mensagemErro(error, 'Não foi possível carregar os polos.') });
+    } finally {
+      if (requisicao === requisicaoListaRef.current) setLoading(false);
+    }
   }, [isAdmin, user?.polo_id]);
 
-  const debouncedLoadPolos = useMemo(() => debounce(loadPolos, 300), [loadPolos]);
+  // Carrega ao abrir a tela e busca enquanto digita.
+  useEffect(() => {
+    const termo = query.trim();
+    const timeoutId = setTimeout(() => void loadPolos(termo), termo ? DEBOUNCE_BUSCA_MS : 0);
+    return () => clearTimeout(timeoutId);
+  }, [query, loadPolos]);
 
-  const handleSearch = useCallback(() => {
-    searchTriggeredRef.current = true;
-    setSearchTriggered(true);
-    debouncedLoadPolos(query);
-  }, [debouncedLoadPolos, query]);
+  const trocarVisualizacao = (valor: Visualizacao) => {
+    setVisualizacao(valor);
+    salvarVisualizacao(valor);
+  };
+
+  const ufsDisponiveis = useMemo(
+    () => Array.from(new Set(polos.map((polo) => polo.endereco?.estado).filter((uf): uf is string => Boolean(uf)))).sort(),
+    [polos],
+  );
+
+  const polosFiltrados = useMemo(
+    () => polos.filter((polo) =>
+      (!statusFiltro || polo.status === statusFiltro)
+      && (!ufFiltro || polo.endereco?.estado === ufFiltro)),
+    [polos, statusFiltro, ufFiltro],
+  );
+
+  const temFiltroLista = Boolean(query.trim() || statusFiltro || ufFiltro);
+  const limparFiltrosLista = () => {
+    setQuery('');
+    setStatusFiltro('');
+    setUfFiltro('');
+  };
 
   // ---------- Detalhe do polo ----------
-  const abrirPolo = useCallback(async (poloId: string) => {
-    setView('detalhe');
+  const carregarDetalhe = useCallback(async (poloId: string, limpar = true) => {
     setLoadingDetalhe(true);
-    setSelectedPolo(null);
-    setResumoPolo(null);
-    setEscolas([]);
-    setEscolaFilter('');
+    if (limpar) {
+      setSelectedPolo(null);
+      setResumoPolo(null);
+      setEscolas([]);
+      setEscolaFilter('');
+    }
     try {
       const [polo, resumo, escolasResp] = await Promise.all([
         polosEscolasApi.obterPolo(poloId),
@@ -218,21 +287,48 @@ export const PolosEscolasPage: React.FC = () => {
       setResumoPolo(resumo);
       setEscolas(escolasResp.items || []);
     } catch (error: any) {
-      setFeedback(error.response?.data?.detail || 'Não foi possível carregar os detalhes do polo.');
-      setView('lista');
+      setFeedback({ tipo: 'erro', texto: mensagemErro(error, 'Não foi possível carregar os detalhes do polo.') });
+      setParams((atual) => {
+        const proximo = new URLSearchParams(atual);
+        proximo.delete('polo');
+        return proximo;
+      }, { replace: true });
     } finally {
       setLoadingDetalhe(false);
     }
-  }, []);
+  }, [setParams]);
 
-  const voltarParaLista = useCallback(() => {
-    setView('lista');
+  useEffect(() => {
+    if (poloAberto) {
+      void carregarDetalhe(poloAberto);
+      return;
+    }
     setSelectedPolo(null);
     setResumoPolo(null);
     setEscolas([]);
     setDrawerOpen(false);
     setEscolaSelecionada(null);
-  }, []);
+  }, [poloAberto, carregarDetalhe]);
+
+  const abrirPolo = useCallback((poloId: string) => {
+    setParams((atual) => {
+      const proximo = new URLSearchParams(atual);
+      proximo.set('polo', poloId);
+      return proximo;
+    });
+  }, [setParams]);
+
+  const voltarParaLista = useCallback(() => {
+    setParams((atual) => {
+      const proximo = new URLSearchParams(atual);
+      proximo.delete('polo');
+      return proximo;
+    });
+  }, [setParams]);
+
+  const recarregarDetalhe = useCallback(() => {
+    if (poloAberto) void carregarDetalhe(poloAberto, false);
+  }, [carregarDetalhe, poloAberto]);
 
   // ---------- Drawer da escola ----------
   const fecharEscola = useCallback(() => {
@@ -247,7 +343,7 @@ export const PolosEscolasPage: React.FC = () => {
     setLoadingEscola(true);
     polosEscolasApi.getResumoOperacionalEscola(escola.id)
       .then(setResumoEscola)
-      .catch((error: any) => setFeedback(error.response?.data?.detail || 'Não foi possível carregar os indicadores da escola.'))
+      .catch((error: any) => setFeedback({ tipo: 'erro', texto: mensagemErro(error, 'Não foi possível carregar os indicadores da escola.') }))
       .finally(() => {
         setLoadingEscola(false);
         setTimeout(() => setDrawerOpen(true), 10);
@@ -261,17 +357,14 @@ export const PolosEscolasPage: React.FC = () => {
     setSaving(true);
     try {
       await polosEscolasApi.criarPolo(poloForm);
-      setFeedback('Polo cadastrado e coordenador vinculado com sucesso.');
+      setFeedback({ tipo: 'ok', texto: 'Polo cadastrado e coordenador vinculado com sucesso.' });
       setModal(null);
       setPoloForm({ nome: '', endereco: emptyAddress, coordenador_usuario_id: '' });
       setBuscaUsuario('');
       setQuery('');
-      searchTriggeredRef.current = true;
-      setSearchTriggered(true);
       await loadPolos('');
     } catch (error: any) {
-      const detail = error.response?.data?.detail;
-      setErroModal(typeof detail === 'string' ? detail : 'Falha ao criar o polo. Confira os dados informados.');
+      setErroModal(mensagemErro(error, 'Falha ao criar o polo. Confira os dados informados.'));
     } finally { setSaving(false); }
   };
 
@@ -281,15 +374,19 @@ export const PolosEscolasPage: React.FC = () => {
     setSaving(true);
     try {
       await polosEscolasApi.criarEscola(escolaForm.polo_id, escolaForm);
-      setFeedback('Escola cadastrada com sucesso.');
+      setFeedback({ tipo: 'ok', texto: 'Escola cadastrada com sucesso.' });
       setModal(null);
       setEscolaForm({ polo_id: user?.polo_id || '', nome: '', endereco: emptyAddress, secretario_nome: '', secretario_cpf: '', secretario_email: '', secretario_senha: '', secretario_usuario_id: '' });
-      if (selectedPolo) await abrirPolo(selectedPolo.id);
-      else await loadPolos(query);
+      if (poloAberto) await carregarDetalhe(poloAberto, false);
+      else await loadPolos(query.trim());
     } catch (error: any) {
-      const detail = error.response?.data?.detail;
-      setErroModal(typeof detail === 'string' ? detail : 'Falha ao criar a escola. Confira os dados informados.');
+      setErroModal(mensagemErro(error, 'Falha ao criar a escola. Confira os dados informados.'));
     } finally { setSaving(false); }
+  };
+
+  const aposEditar = () => {
+    if (poloAberto) void carregarDetalhe(poloAberto, false);
+    else void loadPolos(query.trim());
   };
 
   const escolasFiltradas = useMemo(() => {
@@ -314,135 +411,222 @@ export const PolosEscolasPage: React.FC = () => {
         <button onClick={() => {
           setErroModal('');
           setEscolaForm((form) => ({ ...form, polo_id: user?.polo_id || selectedPolo?.id || '', secretario_usuario_id: '' }));
-          if (!polos.length) {
-            searchTriggeredRef.current = true;
-            setSearchTriggered(true);
-            setQuery('');
-            void loadPolos('');
-          }
+          if (!polos.length) void loadPolos('');
           setModal('escola');
         }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-indigo-500"><Plus size={16} /> Nova escola</button>
       </div>
     </header>
 
-    {feedback && <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300"><span className="flex items-center gap-2"><CheckCircle2 size={16} /> {feedback}</span><button onClick={() => setFeedback('')}><X size={16} /></button></div>}
+    {feedback && (
+      <div
+        role={feedback.tipo === 'erro' ? 'alert' : 'status'}
+        className={`flex items-center justify-between rounded-xl border p-3 text-sm ${
+          feedback.tipo === 'erro'
+            ? 'border-red-500/30 bg-red-500/10 text-red-300'
+            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+        }`}
+      >
+        <span className="flex items-center gap-2">
+          {feedback.tipo === 'erro' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />} {feedback.texto}
+        </span>
+        <button onClick={() => setFeedback(null)} aria-label="Fechar aviso"><X size={16} /></button>
+      </div>
+    )}
 
     {view === 'lista' ? (
-      <>
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <p className="text-sm text-slate-400">Selecione um polo para ver dados, indicadores e escolas vinculadas.</p>
-          <div className="flex gap-2">
-            <div className="relative">
+      <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+        {/* Barra de ferramentas */}
+        <div className="flex flex-col gap-3 border-b border-slate-800 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative sm:w-72">
               <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
               <input
                 className={`${inputClass} pl-9`}
                 placeholder="Buscar polo por nome"
+                aria-label="Buscar polo por nome"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') handleSearch();
-                }}
               />
             </div>
-            <button onClick={handleSearch} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-on-accent hover:bg-blue-500">Buscar</button>
-            <button title="Recarregar" onClick={() => loadPolos(query)} className="rounded-xl border border-slate-800 bg-slate-900 px-3 text-slate-300 hover:text-white"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /></button>
+            <select aria-label="Filtrar por status" className={selectClass} value={statusFiltro} onChange={(event) => setStatusFiltro(event.target.value)}>
+              <option value="">Todos os status</option>
+              <option value="ativo">Ativos</option>
+              <option value="inativo">Inativos</option>
+            </select>
+            <select aria-label="Filtrar por UF" className={selectClass} value={ufFiltro} onChange={(event) => setUfFiltro(event.target.value)}>
+              <option value="">Todas as UFs</option>
+              {ufsDisponiveis.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+            </select>
+            {temFiltroLista && (
+              <button type="button" onClick={limparFiltrosLista} className="text-xs font-semibold text-slate-400 hover:text-white">Limpar filtros</button>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-500">
+              {polosFiltrados.length} {polosFiltrados.length === 1 ? 'polo' : 'polos'}
+            </span>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-xl border border-slate-800 bg-slate-950 p-1" role="group" aria-label="Visualização">
+                <BotaoVisualizacao ativo={visualizacao === 'cards'} label="Cards" icon={<LayoutGrid size={14} />} onClick={() => trocarVisualizacao('cards')} />
+                <BotaoVisualizacao ativo={visualizacao === 'tabela'} label="Tabela" icon={<List size={14} />} onClick={() => trocarVisualizacao('tabela')} />
+              </div>
+              <button title="Recarregar" aria-label="Recarregar polos" onClick={() => void loadPolos(query.trim())} className="rounded-xl border border-slate-800 bg-slate-900 p-2 text-slate-300 hover:text-white">
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </div>
           </div>
         </div>
 
-        <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
-          {loading ? <div className="flex justify-center py-16 text-blue-400"><Loader2 className="animate-spin" /></div> : (
-            <div className="grid gap-4 p-4 md:grid-cols-2">
-              {polos.map((polo) => <article key={polo.id} className="relative rounded-2xl border border-slate-800 bg-slate-950/50 p-5 transition-colors hover:border-blue-500/40">
-                <div className="flex items-start justify-between">
-                  <div className="flex gap-3">
-                    <Building2 className="mt-1 text-blue-400" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="font-bold text-white">{polo.nome}</h2>
-                        <StatusBadge status={polo.status} />
-                      </div>
-                      <p className="mt-1 flex items-center gap-1 text-xs text-slate-400"><MapPin size={13} /> {polo.endereco?.cidade || 'Cidade não informada'} / {polo.endereco?.estado || '--'}</p>
+        {totalPolos > polos.length && (
+          <p className="border-b border-slate-800 bg-amber-500/5 px-4 py-2 text-xs text-amber-200">
+            Mostrando {polos.length} de {totalPolos} polos. Refine a busca para encontrar os demais.
+          </p>
+        )}
+
+        {loading && !polos.length ? (
+          <div className="flex justify-center py-16 text-blue-400"><Loader2 className="animate-spin" /></div>
+        ) : !polosFiltrados.length ? (
+          <div className="py-14 text-center text-sm text-slate-500">
+            {polos.length || temFiltroLista ? 'Nenhum polo corresponde aos filtros.' : 'Nenhum polo cadastrado.'}
+            {temFiltroLista && (
+              <button type="button" onClick={limparFiltrosLista} className="ml-2 font-semibold text-blue-400 hover:text-blue-300">Limpar filtros</button>
+            )}
+          </div>
+        ) : visualizacao === 'cards' ? (
+          <div className={`grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60' : ''}`}>
+            {polosFiltrados.map((polo) => (
+              <article key={polo.id} className="group relative rounded-2xl border border-slate-800 bg-slate-950/50 p-5 transition-colors hover:border-blue-500/40 hover:bg-slate-950/80">
+                {/* Botão que cobre o card inteiro: o card todo abre o detalhe. */}
+                <button
+                  type="button"
+                  onClick={() => abrirPolo(polo.id)}
+                  aria-label={`Abrir polo ${polo.nome}`}
+                  className="absolute inset-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                />
+                <div className="pointer-events-none">
+                  <div className="flex items-start gap-3 pr-8">
+                    <span className="rounded-xl bg-blue-500/10 p-2 text-blue-400"><Building2 size={20} /></span>
+                    <div className="min-w-0">
+                      <h2 className="truncate font-bold text-white" title={polo.nome}>{polo.nome}</h2>
+                      <p className="mt-1 flex items-center gap-1 text-xs text-slate-400"><MapPin size={13} /> {cidadeUf(polo.endereco)}</p>
                     </div>
                   </div>
+                  <div className="mt-3"><StatusBadge status={polo.status} /></div>
+                  <div className="mt-4 border-t border-slate-800 pt-3">
+                    <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Coordenador</span>
+                    <span className="mt-0.5 block truncate text-sm font-semibold text-white">{polo.coordenador_nome || 'Não informado'}</span>
+                    {polo.coordenador_email && (
+                      <span className="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-400"><Mail size={12} className="shrink-0" /> {polo.coordenador_email}</span>
+                    )}
+                  </div>
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-400 group-hover:text-blue-300">
+                    Ver detalhes, indicadores e escolas <ChevronRight size={14} />
+                  </span>
                 </div>
-                <p className="mt-5 border-t border-slate-800 pt-4 text-sm text-slate-300">Coordenador: <b className="text-white">{polo.coordenador_nome || 'Não informado'}</b></p>
-                <button type="button" onClick={(e) => { e.stopPropagation(); setEditPolo(polo); }} className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Polo"> <Edit2 size={16} /></button>
-                <button onClick={() => void abrirPolo(polo.id)} className="mt-4 text-sm font-semibold text-blue-400 hover:text-blue-300">Ver detalhes, indicadores e escolas →</button>
-              </article>)}
-              {!polos.length && <p className="col-span-full py-12 text-center text-slate-500">{searchTriggered ? 'Nenhum polo encontrado. Use a busca ou cadastre um novo.' : 'Preencha a busca e clique em "Buscar" para carregar os polos.'}</p>}
-            </div>
-          )}
-        </section>
-      </>
+                <button
+                  type="button"
+                  onClick={() => setEditPolo(polo)}
+                  className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                  title="Editar polo"
+                  aria-label={`Editar polo ${polo.nome}`}
+                >
+                  <Edit2 size={16} />
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className={`overflow-x-auto ${loading ? 'opacity-60' : ''}`}>
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="p-4">Polo</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Cidade / UF</th>
+                  <th className="p-4">Coordenador</th>
+                  <th className="p-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {polosFiltrados.map((polo) => (
+                  <tr key={polo.id} onClick={() => abrirPolo(polo.id)} className="cursor-pointer text-slate-300 hover:bg-slate-800/40">
+                    <td className="p-4 font-semibold text-white"><Building2 className="mr-2 inline text-blue-400" size={16} />{polo.nome}</td>
+                    <td className="p-4"><StatusBadge status={polo.status} /></td>
+                    <td className="p-4">{cidadeUf(polo.endereco)}</td>
+                    <td className="p-4">
+                      <span className="block text-white">{polo.coordenador_nome || 'Não informado'}</span>
+                      {polo.coordenador_email && <span className="block text-xs text-slate-500">{polo.coordenador_email}</span>}
+                    </td>
+                    <td className="whitespace-nowrap p-4 text-right">
+                      <button type="button" onClick={(event) => { event.stopPropagation(); abrirPolo(polo.id); }} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-blue-500">Detalhes</button>
+                      <button type="button" onClick={(event) => { event.stopPropagation(); setEditPolo(polo); }} className="ml-2 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar polo" aria-label={`Editar polo ${polo.nome}`}><Edit2 size={15} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     ) : (
       <>
-        <div className="flex items-center justify-between">
-          <button onClick={voltarParaLista} className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:text-white">
-            <ArrowLeft size={16} /> Voltar para a lista
-          </button>
-          {selectedPolo && <button type="button" onClick={() => setEditPolo(selectedPolo)} className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:text-white">
-            <Edit2 size={14} /> Editar polo
-          </button>}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <nav aria-label="Navegação" className="flex min-w-0 items-center gap-1.5 text-sm">
+            <button onClick={voltarParaLista} className="font-semibold text-slate-400 hover:text-white">Polos</button>
+            <ChevronRight size={14} className="shrink-0 text-slate-600" />
+            <span className="truncate font-semibold text-white">{selectedPolo?.nome || 'Carregando...'}</span>
+          </nav>
+          {selectedPolo && (
+            <div className="flex gap-2">
+              <button type="button" onClick={recarregarDetalhe} title="Recarregar" aria-label="Recarregar detalhes do polo" className="rounded-xl border border-slate-800 bg-slate-900 p-2 text-slate-300 hover:text-white">
+                <RefreshCw size={16} className={loadingDetalhe ? 'animate-spin' : ''} />
+              </button>
+              <button type="button" onClick={() => setEditPolo(selectedPolo)} className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:text-white">
+                <Edit2 size={14} /> Editar polo
+              </button>
+            </div>
+          )}
         </div>
-        {loadingDetalhe || !selectedPolo ? (
+        {!selectedPolo ? (
           <div className="glass flex justify-center rounded-2xl border border-slate-800 bg-slate-900/80 py-16 text-blue-400"><Loader2 className="animate-spin" /></div>
         ) : (
           <div className="space-y-6">
             {/* 1. Dados do polo + Coordenador */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-6 lg:col-span-2">
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="text-blue-400" size={22} />
-                    <h2 className="text-xl font-bold text-white">{selectedPolo.nome}</h2>
-                  </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-xl bg-blue-500/10 p-2.5 text-blue-400"><Building2 size={22} /></span>
+                  <h2 className="text-xl font-bold text-white">{selectedPolo.nome}</h2>
                   <StatusBadge status={selectedPolo.status} />
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-                  <InfoField label="Logradouro" value={selectedPolo.endereco?.logradouro} />
-                  <InfoField label="Número" value={selectedPolo.endereco?.numero} />
-                  <InfoField label="Complemento" value={selectedPolo.endereco?.complemento} />
-                  <InfoField label="Bairro" value={selectedPolo.endereco?.bairro} />
-                  <InfoField label="Cidade" value={selectedPolo.endereco?.cidade} />
-                  <InfoField label="UF" value={selectedPolo.endereco?.estado} />
-                  <InfoField label="CEP" value={selectedPolo.endereco?.cep} />
-                </div>
+                <div className="mt-4"><Endereco endereco={selectedPolo.endereco} /></div>
               </div>
 
               <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
                 <div className="mb-4 flex items-center gap-2">
-                  <UserCheck className="text-indigo-400" size={22} />
-                  <h3 className="text-base font-bold text-white">Coordenador Responsável</h3>
+                  <UserCheck className="text-indigo-400" size={20} />
+                  <h3 className="text-base font-bold text-white">Coordenador responsável</h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <InfoField label="Nome" value={selectedPolo.coordenador_nome} />
-                  <InfoField label="CPF" value={selectedPolo.coordenador_cpf} />
-                  <InfoField label="E-mail" value={selectedPolo.coordenador_email} />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                    <InfoField label="E-mail" value={selectedPolo.coordenador_email} />
+                    <InfoField label="CPF" value={selectedPolo.coordenador_cpf} />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* 2. Dashboard do polo (10 KPIs) */}
-            <div>
-              <div className="mb-3 flex items-center justify-between">
+            {/* 2. Indicadores do polo (clicáveis) */}
+            <div className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+              <div className="mb-4">
                 <h3 className="text-base font-bold text-white">Indicadores do polo</h3>
-                <span className="text-xs text-slate-500">Atualizado em tempo real</span>
+                <p className="text-xs text-slate-500">Clique em um indicador para abrir a lista correspondente.</p>
               </div>
               {resumoPolo ? (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-                  <KpiCard label="Escolas" value={resumoPolo.escolas} icon={<School size={18} />} />
-                  <KpiCard label="Turmas" value={resumoPolo.turmas} icon={<Users size={18} />} />
-                  <KpiCard label="Professores" value={resumoPolo.professores} icon={<UserCheck size={18} />} />
-                  <KpiCard label="Alunos" value={resumoPolo.alunos} icon={<Users size={18} />} accent="emerald" />
-                  <KpiCard label="Aulas" value={resumoPolo.aulas} icon={<BookOpen size={18} />} />
-                  <KpiCard label="Licenças estoque" value={resumoPolo.licencas_estoque} icon={<Package size={18} />} accent="indigo" />
-                  <KpiCard label="Licenças atribuídas" value={resumoPolo.licencas_atribuidas} icon={<BadgeCheck size={18} />} accent="indigo" />
-                  <KpiCard label="Licenças movimentações" value={resumoPolo.licencas_movimentacoes} icon={<ArrowLeftRight size={18} />} accent="indigo" />
-                  <KpiCard label="Pedidos de licenças" value={resumoPolo.pedidos_licencas} icon={<ShoppingCart size={18} />} accent="amber" />
-                  <KpiCard label="Pedidos de livros" value={resumoPolo.pedidos_livros} icon={<Library size={18} />} accent="amber" />
-                </div>
+                <IndicadoresPolo resumo={resumoPolo} poloId={selectedPolo.id} area={area} />
               ) : (
-                <div className="glass flex justify-center rounded-2xl border border-slate-800 bg-slate-900/80 py-10 text-blue-400"><Loader2 className="animate-spin" /></div>
+                <div className="flex justify-center py-10 text-blue-400"><Loader2 className="animate-spin" /></div>
               )}
             </div>
 
@@ -450,7 +634,9 @@ export const PolosEscolasPage: React.FC = () => {
             <div className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <div className="flex flex-col justify-between gap-3 border-b border-slate-800 p-4 sm:flex-row sm:items-center">
                 <div>
-                  <h3 className="text-base font-bold text-white">Escolas do polo ({escolas.length})</h3>
+                  <h3 className="text-base font-bold text-white">
+                    Escolas do polo ({escolaFilter.trim() ? `${escolasFiltradas.length} de ${escolas.length}` : escolas.length})
+                  </h3>
                   <p className="text-xs text-slate-500">Clique em uma escola para ver dados completos e indicadores.</p>
                 </div>
                 <div className="relative">
@@ -458,6 +644,7 @@ export const PolosEscolasPage: React.FC = () => {
                   <input
                     className={`${inputClass} pl-9`}
                     placeholder="Filtrar escolas..."
+                    aria-label="Filtrar escolas"
                     value={escolaFilter}
                     onChange={(event) => setEscolaFilter(event.target.value)}
                   />
@@ -478,14 +665,14 @@ export const PolosEscolasPage: React.FC = () => {
                     {escolasFiltradas.map((escola) => <tr key={escola.id} onClick={() => abrirEscola(escola)} className="cursor-pointer text-slate-300 hover:bg-slate-800/40">
                       <td className="p-4 font-semibold text-white"><School className="mr-2 inline text-indigo-400" size={16} />{escola.nome}</td>
                       <td className="p-4"><StatusBadge status={escola.status} /></td>
-                      <td className="p-4">{escola.endereco?.cidade || '—'} / {escola.endereco?.estado || '--'}</td>
+                      <td className="p-4">{cidadeUf(escola.endereco)}</td>
                       <td className="p-4">{escola.secretario_nome || 'Não informado'}</td>
-                      <td className="p-4 text-right">
+                      <td className="whitespace-nowrap p-4 text-right">
                         <button type="button" onClick={(event) => { event.stopPropagation(); abrirEscola(escola); }} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-blue-500">Detalhes</button>
-                        <button type="button" onClick={(event) => { event.stopPropagation(); setEditEscola(escola); }} className="ml-2 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar Escola"><Edit2 size={15} /></button>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); setEditEscola(escola); }} className="ml-2 rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" title="Editar escola" aria-label={`Editar escola ${escola.nome}`}><Edit2 size={15} /></button>
                       </td>
                     </tr>)}
-                    {!escolasFiltradas.length && <tr><td colSpan={5} className="p-12 text-center text-slate-500">Nenhuma escola encontrada para este polo.</td></tr>}
+                    {!escolasFiltradas.length && <tr><td colSpan={5} className="p-12 text-center text-slate-500">{escolaFilter.trim() ? 'Nenhuma escola corresponde ao filtro.' : 'Nenhuma escola vinculada a este polo.'}</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -507,58 +694,42 @@ export const PolosEscolasPage: React.FC = () => {
           {/* Header do drawer */}
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-800 bg-slate-900/95 p-5 backdrop-blur">
             <div className="flex items-center gap-3">
-              <School className="text-indigo-400" size={22} />
+              <span className="rounded-xl bg-indigo-500/10 p-2 text-indigo-400"><School size={22} /></span>
               <div>
                 <h3 className="text-lg font-bold text-white">{escolaSelecionada.nome}</h3>
-                <div className="mt-1"><StatusBadge status={escolaSelecionada.status} /></div>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={escolaSelecionada.status} />
+                  {selectedPolo && <span className="text-xs text-slate-500">Polo {selectedPolo.nome}</span>}
+                </div>
               </div>
             </div>
-            <button onClick={fecharEscola} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={20} /></button>
+            <button onClick={fecharEscola} aria-label="Fechar detalhes da escola" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={20} /></button>
           </div>
 
           <div className="flex-1 space-y-6 p-5">
-            {/* Dados cadastrais */}
-            <section>
-              <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><FileText size={16} className="text-blue-400" /> Dados da escola</h4>
-              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-800 bg-slate-950/50 p-4 sm:grid-cols-2 md:grid-cols-3">
-                <InfoField label="Logradouro" value={escolaSelecionada.endereco?.logradouro} />
-                <InfoField label="Número" value={escolaSelecionada.endereco?.numero} />
-                <InfoField label="Complemento" value={escolaSelecionada.endereco?.complemento} />
-                <InfoField label="Bairro" value={escolaSelecionada.endereco?.bairro} />
-                <InfoField label="Cidade" value={escolaSelecionada.endereco?.cidade} />
-                <InfoField label="UF" value={escolaSelecionada.endereco?.estado} />
-                <InfoField label="CEP" value={escolaSelecionada.endereco?.cep} />
+            {/* Dados cadastrais + responsável */}
+            <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+              <Endereco endereco={escolaSelecionada.endereco} />
+              <div className="border-t border-slate-800 pt-4">
+                <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><UserCheck size={14} className="text-indigo-400" /> Responsável</h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <InfoField label="Nome" value={escolaSelecionada.secretario_nome} />
+                  <InfoField label="E-mail" value={escolaSelecionada.secretario_email} />
+                  <InfoField label="CPF" value={escolaSelecionada.secretario_cpf} />
+                </div>
               </div>
             </section>
 
-            {/* Responsável */}
+            {/* Indicadores da escola (clicáveis) */}
             <section>
-              <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><UserCheck size={16} className="text-indigo-400" /> Responsável</h4>
-              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-800 bg-slate-950/50 p-4 sm:grid-cols-3">
-                <InfoField label="Nome" value={escolaSelecionada.secretario_nome} />
-                <InfoField label="CPF" value={escolaSelecionada.secretario_cpf} />
-                <InfoField label="E-mail" value={escolaSelecionada.secretario_email} />
+              <div className="mb-3">
+                <h4 className="text-sm font-bold text-white">Indicadores da escola</h4>
+                <p className="text-xs text-slate-500">Clique em um indicador para abrir a lista correspondente.</p>
               </div>
-            </section>
-
-            {/* Indicadores da escola (10 KPIs) */}
-            <section>
-              <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><Package size={16} className="text-emerald-400" /> Indicadores da escola</h4>
               {loadingEscola || !resumoEscola ? (
                 <div className="flex justify-center rounded-2xl border border-slate-800 bg-slate-950/50 py-10 text-blue-400"><Loader2 className="animate-spin" /></div>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-                  <KpiCard label="Alunos" value={resumoEscola.alunos} icon={<Users size={18} />} accent="emerald" />
-                  <KpiCard label="Aulas" value={resumoEscola.aulas} icon={<BookOpen size={18} />} />
-                  <KpiCard label="Licenças estoque" value={resumoEscola.licencas_estoque} icon={<Package size={18} />} accent="indigo" />
-                  <KpiCard label="Licenças alunos" value={resumoEscola.licencas_alunos} icon={<Users size={18} />} accent="indigo" />
-                  <KpiCard label="Licenças atribuídas" value={resumoEscola.licencas_atribuidas} icon={<BadgeCheck size={18} />} accent="indigo" />
-                  <KpiCard label="Licenças movimentações" value={resumoEscola.licencas_movimentacoes} icon={<ArrowLeftRight size={18} />} accent="indigo" />
-                  <KpiCard label="Pedidos de licenças" value={resumoEscola.pedidos_licencas} icon={<ShoppingCart size={18} />} accent="amber" />
-                  <KpiCard label="Pedidos de livros" value={resumoEscola.pedidos_livros} icon={<Library size={18} />} accent="amber" />
-                  <KpiCard label="Professores" value={resumoEscola.professores} icon={<UserCheck size={18} />} />
-                  <KpiCard label="Turmas" value={resumoEscola.turmas} icon={<Users size={18} />} />
-                </div>
+                <IndicadoresEscola resumo={resumoEscola} escola={escolaSelecionada} area={area} />
               )}
             </section>
           </div>
@@ -626,7 +797,7 @@ export const PolosEscolasPage: React.FC = () => {
       </form>
     </div>}
 
-    {editPolo && <PoloEditModal polo={editPolo} onClose={() => setEditPolo(null)} onSuccess={() => { if (selectedPolo && view === 'detalhe') void abrirPolo(selectedPolo.id); else void loadPolos(query); setEditPolo(null); }} />}
-    {editEscola && <EscolaEditModal escola={editEscola} polos={polos} onClose={() => setEditEscola(null)} onSuccess={() => { if (selectedPolo && view === 'detalhe') void abrirPolo(selectedPolo.id); else void loadPolos(query); setEditEscola(null); }} />}
+    {editPolo && <PoloEditModal polo={editPolo} onClose={() => setEditPolo(null)} onSuccess={() => { aposEditar(); setEditPolo(null); }} />}
+    {editEscola && <EscolaEditModal escola={editEscola} polos={polos} onClose={() => setEditEscola(null)} onSuccess={() => { aposEditar(); setEditEscola(null); }} />}
   </div>;
 };

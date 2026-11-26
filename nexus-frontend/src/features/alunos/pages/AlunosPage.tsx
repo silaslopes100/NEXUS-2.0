@@ -38,9 +38,14 @@ export const AlunosPage: React.FC = () => {
 
   const [polos, setPolos] = useState<EscolaOption[]>([]);
   // Admin vê toda a base por padrão: alunos EAD e em Churn não têm Polo.
-  const [poloId, setPoloId] = useState<string>(isAdmin ? '' : user?.polo_id || '');
+  // ?polo_id / ?escola_id chegam dos indicadores da tela de Polos.
+  const [poloId, setPoloId] = useState<string>(
+    isAdmin ? searchParams.get('polo_id') || '' : user?.polo_id || ''
+  );
   const [escolas, setEscolas] = useState<EscolaOption[]>([]);
-  const [escolaFiltro, setEscolaFiltro] = useState<string>(escolaFixaId || '');
+  const [escolaFiltro, setEscolaFiltro] = useState<string>(
+    escolaFixaId || searchParams.get('escola_id') || ''
+  );
   const [observacao, setObservacao] = useState<Observacao | ''>(
     observacaoDaUrl(searchParams.get('observacao'))
   );

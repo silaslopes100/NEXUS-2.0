@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   BookOpen,
@@ -85,12 +85,14 @@ export const EscolasPage: React.FC = () => {
   const { user } = useAuthStore();
   const role = user?.perfil?.nome?.toLowerCase() || '';
   const isAdmin = role === 'admin';
+  const [searchParams] = useSearchParams();
   const [schools, setSchools] = useState<EscolaItem[]>([]);
   const [poles, setPoles] = useState<PoloItem[]>([]);
   const [query, setQuery] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [poloFilter, setPoloFilter] = useState('');
+  // ?polo_id=<id> chega dos indicadores da tela de Polos.
+  const [poloFilter, setPoloFilter] = useState(() => (isAdmin ? searchParams.get('polo_id') || '' : ''));
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

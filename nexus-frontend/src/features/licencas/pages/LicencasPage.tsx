@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowUpFromLine,
@@ -48,8 +49,10 @@ export const LicencasPage: React.FC = () => {
 
 const LicencasPolo: React.FC<{ isAdmin: boolean; poloDoUsuario: string }> = ({ isAdmin, poloDoUsuario }) => {
   const todasDisciplinas = useDisciplinas();
+  const [searchParams] = useSearchParams();
   const [polos, setPolos] = useState<Opcao[]>([]);
-  const [poloId, setPoloId] = useState(poloDoUsuario);
+  // ?polo_id=<id> chega dos indicadores da tela de Polos (só o admin escolhe o polo).
+  const [poloId, setPoloId] = useState(() => (isAdmin && searchParams.get('polo_id')) || poloDoUsuario);
   const [escolas, setEscolas] = useState<Opcao[]>([]);
   const [kpis, setKpis] = useState<LicencaKpis | null>(null);
   const [estoque, setEstoque] = useState<EstoqueDisciplina | null>(null);
