@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, LogIn, ShieldAlert, KeyRound, ArrowLeft } from 'lucide-react';
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
+import { InstalarAppBotao } from '@/features/auth/components/InstalarAppBotao';
 import { loginSchema, LoginFormData } from '@/features/auth/schemas';
 import { authApi } from '@/features/auth/api';
 import { dashboardDoPerfil, normalizeUserRole, useAuthStore } from '@/stores/authStore';
@@ -340,6 +341,8 @@ const LoginEmailSenha: React.FC<{ onLicenca: () => void }> = ({ onLicenca }) => 
             Quero me matricular no EAD
           </Link>
         </p>
+
+        <InstalarAppBotao />
 
         <div className="pt-2 text-center text-xs text-slate-500">
           Protegido com tecnologia Argon2id e controle ativo de sessões.

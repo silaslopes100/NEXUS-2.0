@@ -70,12 +70,12 @@ export const CheckoutDrawer: React.FC<Props> = ({ turma, disciplina: d, endereco
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60" onMouseDown={onFechar}>
       <aside className="flex h-full w-full max-w-lg flex-col border-l border-slate-700 bg-slate-900 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
-        <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+        <header className="flex items-center justify-between border-b border-slate-800 px-4 py-4 sm:px-6">
           <h2 className="text-lg font-bold text-white">{pedido ? 'Pagamento' : 'Comprar disciplina'}</h2>
           <button type="button" onClick={onFechar} aria-label="Fechar" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={18} /></button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
           {pedido ? (
             <PagamentoPainel pedido={pedido} onAtualizado={atualizado} onFechar={onFechar} />
           ) : (
@@ -140,7 +140,7 @@ export const CheckoutDrawer: React.FC<Props> = ({ turma, disciplina: d, endereco
         </div>
 
         {!pedido && (
-          <footer className="space-y-3 border-t border-slate-800 px-6 py-4">
+          <footer className="space-y-3 border-t border-slate-800 px-4 pt-4 pb-safe-4 sm:px-6">
             {d.livro_disponivel && (
               <button type="button" onClick={() => setComLivro((v) => !v)}
                 className={`flex w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition ${comLivro ? 'border-nexus-yellow bg-nexus-yellow/10' : 'border-dashed border-nexus-yellow/40 hover:border-nexus-yellow'}`}>

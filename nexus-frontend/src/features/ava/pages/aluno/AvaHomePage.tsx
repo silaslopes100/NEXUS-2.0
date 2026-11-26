@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { SomToggle } from '../../components/gamificacao/SomToggle';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Award, BookOpenCheck, CheckCircle2, Clock, GraduationCap, Loader2, Lock, Play, PlayCircle, Sparkles, Trophy } from 'lucide-react';
 import { mensagemErro } from '@/features/comunicacao/api';
@@ -138,10 +139,13 @@ export const AvaHomePage: React.FC = () => {
       {/* Hero */}
       <section className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950 shadow-2xl">
         <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-nexus-yellow/10 blur-3xl" />
-        <div className="relative grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_minmax(0,420px)] lg:items-center">
+        <div className="relative grid gap-5 p-5 sm:gap-6 sm:p-8 lg:grid-cols-[1fr_minmax(0,420px)] lg:items-center">
           <div className="space-y-3">
-            <p className="flex items-center gap-2 text-sm font-semibold text-nexus-yellow"><Sparkles size={16} /> Sala de Aula Virtual</p>
-            <h1 className="text-3xl font-extrabold text-white sm:text-4xl">{saudacao()}, {dados.nome}!</h1>
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-sm font-semibold text-nexus-yellow"><Sparkles size={16} /> Sala de Aula Virtual</p>
+              <SomToggle />
+            </div>
+            <h1 className="text-2xl font-extrabold leading-tight text-white sm:text-4xl">{saudacao()}, {dados.nome}!</h1>
             <p className="max-w-lg text-slate-300">
               {continuar ? 'Bora continuar? Sua próxima aula está te esperando.' : resumo.disciplinas_liberadas ? 'Escolha uma disciplina e comece a estudar.' : 'Assim que uma disciplina for liberada, ela aparece aqui.'}
             </p>

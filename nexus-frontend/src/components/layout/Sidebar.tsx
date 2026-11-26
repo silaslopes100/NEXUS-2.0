@@ -63,16 +63,36 @@ const useContadoresMenu = (perfil: UserRole, comAreaAluno: boolean, ativo: boole
 interface SidebarProps {
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  /** Menu recolhido no desktop (o estado mora no AppLayout, que ajusta o espaçamento do conteúdo). */
+  recolhido?: boolean;
+  onAlternarRecolhido?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen = false,
   onCloseMobile,
+  recolhido = false,
+  onAlternarRecolhido,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, perfil, logout, refreshToken, viaLicenca } = useAuthStore();
-  const [collapsed, setCollapsed] = useState(false);
+  // Na gaveta do celular o menu aparece sempre completo.
+  const collapsed = recolhido && !isMobileOpen;
+
+  // Gaveta aberta no celular: trava a rolagem do fundo, fecha com Esc e com um deslize para a esquerda.
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseMobile?.(); };
+    window.addEventListener('keydown', aoTeclar);
+    return () => {
+      document.body.style.overflow = anterior;
+      window.removeEventListener('keydown', aoTeclar);
+    };
+  }, [isMobileOpen, onCloseMobile]);
+  const [toqueX, setToqueX] = useState<number | null>(null);
   const [areaAlunoAberta, setAreaAlunoAberta] = useState(() =>
     location.pathname.startsWith('/aluno/')
   );
@@ -195,7 +215,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col glass-panel border-r border-slate-800/80 transition-all duration-300 ease-in-out ${
+        onTouchStart={(e) => isMobileOpen && setToqueX(e.touches[0].clientX)}
+        onTouchEnd={(e) => {
+          if (toqueX !== null && toqueX - e.changedTouches[0].clientX > 60) onCloseMobile?.();
+          setToqueX(null);
+        }}
+        className={`fixed top-0 left-0 bottom-0 z-50 flex max-w-[85vw] flex-col glass-panel border-r border-slate-800/80 pb-safe pt-safe transition-all duration-300 ease-in-out ${
           collapsed ? 'w-20' : 'w-72'
         } ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -214,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => onAlternarRecolhido?.()}
             className="hidden lg:flex p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           >

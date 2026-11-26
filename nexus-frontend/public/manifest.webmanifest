@@ -1,0 +1,23 @@
+{
+  "name": "NEXUS 2.0 - Plataforma Educacional",
+  "short_name": "NEXUS",
+  "description": "Sala de Aula Virtual, disciplinas, notas e muito mais no seu celular.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "pt-BR",
+  "background_color": "#0B0F19",
+  "theme_color": "#0B0F19",
+  "categories": ["education"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Sala de Aula Virtual", "short_name": "AVA", "url": "/aluno/ava", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Minhas disciplinas", "short_name": "Disciplinas", "url": "/aluno/compras", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
+import { tocar } from '../../utils/sons';
 import { Recompensa } from '../../alunoApi';
 import { AnelNivel, ConquistaBadge } from './Gamificacao';
 
@@ -9,7 +10,14 @@ interface Props {
 }
 
 /** Modal para conquista nova ou subida de nível (o XP comum aparece só como aviso). */
-export const CelebracaoRecompensa: React.FC<Props> = ({ recompensa: r, onFechar }) => (
+export const CelebracaoRecompensa: React.FC<Props> = ({ recompensa: r, onFechar }) => {
+  // Fanfarra ao abrir: subida de nível tem a própria; conquista nova, a de conquista.
+  useEffect(() => {
+    const t = window.setTimeout(() => tocar(r.subiu_nivel ? 'nivel' : 'conquista'), 150);
+    return () => window.clearTimeout(t);
+  }, [r]);
+
+  return (
   <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 p-4" onClick={onFechar}>
     <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
       className="w-full max-w-md rounded-3xl border border-nexus-yellow/40 bg-gradient-to-b from-slate-900 to-slate-950 p-7 text-center shadow-nexus-glow">
@@ -24,7 +32,7 @@ export const CelebracaoRecompensa: React.FC<Props> = ({ recompensa: r, onFechar 
       )}
       {r.conquistas.length > 0 && (
         <div className="mb-5 flex flex-wrap justify-center gap-5">
-          {r.conquistas.map((c) => <div key={c.codigo} className="w-32"><ConquistaBadge conquista={c} tamanho="lg" /></div>)}
+          {r.conquistas.map((c) => <div key={c.codigo} className="w-[44%] max-w-[8rem]"><ConquistaBadge conquista={c} tamanho="lg" /></div>)}
         </div>
       )}
       <p className="text-sm text-slate-300">
@@ -36,4 +44,5 @@ export const CelebracaoRecompensa: React.FC<Props> = ({ recompensa: r, onFechar 
       </button>
     </div>
   </div>
-);
+  );
+};
