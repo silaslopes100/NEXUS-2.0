@@ -52,6 +52,7 @@ class CargaHorariaRepositoryInterface(Protocol):
     def listar_atas_turma(self, turma_id: str) -> List[Dict[str, Any]]: ...
     def listar_presencas_turma(self, turma_id: str) -> List[Dict[str, Any]]: ...
     def alunos_turma(self, turma_id: str) -> List[Dict[str, Any]]: ...
+    def notas_turma(self, aluno_ids: Sequence[str], disciplina_ids: Sequence[str]) -> List[Dict[str, Any]]: ...
     def concluir_turma(self, turma_id: str, usuario_id: str) -> datetime: ...
 
     # Auditoria
@@ -249,6 +250,22 @@ class PostgresCargaHorariaRepository:
                  ORDER BY nome
                 """,
                 (str(turma_id),),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
+    def notas_turma(self, aluno_ids: Sequence[str], disciplina_ids: Sequence[str]) -> List[Dict[str, Any]]:
+        """Notas lançadas dos alunos nas disciplinas do curso: {aluno_id, disciplina_id, valor, lancado_em}."""
+        if not aluno_ids or not disciplina_ids:
+            return []
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT n.aluno_id::text AS aluno_id, n.disciplina_id::text AS disciplina_id, n.valor,
+                       COALESCE(n.lancado_em, n.criado_em) AS lancado_em
+                  FROM notas n
+                 WHERE n.aluno_id = ANY(%s::uuid[]) AND n.disciplina_id = ANY(%s::uuid[]) AND n.valor IS NOT NULL
+                """,
+                (list(aluno_ids), list(disciplina_ids)),
             )
             return [_limpar(r) for r in cur.fetchall()]
 
@@ -491,6 +508,9 @@ class InMemoryCargaHorariaRepository:
             return []
         vinculos = {k for k, v in self.aulas_repo.vinculos.items() if v.get("turma_id") == str(turma_id)}
         return [p for p in self.aulas_repo.presencas if p["professor_disciplina_id"] in vinculos]
+
+    def notas_turma(self, aluno_ids: Sequence[str], disciplina_ids: Sequence[str]) -> List[Dict[str, Any]]:
+        return [n for n in getattr(self, "notas", []) if n["aluno_id"] in aluno_ids and n["disciplina_id"] in disciplina_ids]
 
     def alunos_turma(self, turma_id: str) -> List[Dict[str, Any]]:
         if self.aulas_repo and str(turma_id) in self.aulas_repo.alunos_turma:

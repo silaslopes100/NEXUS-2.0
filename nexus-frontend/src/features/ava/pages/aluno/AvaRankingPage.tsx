@@ -1,24 +1,33 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { tocar } from '../../utils/sons';
+import { SomToggle } from '../../components/gamificacao/SomToggle';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Crown, EyeOff, Loader2, Trophy, Users } from 'lucide-react';
 import { mensagemErro } from '@/features/comunicacao/api';
 import { Ranking, RankingItem, gamificacaoApi } from '../../alunoApi';
 import { AvatarRanking, RankingLista } from '../../components/gamificacao/Gamificacao';
 
-const ALTURAS = ['h-32', 'h-24', 'h-20'];
+const ALTURAS = ['h-28 sm:h-32', 'h-20 sm:h-24', 'h-16 sm:h-20'];
 const CORES = ['from-yellow-400/40 border-yellow-400/60', 'from-slate-300/30 border-slate-300/50', 'from-amber-600/30 border-amber-600/50'];
 
 const Podio: React.FC<{ itens: RankingItem[] }> = ({ itens }) => {
   const ordem = [itens[1], itens[0], itens[2]].filter(Boolean) as RankingItem[];
+  const euNoPodio = itens.some((i) => i.eu);
+  // Sino quando o próprio aluno está no pódio.
+  useEffect(() => {
+    if (!euNoPodio) return;
+    const t = window.setTimeout(() => tocar('podio'), 300);
+    return () => window.clearTimeout(t);
+  }, [euNoPodio]);
   return (
-    <div className="flex items-end justify-center gap-3 sm:gap-6">
+    <div className="flex items-end justify-center gap-2 sm:gap-6">
       {ordem.map((i) => (
-        <div key={i.usuario_id} className="flex w-24 flex-col items-center gap-2 sm:w-32">
+        <div key={i.usuario_id} className="flex w-[30%] max-w-[8rem] flex-col items-center gap-2">
           {i.posicao === 1 && <Crown className="text-yellow-400" size={26} />}
           <AvatarRanking item={i} tamanho={i.posicao === 1 ? 'h-16 w-16' : 'h-12 w-12'} />
           <span className={`w-full truncate text-center text-sm ${i.eu ? 'font-bold text-nexus-yellow' : 'font-semibold text-white'}`}>{i.nome}</span>
           <div className={`flex w-full flex-col items-center justify-start rounded-t-2xl border-x border-t bg-gradient-to-b to-transparent pt-3 ${CORES[i.posicao - 1]} ${ALTURAS[i.posicao - 1]}`}>
-            <span className="text-2xl font-black text-white">{i.posicao}º</span>
+            <span className="text-xl font-black text-white sm:text-2xl">{i.posicao}º</span>
             <span className="text-xs font-bold text-nexus-yellow">{i.xp} XP</span>
           </div>
         </div>
@@ -75,6 +84,7 @@ export const AvaRankingPage: React.FC = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <SomToggle />
           {dados && dados.cursos.length > 1 && (
             <select value={dados.curso?.id ?? ''} onChange={(e) => setCursoId(e.target.value)}
               className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-nexus-yellow focus:outline-none">

@@ -27,6 +27,11 @@ from app.modules.carga_horaria.schemas import (
     DatasLetivasResponse,
     DisciplinaCronograma,
     FrequenciaResponse,
+    HistoricoAluno,
+    HistoricoDisciplina,
+    HistoricoMes,
+    HistoricoResumo,
+    HistoricoTurmaResponse,
     MesLetivo,
     PrazoDisciplinaEad,
     PrazosAlunoEad,
@@ -291,6 +296,95 @@ class CargaHorariaService:
         return FrequenciaResponse(
             turma_id=turma_id, base=regras.frequencia_base, minimo_pct=regras.frequencia_minima_pct,
             alunos_em_risco=sum(1 for a in alunos if a["em_risco"]), alunos=alunos,
+        )
+
+    # ---------- Histórico (desempenho) da turma ----------
+
+    def historico(self, user: Optional[UserResponse], turma_id: str) -> HistoricoTurmaResponse:
+        """Desempenho da turma: notas finais (maior nota por aluno e disciplina) + frequência + índice 0–100."""
+        from app.modules.admin.ranking_config import indice, obter_pesos
+
+        turma = self.contexto(user, turma_id)
+        ead = turma.get("modalidade") == "ead"
+        pesos = obter_pesos()
+        nota_minima = 6.0
+        disciplinas = sorted(self.repo.disciplinas_do_curso(turma["curso_id"]) if turma.get("curso_id") else [],
+                             key=lambda d: (d.get("semestre") or 0, d.get("ordem") or 0, d.get("nome") or ""))
+        alunos = self.repo.alunos_turma(turma_id)
+        ids_alunos = [a["aluno_id"] for a in alunos]
+        notas = self.repo.notas_turma(ids_alunos, [d["id"] for d in disciplinas])
+
+        finais: Dict[Tuple[str, str], float] = {}
+        meses: Dict[str, List[float]] = {}
+        for n in notas:
+            chave = (n["aluno_id"], n["disciplina_id"])
+            valor = float(n["valor"])
+            finais[chave] = max(finais.get(chave, valor), valor)
+            quando = n.get("lancado_em")
+            if quando:
+                meses.setdefault(f"{quando.year:04d}-{quando.month:02d}", []).append(valor)
+
+        freq_alunos: Dict[str, Dict[str, Any]] = {}
+        minimo = 75.0
+        if not ead:
+            try:
+                f = self.frequencia(user, turma_id)
+                minimo = f.minimo_pct
+                freq_alunos = {a.aluno_id: a.model_dump() for a in f.alunos}
+            except HTTPException:
+                freq_alunos = {}
+
+        def _media(vals: List[float]) -> Optional[float]:
+            return round(sum(vals) / len(vals), 2) if vals else None
+
+        linhas_disc = []
+        for d in disciplinas:
+            vals = [finais[(a, d["id"])] for a in ids_alunos if (a, d["id"]) in finais]
+            freqs = [fd["frequencia_pct"] for fa in freq_alunos.values() for fd in fa.get("disciplinas", [])
+                     if fd["disciplina_id"] == d["id"] and fd.get("frequencia_pct") is not None]
+            linhas_disc.append(HistoricoDisciplina(
+                disciplina_id=d["id"], nome=d.get("nome") or "", semestre=d.get("semestre"), media=_media(vals),
+                aprovados=sum(1 for v in vals if v >= nota_minima), reprovados=sum(1 for v in vals if v < nota_minima),
+                sem_nota=len(ids_alunos) - len(vals), frequencia_media=_media(freqs),
+            ))
+
+        linhas_alunos = []
+        for a in alunos:
+            vals = [v for (al, _), v in finais.items() if al == a["aluno_id"]]
+            fa = freq_alunos.get(a["aluno_id"]) or {}
+            freq = fa.get("frequencia_pct")
+            media = _media(vals)
+            if media is None and freq is None:
+                situacao = "sem_dados"
+            elif (media is not None and media < nota_minima) or fa.get("em_risco"):
+                situacao = "atencao"
+            else:
+                situacao = "bom"
+            linhas_alunos.append(HistoricoAluno(
+                aluno_id=a["aluno_id"], nome=a.get("nome") or "", numero_matricula=a.get("numero_matricula"), media=media,
+                aprovadas=sum(1 for v in vals if v >= nota_minima), reprovadas=sum(1 for v in vals if v < nota_minima),
+                frequencia_pct=freq, em_risco=bool(fa.get("em_risco")), situacao=situacao,
+            ))
+
+        todas = list(finais.values())
+        media_geral = _media(todas)
+        freqs_alunos = [x["frequencia_pct"] for x in freq_alunos.values() if x.get("frequencia_pct") is not None]
+        freq_media = round(sum(freqs_alunos) / len(freqs_alunos), 1) if freqs_alunos else None
+        componentes: Dict[str, Optional[float]] = {"notas": media_geral * 10 if media_geral is not None else None}
+        if not ead:
+            componentes["frequencia"] = freq_media
+        resumo = HistoricoResumo(
+            alunos=len(alunos), media_geral=media_geral,
+            aprovacao_pct=round(sum(1 for v in todas if v >= nota_minima) * 100 / len(todas), 1) if todas else None,
+            notas_lancadas=len(todas), frequencia_media=freq_media,
+            abaixo_minimo=sum(1 for x in freq_alunos.values() if x.get("em_risco")), minimo_pct=minimo,
+            indice=indice(componentes, pesos),
+        )
+        return HistoricoTurmaResponse(
+            turma_id=turma_id, modalidade=turma.get("modalidade") or "presencial", frequencia_aplica=not ead,
+            peso_notas=pesos["peso_notas"], peso_frequencia=pesos["peso_frequencia"], resumo=resumo,
+            disciplinas=linhas_disc, alunos=sorted(linhas_alunos, key=lambda x: (x.situacao != "atencao", x.nome.lower())),
+            evolucao=[HistoricoMes(mes=m, media=round(sum(v) / len(v), 2), notas=len(v)) for m, v in sorted(meses.items())],
         )
 
     # ---------- Conclusão (Ponto em aberto 5) ----------

@@ -166,7 +166,7 @@ export const TurmaCargaHorariaPanel: React.FC<Props> = ({
           </div>
         </header>
 
-        <nav role="tablist" className="flex gap-1 border-b border-slate-800 px-5 py-2">
+        <nav role="tablist" className="rolagem-sem-barra flex gap-1 overflow-x-auto border-b border-slate-800 px-3 py-2 sm:px-5 [&>button]:shrink-0">
           {(['cronograma', 'andamento', 'frequencia'] as Aba[]).map((a) => (
             <button key={a} type="button" role="tab" aria-selected={aba === a} onClick={() => setAba(a)} className={abaCls(aba === a)}>
               {a === 'cronograma' ? 'Cronograma' : a === 'andamento' ? 'Andamento' : 'Frequência'}

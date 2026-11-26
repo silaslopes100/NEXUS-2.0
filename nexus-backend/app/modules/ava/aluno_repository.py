@@ -24,7 +24,8 @@ class PostgresAvaAlunoRepository:
                 SELECT d.id FROM disciplinas d
                  WHERE COALESCE(d.ativo, true)
                    AND d.curso_id IN (SELECT m.curso_id FROM matriculas_ead m
-                                       WHERE m.aluno_id = %(a)s AND m.curso_id IS NOT NULL)
+                                       WHERE m.aluno_id = %(a)s AND m.curso_id IS NOT NULL
+                                         AND COALESCE(m.status, 'ativa') = 'ativa')
                 UNION
                 SELECT c.disciplina_id FROM compras_disciplina_ead c
                  WHERE c.aluno_id = %(a)s AND c.disciplina_id IS NOT NULL
@@ -40,6 +41,8 @@ class PostgresAvaAlunoRepository:
                    lic.ativada_em AS licenca_em,
                    (SELECT MIN(m.data_matricula) FROM matriculas_ead m
                      WHERE m.aluno_id = %(a)s AND m.curso_id = d.curso_id) AS matricula_em,
+                   EXISTS (SELECT 1 FROM matriculas_ead m WHERE m.aluno_id = %(a)s AND m.curso_id = d.curso_id
+                              AND m.status = 'ativa' AND m.tipo = 'bolsista') AS bolsista,
                    (SELECT COUNT(*) FROM ({_AULAS_PUBLICADAS}) x) AS total_aulas,
                    (SELECT COUNT(*) FROM ({_AULAS_PUBLICADAS}) x WHERE x.obrigatoria) AS total_obrigatorias,
                    (SELECT COALESCE(SUM(x.duracao_min), 0) FROM ({_AULAS_PUBLICADAS}) x) AS duracao_min,
@@ -61,7 +64,10 @@ class PostgresAvaAlunoRepository:
             LEFT JOIN LATERAL (
                 SELECT c.* FROM compras_disciplina_ead c
                  WHERE c.aluno_id = %(a)s AND c.disciplina_id = d.id
-                 ORDER BY (c.liberada_em IS NOT NULL) DESC, c.criado_em DESC NULLS LAST LIMIT 1
+                   AND COALESCE(c.status_pagamento, '') NOT IN ('cancelado', 'cancelada')
+                 -- a liberada mais recente vale (recompra depois do prazo vencido); senão, a pendente mais nova
+                 ORDER BY (c.liberada_em IS NOT NULL) DESC, c.liberada_em DESC NULLS LAST,
+                          c.criado_em DESC NULLS LAST LIMIT 1
             ) compra ON true
             LEFT JOIN LATERAL (
                 SELECT l.ativada_em FROM licencas_alunos l

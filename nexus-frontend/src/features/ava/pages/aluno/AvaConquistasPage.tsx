@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { SomToggle } from '../../components/gamificacao/SomToggle';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Award, Flame, History, Loader2, TrendingUp, Trophy } from 'lucide-react';
 import { mensagemErro, tempoRelativo } from '@/features/comunicacao/api';
@@ -41,7 +42,9 @@ export const AvaConquistasPage: React.FC = () => {
       <section className="grid gap-4 rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/50 p-6 md:grid-cols-[auto_1fr_auto] md:items-center">
         <AnelNivel nivel={perfil.nivel} tamanho={110} />
         <div className="space-y-3">
-          <h1 className="text-3xl font-extrabold text-white">Minhas conquistas</h1>
+          <h1 className="flex items-center justify-between gap-3 text-2xl font-extrabold text-white sm:text-3xl">
+            Minhas conquistas <SomToggle />
+          </h1>
           <BarraXp nivel={perfil.nivel} />
         </div>
         <div className="flex flex-wrap gap-2 md:flex-col">

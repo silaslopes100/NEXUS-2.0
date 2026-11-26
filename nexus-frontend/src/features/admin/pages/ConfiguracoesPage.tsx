@@ -233,8 +233,8 @@ export const ConfiguracoesPage: React.FC = () => {
 
       {/* Modal de Criação / Edição de Configuração */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl p-6 sm:p-8 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="my-auto glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl p-6 sm:p-8 animate-fadeIn">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2 text-white font-bold text-base">
                 <Code2 className="w-5 h-5 text-nexus-yellow" />

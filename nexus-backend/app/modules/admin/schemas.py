@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.modules.admin.ficha_schemas import (
     DadosCadastraisFicha,
@@ -98,11 +98,36 @@ class RankingPoloItem(BaseModel):
     novas_licencas: int = 0
     receita_paga: float = 0.0
     presenca_pct: Optional[float] = None
+    # Índice de desempenho (0–100): notas + frequência das turmas do Polo + compras (licenças/livros do Polo
+    # e solicitações atendidas das Escolas), com os pesos de config_ranking_polos.
+    notas_media: Optional[float] = None  # 0–10
+    compras_qtd: int = 0
+    compras_polo: int = 0
+    solicitacoes_escolas: int = 0
+    compras_pct: Optional[float] = None  # relativo ao Polo que mais comprou no período
+    indice: Optional[float] = None
+
+
+class PesosRanking(BaseModel):
+    peso_notas: float = Field(ge=0, le=1000)
+    peso_frequencia: float = Field(ge=0, le=1000)
+    peso_compras: float = Field(ge=0, le=1000)
+
+    @model_validator(mode="after")
+    def _soma_positiva(self) -> "PesosRanking":
+        if self.peso_notas + self.peso_frequencia + self.peso_compras <= 0:
+            raise ValueError("Pelo menos um peso precisa ser maior que zero.")
+        return self
+
+
+class PesosRankingOut(PesosRanking):
+    atualizado_em: Optional[datetime] = None
 
 
 class RankingPolosResponse(BaseModel):
     periodo: PeriodoResolvido
     ordenar_por: str
+    pesos: Optional[PesosRankingOut] = None
     items: List[RankingPoloItem]
 
 

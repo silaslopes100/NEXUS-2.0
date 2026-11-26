@@ -4,7 +4,7 @@ import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { EsqueciSenhaPage } from '@/features/auth/pages/EsqueciSenhaPage';
 import { RedefinirSenhaPage } from '@/features/auth/pages/RedefinirSenhaPage';
 import { RequireRole } from '@/components/guards/RequireRole';
-import { RequireAlunoEad } from '@/components/guards/RequireAlunoEad';
+import { RequireAlunoEad, SemAlunoEad } from '@/components/guards/RequireAlunoEad';
 import { AvaConteudoPage } from '@/features/ava/pages/admin/AvaConteudoPage';
 import { AvaDisciplinaEditorPage } from '@/features/ava/pages/admin/AvaDisciplinaEditorPage';
 import { AvaHomePage } from '@/features/ava/pages/aluno/AvaHomePage';
@@ -55,7 +55,10 @@ import { SolicitacoesEscolaPage } from '@/features/solicitacoes/pages/Solicitaco
 import { SolicitacoesPoloPage } from '@/features/solicitacoes/pages/SolicitacoesPoloPage';
 import { NotasProfessorPage } from '@/features/notas_historico/pages/NotasProfessorPage';
 import { HistoricoAlunoPage } from '@/features/notas_historico/pages/HistoricoAlunoPage';
-import { ComprasEadPage } from '@/features/alunos/components/RegularizacaoEadModal';
+import { LojaEadPage } from '@/features/ead_vendas/pages/LojaEadPage';
+import { GestaoMatriculasEadPage } from '@/features/ead_vendas/pages/admin/GestaoMatriculasEadPage';
+import { TurmaEadPage } from '@/features/ead_vendas/pages/TurmaEadPage';
+import { VitrineEadPage } from '@/features/ead_vendas/pages/VitrineEadPage';
 import { GatewaysPage } from '@/features/financeiro/pages/GatewaysPage';
 import { PagamentosPage } from '@/features/financeiro/pages/PagamentosPage';
 import { MeusPedidosPage } from '@/features/financeiro/pages/MeusPedidosPage';
@@ -105,6 +108,10 @@ export const AppRoutes: React.FC = () => {
       <Route path="/certificados/validar" element={<ValidarCertificadoPage />} />
       <Route path="/certificados/validar/:codigo" element={<ValidarCertificadoPage />} />
 
+      {/* Página pública de vendas do EAD: Turmas EAD abertas e inscrição gratuita */}
+      <Route path="/matricula-ead" element={<VitrineEadPage />} />
+      <Route path="/matricula-ead/:turmaId" element={<TurmaEadPage />} />
+
       {/* Rotas Protegidas - Layout Principal */}
       <Route element={<AppLayout />}>
         
@@ -128,6 +135,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/alunos" element={<AlunosPage />} />
           <Route path="/admin/ead" element={<Navigate to="/admin/ava" replace />} />
           <Route path="/admin/ava" element={<AvaConteudoPage />} />
+          <Route path="/admin/ead/matriculas" element={<GestaoMatriculasEadPage />} />
           <Route path="/admin/ava/disciplinas/:disciplinaId" element={<AvaDisciplinaEditorPage />} />
           <Route path="/admin/ava/disciplinas/:disciplinaId/previa" element={<AvaDisciplinaPage previa />} />
           <Route path="/admin/ava/disciplinas/:disciplinaId/previa/aulas/:aulaId" element={<AvaDisciplinaPage previa />} />
@@ -225,7 +233,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/transferencias" element={<TransferenciasPage modo="aluno" />} />
             <Route path="/aluno/disciplinas" element={<MinhasDisciplinasPage />} />
             <Route path="/aluno/avaliacoes/:avaliacaoId" element={<RealizarAvaliacaoPage />} />
-            <Route path="/aluno/presenca" element={<MinhasPresencasPage />} />
+            <Route path="/aluno/presenca" element={<SemAlunoEad><MinhasPresencasPage /></SemAlunoEad>} />
             <Route path="/aluno/estagio" element={<CentralEstagioAlunoPage />} />
           </Route>
           <Route element={<RequireAlunoEad />}>
@@ -236,8 +244,10 @@ export const AppRoutes: React.FC = () => {
             <Route path="/aluno/ava/ranking" element={<AvaRankingPage />} />
           </Route>
           <Route path="/aluno/historico" element={<HistoricoAlunoPage />} />
-          <Route path="/aluno/livros" element={<ModulePlaceholderPage />} />
-          <Route path="/aluno/compras" element={<ComprasEadPage />} />
+          <Route path="/aluno/livros" element={<SemAlunoEad><ModulePlaceholderPage /></SemAlunoEad>} />
+          <Route element={<RequireAlunoEad />}>
+            <Route path="/aluno/compras" element={<LojaEadPage />} />
+          </Route>
         </Route>
 
         {/* Chat Interno (todos os perfis) */}

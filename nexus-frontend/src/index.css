@@ -3,9 +3,42 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-nexus-page text-slate-100 font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    /* E-mails, URLs e palavras longas quebram em vez de empurrar a tela para o lado. */
+    overflow-wrap: break-word;
   }
+}
+
+/* Celular: o iOS amplia a página ao focar campos com fonte < 16px (e o zoom fica preso).
+   Fora do @layer e com !important para vencer as classes text-sm/text-xs dos campos. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea,
+  [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+}
+
+/* Mídia nunca mais larga que o contêiner. */
+img, video, iframe { max-width: 100%; }
+
+/* Áreas seguras (notch, barra de gestos) — o viewport usa viewport-fit=cover. */
+@layer utilities {
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
+  .pb-safe-4 { padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); }
+  .bottom-safe { bottom: env(safe-area-inset-bottom, 0px); }
+  .rolagem-sem-barra { scrollbar-width: none; }
+  .rolagem-sem-barra::-webkit-scrollbar { display: none; }
 }
 
 /* Cores categóricas dos gráficos (ordem fixa, validadas para daltonismo nos

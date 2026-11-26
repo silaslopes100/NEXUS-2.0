@@ -44,7 +44,7 @@ const CampoComentario: React.FC<{
   return (
     <div className="flex items-start gap-2">
       <Avatar nome={nome} usuarioId={user?.id} fotoUrl={user?.foto_url} tamanho="sm" />
-      <div className="flex flex-1 items-end gap-1 rounded-2xl border border-slate-700 bg-slate-950/60 px-3 py-1.5 focus-within:border-nexus-yellow/70">
+      <div className="flex min-w-0 flex-1 items-end gap-1 rounded-2xl border border-slate-700 bg-slate-950/60 px-3 py-1.5 focus-within:border-nexus-yellow/70">
         <textarea
           autoFocus={autoFocus}
           value={texto}
@@ -63,7 +63,7 @@ const CampoComentario: React.FC<{
             if (e.key === 'Escape') onCancelar?.();
           }}
           placeholder={placeholder}
-          className="max-h-40 flex-1 resize-none bg-transparent py-1 text-sm text-white placeholder-slate-500 focus:outline-none"
+          className="max-h-40 min-w-0 flex-1 resize-none bg-transparent py-1 text-sm text-white placeholder-slate-500 focus:outline-none"
         />
         <button type="button" onClick={() => void enviar()} disabled={!texto.trim() || enviando} aria-label="Enviar comentário"
           className="mb-0.5 rounded-full p-1.5 text-nexus-yellow hover:bg-slate-800 disabled:opacity-40">
@@ -229,7 +229,7 @@ export const ComentariosSecao: React.FC<Props> = ({ post, completo, focarCampo, 
               {respondendo === c.id && (
                 <div className="flex items-start gap-1">
                   <CornerDownRight size={14} className="mt-2.5 shrink-0 text-slate-600" />
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <CampoComentario autoFocus placeholder={`Responder a ${c.autor.nome.split(' ')[0]}…`}
                       onEnviar={(t) => comentar(t, c.id)} onCancelar={() => setRespondendo(null)} />
                   </div>

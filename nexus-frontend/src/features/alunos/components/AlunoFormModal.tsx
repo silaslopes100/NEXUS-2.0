@@ -214,7 +214,7 @@ const VincularUsuarioForm: React.FC<Props> = ({ poloId, escolas, escolaFixaId, o
       <Field label="Buscar usuário aluno">
         <input aria-label="Buscar usuário aluno" className={inputCls} value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(0); }} placeholder="Nome, e-mail ou CPF" />
       </Field>
-      {selecionado && <p className="text-sm text-blue-300">Selecionado: {selecionado.nome} {selecionado.sobrenome || ''} ({selecionado.email || 'sem e-mail'})</p>}
+      {selecionado && <p className="break-words text-sm text-blue-300">Selecionado: {selecionado.nome} {selecionado.sobrenome || ''} ({selecionado.email || 'sem e-mail'})</p>}
       <ul className="max-h-40 overflow-y-auto rounded-xl border border-slate-700">
         {carregando ? <li className="p-3 text-sm text-slate-400">Buscando...</li> : usuarios.length === 0 ? <li className="p-3 text-sm text-slate-400">Nenhum usuário disponível.</li> : usuarios.map((u) => (
           <li key={u.id}><button type="button" onClick={() => setSelecionado(u)} className="w-full p-3 text-left text-sm text-white hover:bg-slate-800">{u.nome} {u.sobrenome || ''} — {u.email || 'sem e-mail'}</button></li>

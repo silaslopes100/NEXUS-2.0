@@ -708,18 +708,27 @@ async def test_calendario_oficial_antigo_removido(client: AsyncClient, turmas_se
 @pytest.mark.asyncio
 async def test_modulo_ead(client: AsyncClient):
     t_aluno = _token("aluno-1", "aluno@nexus.com.br", "aluno")
+    t_admin = _token("admin-1", "admin@nexus.com.br", "admin")
+
+    # O aluno não marca a própria compra como paga: compra só pela loja (/ead/loja), com cobrança.
+    negado = await client.post(
+        "/ead/compras",
+        json={"aluno_id": "aluno-1", "valor_pago": 120.0, "status_pagamento": "pago"},
+        headers={"Authorization": f"Bearer {t_aluno}"},
+    )
+    assert negado.status_code == 403
 
     m_res = await client.post(
         "/ead/matriculas",
         json={"aluno_id": "aluno-1", "ativa_automaticamente": True},
-        headers={"Authorization": f"Bearer {t_aluno}"},
+        headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert m_res.status_code == 201
 
     c_res = await client.post(
         "/ead/compras",
         json={"aluno_id": "aluno-1", "valor_pago": 120.0, "status_pagamento": "pago"},
-        headers={"Authorization": f"Bearer {t_aluno}"},
+        headers={"Authorization": f"Bearer {t_admin}"},
     )
     assert c_res.status_code == 201
 

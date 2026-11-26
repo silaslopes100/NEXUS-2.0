@@ -397,7 +397,7 @@ export const CentralEstagioAdminPage: React.FC = () => {
           </div>
 
           {relatorio && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
               {[
                 { rotulo: 'Alunos', valor: relatorio.total, cor: 'text-white' },
                 { rotulo: 'Concluídos', valor: relatorio.concluidos, cor: 'text-emerald-300' },

@@ -349,7 +349,7 @@ export const UsuariosInternosPage: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <p className="text-slate-200 font-medium">{u.email || '—'}</p>
+                      <p className="break-all text-slate-200 font-medium">{u.email || '—'}</p>
                       <p className="text-[11px] text-slate-500">{u.cpf || 'Sem CPF cadastrado'}</p>
                     </td>
 
@@ -480,8 +480,8 @@ export const UsuariosInternosPage: React.FC = () => {
 
       {/* Modal de Redefinição de Senha */}
       {isResetPasswordOpen && resetTargetUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="my-auto glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <KeyRound className="w-4 h-4 text-nexus-yellow" />
@@ -536,8 +536,8 @@ export const UsuariosInternosPage: React.FC = () => {
 
       {/* Modal de Confirmação de Exclusão */}
       {deleteTargetUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="my-auto glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
             <div className="flex items-center gap-2 text-white font-bold text-sm pb-3 border-b border-slate-800">
               <Trash2 className="w-4 h-4 text-red-400" />
               <span>Confirmar Exclusão</span>

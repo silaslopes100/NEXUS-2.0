@@ -67,7 +67,7 @@ export const VisualizadoresReais: React.FC<Props> = ({ metrics, executivo, ranki
   const widgets: Array<{ id: WidgetId | 'licencas'; titulo: string; valor: string; descricao: string; icone: React.ElementType }> = [
     { id: 'alunos', titulo: 'Alunos ativos', valor: fmtInt(metrics?.alunos_ativos), descricao: 'Buscar aluno e abrir a ficha', icone: Users },
     { id: 'matriculas', titulo: 'Matrículas EAD', valor: fmtInt(executivo?.crescimento.novas_matriculas), descricao: `No período · ${fmtInt(metrics?.matriculas_total)} no total`, icone: GraduationCap },
-    { id: 'ranking', titulo: 'Ranking de Polos', valor: ranking ? `${fmtInt(ranking.items.length)} polos` : '—', descricao: 'Por novas licenças no período', icone: Trophy },
+    { id: 'ranking', titulo: 'Ranking de Polos', valor: ranking ? `${fmtInt(ranking.items.length)} polos` : '—', descricao: 'Por índice de desempenho no período', icone: Trophy },
     { id: 'unidades', titulo: 'Polos / Escolas ativas', valor: metrics ? `${fmtInt(metrics.polos_ativos)} / ${fmtInt(metrics.escolas_ativas)}` : '—', descricao: 'Responsável, endereço e números', icone: Building2 },
     { id: 'professores', titulo: 'Professores ativos', valor: fmtInt(metrics?.professores_ativos), descricao: 'Lotação, disciplinas e aulas', icone: GraduationCap },
     { id: 'certificados', titulo: 'Certificados emitidos', valor: fmtInt(executivo?.academico.certificados_periodo), descricao: `No período · ${fmtInt(metrics?.certificados_emitidos)} no total`, icone: Award },

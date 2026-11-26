@@ -55,7 +55,8 @@ export const AdminDashboardPage: React.FC = () => {
   const [ranking, setRanking] = useState<Ranking | null>(null);
   const [erroRanking, setErroRanking] = useState(false);
   const [carregandoRanking, setCarregandoRanking] = useState(false);
-  const [ordenarPor, setOrdenarPor] = useState<OrdenacaoRanking>('novas_licencas');
+  const [ordenarPor, setOrdenarPor] = useState<OrdenacaoRanking>('indice');
+  const [versaoRanking, setVersaoRanking] = useState(0);
   const [atividade, setAtividade] = useState<AtividadeDocente | null>(null);
   const [erroAtividade, setErroAtividade] = useState(false);
 
@@ -111,7 +112,7 @@ export const AdminDashboardPage: React.FC = () => {
       .catch(() => vivo && setErroRanking(true))
       .finally(() => vivo && setCarregandoRanking(false));
     return () => { vivo = false; };
-  }, [filtrosPeriodo, ordenarPor]);
+  }, [filtrosPeriodo, ordenarPor, versaoRanking]);
 
   const aplicarAtalho = (dias: number) => {
     const next = new URLSearchParams(params);
@@ -240,6 +241,7 @@ export const AdminDashboardPage: React.FC = () => {
       <RankingPolos
         ranking={ranking} erro={erroRanking} carregando={carregandoRanking}
         ordenarPor={ordenarPor} onOrdenar={setOrdenarPor} filtros={filtrosPeriodo}
+        onPesosSalvos={() => setVersaoRanking((v) => v + 1)}
       />
 
       <VisualizadoresReais metrics={metrics} executivo={executivo} ranking={ranking} filtros={filtros} />

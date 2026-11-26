@@ -63,16 +63,36 @@ const useContadoresMenu = (perfil: UserRole, comAreaAluno: boolean, ativo: boole
 interface SidebarProps {
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  /** Menu recolhido no desktop (o estado mora no AppLayout, que ajusta o espaçamento do conteúdo). */
+  recolhido?: boolean;
+  onAlternarRecolhido?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen = false,
   onCloseMobile,
+  recolhido = false,
+  onAlternarRecolhido,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, perfil, logout, refreshToken, viaLicenca } = useAuthStore();
-  const [collapsed, setCollapsed] = useState(false);
+  // Na gaveta do celular o menu aparece sempre completo.
+  const collapsed = recolhido && !isMobileOpen;
+
+  // Gaveta aberta no celular: trava a rolagem do fundo, fecha com Esc e com um deslize para a esquerda.
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseMobile?.(); };
+    window.addEventListener('keydown', aoTeclar);
+    return () => {
+      document.body.style.overflow = anterior;
+      window.removeEventListener('keydown', aoTeclar);
+    };
+  }, [isMobileOpen, onCloseMobile]);
+  const [toqueX, setToqueX] = useState<number | null>(null);
   const [areaAlunoAberta, setAreaAlunoAberta] = useState(() =>
     location.pathname.startsWith('/aluno/')
   );
@@ -85,7 +105,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Itens do AVA (somenteEad) só aparecem para o aluno EAD.
   const alunoEad = !!user?.aluno_ead && !user?.tambem_aluno;
   const menuBase: MenuGroup[] = (menuByRole[activeRole] || menuByRole.aluno)
-    .map((group) => ({ ...group, items: group.items.filter((item) => !item.somenteEad || alunoEad) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => (!item.somenteEad || alunoEad) && !(item.ocultarEad && alunoEad)),
+    }))
     .filter((group) => group.items.length > 0);
   const menuGroups: MenuGroup[] = viaLicenca
     ? menuBase
@@ -106,8 +129,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } catch (e) {
       // Limpeza local mesmo se a requisição falhar
     }
+    // Vai para o login antes de limpar a sessão: assim os guards não guardam a tela atual como
+    // "rota pretendida" (o próximo usuário, de outro perfil, cairia nela com "Acesso Não Autorizado").
+    navigate('/auth/login', { replace: true, state: null });
     logout();
-    navigate('/auth/login', { replace: true });
   };
 
   const renderBadge = (item: MenuItem) => {
@@ -190,7 +215,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col glass-panel border-r border-slate-800/80 transition-all duration-300 ease-in-out ${
+        onTouchStart={(e) => isMobileOpen && setToqueX(e.touches[0].clientX)}
+        onTouchEnd={(e) => {
+          if (toqueX !== null && toqueX - e.changedTouches[0].clientX > 60) onCloseMobile?.();
+          setToqueX(null);
+        }}
+        className={`fixed top-0 left-0 bottom-0 z-50 flex max-w-[85vw] flex-col glass-panel border-r border-slate-800/80 pb-safe pt-safe transition-all duration-300 ease-in-out ${
           collapsed ? 'w-20' : 'w-72'
         } ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -204,12 +234,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <div className="w-full flex justify-center">
-              <span className="font-display font-black text-2xl text-nexus-yellow">N</span>
+              <img src="/icons/favicon-64.png" alt="NEXUS" draggable={false} className="h-9 w-9 rounded-lg" />
             </div>
           )}
 
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => onAlternarRecolhido?.()}
             className="hidden lg:flex p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           >

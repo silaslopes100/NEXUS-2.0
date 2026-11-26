@@ -97,7 +97,7 @@ class AvaAlunoService:
     def _situacao(cls, d: Dict[str, Any]) -> str:
         if d.get("ead_aguardando"):  # turma EAD: a disciplina ainda não foi liberada pela sequência
             return "bloqueada"
-        pago = bool(d.get("liberada_em") or d.get("licenca_em")
+        pago = bool(d.get("liberada_em") or d.get("licenca_em") or d.get("bolsista")
                     or (d.get("status_pagamento") or "").strip().lower() in _PAGOS)
         prazo = _dt(d.get("prazo_conclusao"))
         vencido = bool(prazo and prazo < _agora()) and not d.get("ead_prazo_alerta")
@@ -137,9 +137,14 @@ class AvaAlunoService:
                 continue
             if p["situacao"] == "aguardando":
                 d["ead_aguardando"] = True
-            if p.get("data_limite"):
+            limite = p.get("data_limite")
+            liberada = _dt(d.get("liberada_em"))
+            if limite and liberada and liberada.date() > limite:
+                # Recompra depois do prazo vencido (RN-03): novo pagamento, prazo novo a partir da liberação.
+                limite = liberada.date() + timedelta(days=int(p.get("prazo_dias") or 0))
+            if limite:
                 # Vence ao fim do dia limite.
-                d["prazo_conclusao"] = datetime.combine(p["data_limite"] + timedelta(days=1), time.min, tzinfo=timezone.utc)
+                d["prazo_conclusao"] = datetime.combine(limite + timedelta(days=1), time.min, tzinfo=timezone.utc)
             if p.get("ao_vencer") == "alertar":
                 d["ead_prazo_alerta"] = True
 

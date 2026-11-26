@@ -269,3 +269,58 @@ class PrazosEadResponse(BaseModel):
     regras: Dict[str, Any]
     disciplinas: List[Dict[str, Any]] = Field(default_factory=list)  # ordem e prazo de cada disciplina
     alunos: List[PrazosAlunoEad] = Field(default_factory=list)
+
+
+# ---------- Histórico (desempenho) da turma ----------
+
+
+class HistoricoResumo(BaseModel):
+    alunos: int = 0
+    media_geral: Optional[float] = None  # 0–10 (nota final = maior nota por aluno e disciplina)
+    aprovacao_pct: Optional[float] = None  # notas finais >= nota mínima
+    notas_lancadas: int = 0  # pares aluno × disciplina com nota final
+    frequencia_media: Optional[float] = None
+    abaixo_minimo: int = 0
+    minimo_pct: float = 75.0
+    indice: Optional[float] = None  # 0–100
+
+
+class HistoricoDisciplina(BaseModel):
+    disciplina_id: str
+    nome: str
+    semestre: Optional[int] = None
+    media: Optional[float] = None
+    aprovados: int = 0
+    reprovados: int = 0
+    sem_nota: int = 0
+    frequencia_media: Optional[float] = None
+
+
+class HistoricoAluno(BaseModel):
+    aluno_id: str
+    nome: str
+    numero_matricula: Optional[str] = None
+    media: Optional[float] = None
+    aprovadas: int = 0
+    reprovadas: int = 0
+    frequencia_pct: Optional[float] = None
+    em_risco: bool = False
+    situacao: Literal["bom", "atencao", "sem_dados"] = "sem_dados"
+
+
+class HistoricoMes(BaseModel):
+    mes: str  # AAAA-MM
+    media: float
+    notas: int
+
+
+class HistoricoTurmaResponse(BaseModel):
+    turma_id: str
+    modalidade: str = "presencial"
+    frequencia_aplica: bool = True
+    peso_notas: float
+    peso_frequencia: float
+    resumo: HistoricoResumo
+    disciplinas: List[HistoricoDisciplina] = Field(default_factory=list)
+    alunos: List[HistoricoAluno] = Field(default_factory=list)
+    evolucao: List[HistoricoMes] = Field(default_factory=list)

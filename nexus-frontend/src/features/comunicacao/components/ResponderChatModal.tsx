@@ -33,7 +33,7 @@ export const ResponderChatModal: React.FC<{ post: Post; onFechar: () => void }> 
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onMouseDown={onFechar}>
-      <div className="w-full max-w-lg overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:rounded-2xl"
+      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-700 bg-slate-900 pb-safe shadow-2xl sm:rounded-2xl"
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <h3 className="flex items-center gap-2 font-semibold text-white">

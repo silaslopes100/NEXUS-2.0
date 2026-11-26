@@ -11,10 +11,11 @@ import {
   PlayCircle,
   Plus,
   Settings2,
+  ShoppingBag,
 } from 'lucide-react';
 import { mensagemErro } from '@/features/comunicacao/api';
 import { urlArquivo } from '@/lib/uploadDireto';
-import { ACEITA_IMAGENS, Aula, Capitulo, ConfigAva, Estrutura, ReordenarPayload, avaAdminApi, formatarDuracao } from '../../api';
+import { ACEITA_IMAGENS, Aula, Capitulo, ConfigAva, Estrutura, ReordenarPayload, avaAdminApi, formatarBRL, formatarDuracao } from '../../api';
 import { EstruturaEditor } from '../../components/editor/EstruturaEditor';
 import { AulaDrawer } from '../../components/editor/AulaDrawer';
 import { botaoPrimario, botaoSecundario, campo, rotulo } from '../../components/editor/estilos';
@@ -48,6 +49,8 @@ export const AvaDisciplinaEditorPage: React.FC = () => {
   const [drawer, setDrawer] = useState<{ capitulo: Capitulo; aula: Aula | null } | null>(null);
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [descricao, setDescricao] = useState('');
+  const [valorEad, setValorEad] = useState('');
+  const [valorLivro, setValorLivro] = useState('');
   const [enviandoCapa, setEnviandoCapa] = useState(false);
   const inputCapa = useRef<HTMLInputElement>(null);
 
@@ -58,6 +61,8 @@ export const AvaDisciplinaEditorPage: React.FC = () => {
       setEstrutura(e);
       setCapitulos(e.capitulos);
       setDescricao(e.config.descricao_ava ?? '');
+      setValorEad(String(e.config.valor_ead ?? 45));
+      setValorLivro(String(e.config.valor_livro_ead ?? 25));
     } catch (e) {
       setErro(mensagemErro(e, 'Não foi possível carregar a disciplina.'));
     } finally {
@@ -93,7 +98,8 @@ export const AvaDisciplinaEditorPage: React.FC = () => {
       const atual = estrutura.config;
       const cfg = await avaAdminApi.salvarConfig(disciplinaId, {
         capa_url: atual.capa_url, descricao_ava: atual.descricao_ava, sequencial: atual.sequencial,
-        publicado: atual.publicado, ...parcial,
+        publicado: atual.publicado, valor_ead: atual.valor_ead ?? 45, livro_disponivel: atual.livro_disponivel ?? false,
+        valor_livro_ead: atual.valor_livro_ead ?? 25, ...parcial,
       });
       setEstrutura({ ...estrutura, config: cfg });
     }, 'Configuração salva.');
@@ -239,6 +245,46 @@ export const AvaDisciplinaEditorPage: React.FC = () => {
                 <button type="button" disabled={descricao === (config.descricao_ava ?? '')}
                   onClick={() => void salvarConfig({ descricao_ava: descricao })} className={botaoPrimario}>
                   Salvar apresentação
+                </button>
+              </div>
+            </div>
+            <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-bold text-white">
+                  <ShoppingBag size={16} className="text-nexus-yellow" /> Venda EAD
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  Fica à venda na loja do aluno quando estiver <b>publicada</b> e liberada no calendário da Turma EAD.
+                </span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="block">
+                  <span className={rotulo}>Valor da disciplina (R$)</span>
+                  <input type="number" min={0} step="0.01" value={valorEad} onChange={(e) => setValorEad(e.target.value)} className={campo} />
+                </label>
+                <div className="flex items-end pb-1">
+                  <Interruptor ligado={config.livro_disponivel ?? false}
+                    onChange={(v) => void salvarConfig({ livro_disponivel: v })}
+                    rotulo="Oferecer livro físico"
+                    ajuda="Upsell no checkout, sem licença (a avaliação é feita no AVA)." />
+                </div>
+                <label className="block">
+                  <span className={rotulo}>Valor do livro (R$)</span>
+                  <input type="number" min={0} step="0.01" value={valorLivro} disabled={!config.livro_disponivel}
+                    onChange={(e) => setValorLivro(e.target.value)} className={`${campo} disabled:opacity-50`} />
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-slate-400">
+                  Aluno paga {formatarBRL(Number(valorEad) || 0)}
+                  {config.livro_disponivel ? ` · com o livro, ${formatarBRL((Number(valorEad) || 0) + (Number(valorLivro) || 0))}` : ''}
+                </span>
+                <button type="button"
+                  disabled={valorEad === '' || Number(valorEad) < 0 || valorLivro === '' || Number(valorLivro) < 0
+                    || (Number(valorEad) === config.valor_ead && Number(valorLivro) === config.valor_livro_ead)}
+                  onClick={() => void salvarConfig({ valor_ead: Number(valorEad), valor_livro_ead: Number(valorLivro) })}
+                  className={botaoPrimario}>
+                  Salvar valores
                 </button>
               </div>
             </div>

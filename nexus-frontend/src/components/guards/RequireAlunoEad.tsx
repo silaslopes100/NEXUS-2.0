@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Navigate, Outlet } from 'react-router-dom';
 import { ArrowLeft, Laptop } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -35,4 +35,11 @@ export const RequireAlunoEad: React.FC<{ children?: React.ReactNode }> = ({ chil
   }
 
   return children ? <>{children}</> : <Outlet />;
+};
+
+/** Telas só do aluno presencial (presença, material do Polo): o aluno EAD vai para o AVA. */
+export const SemAlunoEad: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuthStore();
+  if (user?.aluno_ead && !user?.tambem_aluno) return <Navigate to="/aluno/ava" replace />;
+  return <>{children}</>;
 };

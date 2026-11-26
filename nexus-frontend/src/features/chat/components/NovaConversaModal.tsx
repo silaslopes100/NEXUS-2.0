@@ -49,7 +49,7 @@ export const NovaConversaModal: React.FC<Props> = ({ souAluno, onFechar, onAbert
           <h3 className="font-semibold text-white">Nova conversa</h3>
           <button type="button" onClick={onFechar} aria-label="Fechar" className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
-        <div className="flex gap-1 border-b border-slate-800 px-3 pt-2">
+        <div className="rolagem-sem-barra flex gap-1 overflow-x-auto border-b border-slate-800 px-3 pt-2 [&>button]:shrink-0">
           {abas.map(([v, r, ic]) => (
             <button key={v} type="button" onClick={() => { setAba(v); setErro(null); }}
               className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm ${aba === v ? 'border-nexus-yellow text-white' : 'border-transparent text-slate-400 hover:text-white'}`}>

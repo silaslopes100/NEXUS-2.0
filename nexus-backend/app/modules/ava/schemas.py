@@ -28,6 +28,9 @@ class DisciplinaAvaOut(BaseModel):
     capa_url: Optional[str] = None
     publicado: bool = False
     sequencial: bool = False
+    valor_ead: float = 45.0
+    livro_disponivel: bool = False
+    valor_livro_ead: float = 25.0
     total_capitulos: int = 0
     total_aulas: int = 0
     atualizado_em: Optional[datetime] = None
@@ -38,6 +41,10 @@ class ConfigIn(BaseModel):
     descricao_ava: Optional[str] = Field(default=None, max_length=5000)
     sequencial: bool = False
     publicado: bool = False
+    # Venda para o aluno EAD: preço da disciplina e upsell do livro físico (sem licença).
+    valor_ead: float = Field(default=45.0, ge=0, le=100_000)
+    livro_disponivel: bool = False
+    valor_livro_ead: float = Field(default=25.0, ge=0, le=100_000)
 
 
 class ConfigOut(ConfigIn):

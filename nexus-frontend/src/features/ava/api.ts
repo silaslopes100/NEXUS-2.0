@@ -16,6 +16,9 @@ export interface DisciplinaAva {
   capa_url?: string | null;
   publicado: boolean;
   sequencial: boolean;
+  valor_ead?: number;
+  livro_disponivel?: boolean;
+  valor_livro_ead?: number;
   total_capitulos: number;
   total_aulas: number;
   atualizado_em?: string | null;
@@ -27,7 +30,14 @@ export interface ConfigAva {
   descricao_ava?: string | null;
   sequencial: boolean;
   publicado: boolean;
+  /** Venda para o aluno EAD: preço da disciplina e upsell do livro físico (sem licença). */
+  valor_ead: number;
+  livro_disponivel: boolean;
+  valor_livro_ead: number;
 }
+
+export const formatarBRL = (v: number | null | undefined) =>
+  (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export interface ItemAula {
   id: string;

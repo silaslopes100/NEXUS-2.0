@@ -20,9 +20,10 @@ import {
 import { TurmaAlunosPanel } from '@/features/turmas/components/TurmaAlunosPanel';
 import { inputCls, TurmaFormModal, useOpcoesTurma } from '@/features/turmas/components/TurmaFormModal';
 import { TurmaProfessoresPanel } from '@/features/turmas/components/TurmaProfessoresPanel';
+import { TurmaHistoricoPanel } from '@/features/turmas/components/TurmaHistoricoPanel';
 import { baseTurmas, SeloSituacao } from '@/features/turmas/pages/TurmasPage';
 
-type Aba = 'dados' | 'alunos' | 'professores' | 'carga' | 'prazos';
+type Aba = 'dados' | 'alunos' | 'professores' | 'carga' | 'prazos' | 'historico';
 
 const Dado: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
@@ -131,9 +132,9 @@ const CancelarModal: React.FC<{ turma: Turma; aoFechar: () => void; aoConcluir: 
     }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
       <form onSubmit={enviar} role="dialog" aria-modal="true" aria-labelledby="cancelar-turma-titulo"
-        className="glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        className="my-auto glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 id="cancelar-turma-titulo" className="flex items-center gap-2 text-lg font-bold text-white">
             <Ban className="h-5 w-5 text-red-400" /> Cancelar turma
@@ -193,6 +194,7 @@ export const TurmaDetalhePage: React.FC = () => {
     { id: 'professores', rotulo: 'Professores' },
     { id: 'carga', rotulo: 'Cronograma, andamento e frequência' },
     ...(ead ? [{ id: 'prazos' as Aba, rotulo: 'Prazos EAD' }] : []),
+    { id: 'historico', rotulo: 'Histórico' },
   ];
   const abaParam = params.get('aba') as Aba | null;
   const aba: Aba = abas.some((a) => a.id === abaParam) ? (abaParam as Aba) : 'dados';
@@ -367,6 +369,11 @@ export const TurmaDetalhePage: React.FC = () => {
             onAlterado={() => void carregar()}
           />
         )}
+        {aba === 'historico' && (
+          <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+            <TurmaHistoricoPanel turmaId={turma.id} turmaNome={turma.nome} />
+          </section>
+        )}
         {aba === 'prazos' && ead && (
           <section className="glass rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
             <PrazosEadTab turma={turma} />
@@ -402,9 +409,9 @@ export const TurmaDetalhePage: React.FC = () => {
         />
       )}
       {modal === 'excluir' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
           <div role="dialog" aria-modal="true" aria-labelledby="excluir-turma-titulo"
-            className="glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            className="my-auto glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
             <h2 id="excluir-turma-titulo" className="flex items-center gap-2 text-lg font-bold text-white">
               <Trash2 className="h-5 w-5 text-red-400" /> Excluir turma
             </h2>

@@ -56,7 +56,7 @@ const EstatisticasModal: React.FC<{ aviso: Aviso; onFechar: () => void }> = ({ a
         {!dados && !erro && <div className="flex justify-center py-12 text-blue-400"><Loader2 className="animate-spin" /></div>}
         {dados && (
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
               {[
                 ['Público estimado', dados.publico_estimado, ''],
                 ['Visualizaram', dados.visualizacoes, `${pct(dados.visualizacoes)}%`],

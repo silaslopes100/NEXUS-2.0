@@ -521,8 +521,8 @@ const ModalLiberar: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <form onSubmit={submit} className="glass w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+      <form onSubmit={submit} className="my-auto glass w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">Liberar licenças{poloNome ? ` para ${poloNome}` : ''}</h2>
           <button type="button" onClick={onFechar} aria-label="Fechar" className="text-slate-400"><X /></button>
@@ -585,8 +585,8 @@ const ModalReclassificar: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <form onSubmit={submit} className="glass w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+      <form onSubmit={submit} className="my-auto glass w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">Definir a disciplina do saldo</h2>
           <button type="button" onClick={onFechar} aria-label="Fechar" className="text-slate-400"><X /></button>

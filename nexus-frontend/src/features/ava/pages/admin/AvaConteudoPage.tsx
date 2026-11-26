@@ -4,7 +4,7 @@ import { AlertCircle, BookOpen, Layers, Laptop, Loader2, PlayCircle, Search } fr
 import { cursosApi, Curso } from '@/features/cursos/api';
 import { mensagemErro } from '@/features/comunicacao/api';
 import { urlArquivo } from '@/lib/uploadDireto';
-import { avaAdminApi, DisciplinaAva } from '../../api';
+import { avaAdminApi, DisciplinaAva, formatarBRL } from '../../api';
 
 const CHAVE_CURSO = 'nexus:ava:curso';
 
@@ -174,6 +174,7 @@ export const AvaConteudoPage: React.FC = () => {
                   <span className="flex items-center gap-3">
                     <span className="flex items-center gap-1"><Layers size={13} /> {d.total_capitulos} capítulos</span>
                     <span className="flex items-center gap-1"><PlayCircle size={13} /> {d.total_aulas} aulas</span>
+                    <span className="font-semibold text-emerald-300">{formatarBRL(d.valor_ead ?? 45)}</span>
                   </span>
                   <span className="font-semibold text-nexus-yellow opacity-0 transition group-hover:opacity-100">
                     Montar conteúdo →

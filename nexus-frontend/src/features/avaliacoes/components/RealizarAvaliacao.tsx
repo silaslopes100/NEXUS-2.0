@@ -309,8 +309,8 @@ export const RealizarAvaliacao: React.FC<Props> = ({
       </footer>
 
       {confirmando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div role="dialog" aria-modal="true" className="glass w-full max-w-sm space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+          <div role="dialog" aria-modal="true" className="my-auto glass w-full max-w-sm space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
             <h2 className="text-lg font-bold text-white">Enviar a avaliação?</h2>
             <p className="text-sm text-slate-300">
               {respondidas < total

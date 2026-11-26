@@ -228,14 +228,14 @@ export const AlunosPage: React.FC = () => {
             </option>
           ))}
         </select>
-        <form onSubmit={aplicarBusca} className="flex items-stretch gap-2">
-          <div className="relative">
+        <form onSubmit={aplicarBusca} className="flex w-full items-stretch gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search size={16} className="absolute left-3 top-2.5 text-slate-500" />
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Nome, e-mail, CPF ou matrícula"
-              className={`${selectCls} w-72 pl-9`}
+              className={`${selectCls} w-full pl-9 sm:w-72`}
             />
           </div>
           <button
@@ -288,7 +288,7 @@ export const AlunosPage: React.FC = () => {
                       <td className="p-4 font-mono text-xs text-slate-400">{a.numero_matricula || '—'}</td>
                       <td className="p-4">
                         <p className="font-semibold text-white">{a.nome}</p>
-                        <p className="text-xs text-slate-500">{a.email || '—'}</p>
+                        <p className="break-all text-xs text-slate-500">{a.email || '—'}</p>
                       </td>
                       <td className="p-4">
                         {MODALIDADE_LABEL[a.modalidade ?? ''] ?? a.modalidade ?? '—'}

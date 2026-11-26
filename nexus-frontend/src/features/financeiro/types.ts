@@ -2,9 +2,11 @@
 
 /** 'kit' = Disciplina (1 livro + 1 licença), o produto vendido; 'livro' e 'licenca' ficam para o histórico. */
 /** 'troca' = solicitação de troca de licença/livro feita pelo Polo/Escola. */
-export type TipoPedido = 'livro' | 'licenca' | 'kit' | 'troca';
+/** 'ead' / 'ead_livro' = disciplina comprada pelo aluno EAD na loja (com ou sem livro físico). */
+export type TipoPedido = 'livro' | 'licenca' | 'kit' | 'troca' | 'ead' | 'ead_livro';
 /** Tipos que passam pela logística (envio de livro). */
-export const tipoComEnvio = (tipo: TipoPedido) => tipo === 'livro' || tipo === 'kit' || tipo === 'troca';
+export const tipoComEnvio = (tipo: TipoPedido) =>
+  tipo === 'livro' || tipo === 'kit' || tipo === 'troca' || tipo === 'ead_livro';
 
 export type StatusPedido =
   | 'aguardando_pagamento'
@@ -129,6 +131,18 @@ export interface Pedido {
   troca_motivo?: MotivoTroca | null;
   troca_descricao?: string | null;
   troca_itens?: TrocaItem[];
+  /** Pedido do aluno EAD (tipos ead / ead_livro). */
+  aluno_id?: string | null;
+  aluno_nome?: string | null;
+  ead?: {
+    disciplina_id?: string | null;
+    disciplina_nome?: string | null;
+    turma_nome?: string | null;
+    status_pagamento?: string | null;
+    liberada_em?: string | null;
+    numero_matricula?: string | null;
+    aluno_email?: string | null;
+  } | null;
 }
 
 export interface Envio {
@@ -205,6 +219,10 @@ export interface VendasKpis {
   ticket_medio: number;
   receita_licencas: number;
   receita_livros: number;
+  receita_kits?: number;
+  receita_ead: number;
+  vendas_ead: number;
+  vendas_ead_livro: number;
   licencas_vendidas: number;
   livros_vendidos: number;
   por_status: { status: string; pedidos: number; valor: number }[];
@@ -319,6 +337,7 @@ export const STATUS_PEDIDO: Record<StatusPedido, { label: string; className: str
 
 export const TIPO_PEDIDO: Record<TipoPedido, string> = {
   kit: 'Disciplina (livro + licença)', livro: 'Livro', licenca: 'Licença', troca: 'Troca de livro',
+  ead: 'Disciplina EAD (aluno)', ead_livro: 'Disciplina EAD + livro (aluno)',
 };
 
 // Transições manuais permitidas pela API (POST /financeiro/pedidos/{id}/status).

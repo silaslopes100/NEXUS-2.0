@@ -112,8 +112,25 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
             </div>
 
             <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div><p className="text-xs text-slate-500">Polo</p><p className="text-white">{pedido.polo_nome || '-'}</p></div>
-              <div><p className="text-xs text-slate-500">Escola</p><p className="text-white">{pedido.escola_nome || '-'}</p></div>
+              {pedido.aluno_id ? (
+                <>
+                  <div><p className="text-xs text-slate-500">Aluno EAD</p><p className="text-white">{pedido.aluno_nome || '-'}</p>
+                    {pedido.ead?.numero_matricula && <p className="text-[11px] text-slate-500">{pedido.ead.numero_matricula}{pedido.ead.aluno_email ? ` · ${pedido.ead.aluno_email}` : ''}</p>}
+                  </div>
+                  <div><p className="text-xs text-slate-500">Turma</p><p className="text-white">{pedido.ead?.turma_nome || '-'}</p></div>
+                  <div><p className="text-xs text-slate-500">Disciplina</p><p className="text-white">{pedido.ead?.disciplina_nome || '-'}</p></div>
+                  <div><p className="text-xs text-slate-500">Acesso no AVA</p>
+                    <p className={pedido.ead?.liberada_em ? 'text-emerald-300' : 'text-slate-300'}>
+                      {pedido.ead?.liberada_em ? `Liberado em ${formatData(pedido.ead.liberada_em, true)}` : pedido.ead?.status_pagamento === 'cancelado' ? 'Compra cancelada' : 'Aguardando pagamento'}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div><p className="text-xs text-slate-500">Polo</p><p className="text-white">{pedido.polo_nome || '-'}</p></div>
+                  <div><p className="text-xs text-slate-500">Escola</p><p className="text-white">{pedido.escola_nome || '-'}</p></div>
+                </>
+              )}
               {pedido.fornecedor && <div><p className="text-xs text-slate-500">Fornecedor</p><p className="text-white">{pedido.fornecedor}</p></div>}
               {pedido.pago_em && <div><p className="text-xs text-slate-500">Pago em</p><p className="text-white">{formatData(pedido.pago_em, true)}</p></div>}
               {pedido.motivo_cancelamento && (
@@ -131,6 +148,7 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
 
             {!ehTroca && <div>
               <h3 className="mb-2 text-xs font-bold uppercase text-slate-500">Itens</h3>
+              <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-800">
                   {pedido.itens.map((i) => (
@@ -142,6 +160,7 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
                   ))}
                 </tbody>
               </table>
+              </div>
               <div className="mt-2 space-y-1 border-t border-slate-800 pt-2 text-right text-xs text-slate-400">
                 {Number(pedido.desconto) > 0 && <p>Desconto: −{formatBRL(pedido.desconto)}</p>}
                 <p className="text-base font-bold text-white">Total {formatBRL(pedido.valor_total)}</p>

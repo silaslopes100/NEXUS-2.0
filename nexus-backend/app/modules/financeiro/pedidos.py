@@ -47,7 +47,8 @@ def validar_transicao(de: str, para: str) -> None:
 
 # "kit" = Disciplina (1 livro físico + 1 licença por unidade). É o produto vendido a partir da
 # migração 021; "livro" e "licenca" ficam para o histórico.
-TIPOS_COM_ENVIO: FrozenSet[str] = frozenset({"livro", "kit", "troca"})  # passam pela logística
+# "ead" = disciplina comprada pelo aluno EAD (só acesso ao AVA); "ead_livro" = + livro físico (sem licença).
+TIPOS_COM_ENVIO: FrozenSet[str] = frozenset({"livro", "kit", "troca", "ead_livro"})  # passam pela logística
 TIPOS_COM_LICENCA: FrozenSet[str] = frozenset({"licenca", "kit"})    # creditam licenças ao pagar
 
 # Status que não fazem sentido para cada tipo de pedido.
@@ -57,7 +58,15 @@ STATUS_INVALIDOS_POR_TIPO: Dict[str, FrozenSet[str]] = {
     "licenca": frozenset({"pago_aguardando_envio", "enviado", "entregue"}),  # sem logística
     # Troca: só troca_solicitada -> troca | cancelado (endpoints próprios).
     "troca": frozenset({"pago_aguardando_envio", "enviado", "entregue", "concluido"}),
+    "ead": frozenset({"pago_aguardando_envio", "enviado", "entregue"}),  # acesso liberado na hora
+    "ead_livro": frozenset({"concluido"}),  # termina na entrega do livro
 }
+
+TIPOS_EAD: FrozenSet[str] = frozenset({"ead", "ead_livro"})
+
+
+def eh_ead(tipo: str) -> bool:
+    return tipo in TIPOS_EAD
 
 # Status de quem aguarda a logística ("Pendentes de envio"): venda paga ou troca solicitada.
 STATUS_FILA_ENVIO: FrozenSet[str] = frozenset({"pago_aguardando_envio", "troca_solicitada"})

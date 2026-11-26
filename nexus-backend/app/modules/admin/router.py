@@ -13,6 +13,8 @@ from app.core.database import get_db_cursor
 from app.modules.alunos import perfil as perfil_aluno
 from app.modules.admin.dependencies import get_admin_service, require_admin_user
 from app.modules.admin.schemas import (
+    PesosRanking,
+    PesosRankingOut,
     AdminDashboardMetricsResponse,
     CertificadoDashboardListResponse,
     DashboardExecutivoResponse,
@@ -87,7 +89,9 @@ def filtros_dashboard(
         ) from exc
 
 
-_ORDENAR_RANKING = Query("novas_licencas", pattern="^(novas_licencas|receita_paga|alunos_ativos|presenca_pct)$")
+_ORDENAR_RANKING = Query(
+    "indice", pattern="^(indice|notas_media|compras_qtd|novas_licencas|receita_paga|alunos_ativos|presenca_pct)$"
+)
 
 
 @router.get(
@@ -113,6 +117,22 @@ async def get_ranking_polos(
     service: AdminService = Depends(get_admin_service),
 ) -> RankingPolosResponse:
     return service.get_ranking_polos(filtros, ordenar_por)
+
+
+@router.get("/dashboard/ranking-polos/config", response_model=PesosRankingOut,
+            summary="Pesos do índice de desempenho (notas, frequência, compras)")
+async def get_pesos_ranking(service: AdminService = Depends(get_admin_service)) -> PesosRankingOut:
+    return service.pesos_ranking()
+
+
+@router.put("/dashboard/ranking-polos/config", response_model=PesosRankingOut,
+            summary="Altera os pesos do índice de desempenho")
+async def salvar_pesos_ranking(
+    payload: PesosRanking,
+    current_user: UserResponse = Depends(require_admin_user),
+    service: AdminService = Depends(get_admin_service),
+) -> PesosRankingOut:
+    return service.salvar_pesos_ranking(payload, str(current_user.id))
 
 
 @router.get(

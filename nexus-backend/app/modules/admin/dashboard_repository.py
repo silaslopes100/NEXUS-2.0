@@ -27,7 +27,8 @@ PRESENCA_CONTA = """NOT EXISTS (
                        AND am.tipo NOT IN ('prevista', 'reposicao'))"""
 # Mesmos predicados da tela de Vendas (financeiro/repository.kpis_vendas), para os números baterem.
 PEDIDO_PAGO = "p.pago_em IS NOT NULL AND p.status <> 'cancelado'"
-ORDENACOES_RANKING = ("novas_licencas", "receita_paga", "alunos_ativos", "presenca_pct")
+ORDENACOES_RANKING = ("indice", "novas_licencas", "receita_paga", "alunos_ativos", "presenca_pct", "notas_media",
+                      "compras_qtd")
 
 
 def _normalizar(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -181,7 +182,26 @@ class PostgresDashboardMixin:
                    (SELECT COALESCE(SUM(p.valor_total), 0) FROM pedidos p
                      WHERE p.polo_id = po.id AND {PEDIDO_PAGO}
                        AND p.criado_em >= %s AND p.criado_em < %s::date + 1) AS receita_paga,
-                   pres.total AS presencas_total, pres.positivas AS presencas_positivas
+                   pres.total AS presencas_total, pres.positivas AS presencas_positivas,
+                   (SELECT AVG(x.nota) FROM (
+                        SELECT MAX(n.valor) AS nota FROM notas n
+                         WHERE n.valor IS NOT NULL
+                           AND COALESCE(n.lancado_em, n.criado_em) >= %s AND COALESCE(n.lancado_em, n.criado_em) < %s::date + 1
+                           AND n.aluno_id IN (
+                               SELECT a.id FROM alunos a WHERE a.polo_id = po.id
+                               UNION
+                               SELECT ta.aluno_id FROM turma_alunos ta JOIN turmas t ON t.id = ta.turma_id
+                                 LEFT JOIN escolas es ON es.id = t.escola_id
+                                WHERE (t.polo_id = po.id OR es.polo_id = po.id) AND COALESCE(ta.status, 'ativo') = 'ativo')
+                         GROUP BY n.aluno_id, n.disciplina_id) x) AS notas_media,
+                   (SELECT COALESCE(SUM(pi.quantidade), 0) FROM pedidos p JOIN pedidos_itens pi ON pi.pedido_id = p.id
+                     WHERE p.polo_id = po.id AND p.tipo IN ('licenca', 'kit', 'livro') AND {PEDIDO_PAGO}
+                       AND p.criado_em >= %s AND p.criado_em < %s::date + 1) AS compras_polo,
+                   (SELECT COALESCE(SUM(si.quantidade_atendida), 0)
+                      FROM solicitacoes_unidade su JOIN solicitacoes_unidade_itens si ON si.solicitacao_id = su.id
+                     WHERE su.polo_id = po.id AND su.status IN ('atendida', 'atendida_parcial')
+                       AND COALESCE(su.resolvido_em, su.atualizado_em) >= %s
+                       AND COALESCE(su.resolvido_em, su.atualizado_em) < %s::date + 1) AS solicitacoes_escolas
               FROM polos po
               LEFT JOIN LATERAL (
                     SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE pr.presente) AS positivas
@@ -193,8 +213,18 @@ class PostgresDashboardMixin:
              WHERE po.status = 'ativo'
         """
         with get_db_cursor() as cur:
-            cur.execute(sql, (inicio, fim, inicio, fim, inicio, fim))
+            cur.execute(sql, (inicio, fim, inicio, fim, inicio, fim, inicio, fim, inicio, fim, inicio, fim))
             return [_normalizar(r) for r in cur.fetchall()]
+
+    def pesos_ranking(self) -> Dict[str, Any]:
+        from app.modules.admin.ranking_config import obter_pesos
+
+        return obter_pesos()
+
+    def salvar_pesos_ranking(self, pesos: Dict[str, float], usuario_id: Optional[str]) -> Dict[str, Any]:
+        from app.modules.admin.ranking_config import salvar_pesos
+
+        return salvar_pesos(pesos, usuario_id)
 
     def dashboard_list_matriculas(
         self, filtros: FiltrosPeriodo, q: Optional[str] = None
@@ -392,6 +422,15 @@ class InMemoryDashboardMixin:
 
     def dashboard_ranking_polos(self, inicio: date, fim: date) -> List[Dict[str, Any]]:
         return [dict(r) for r in self.ranking_polos_rows]
+
+    def pesos_ranking(self) -> Dict[str, Any]:
+        from app.modules.admin.ranking_config import PESOS_PADRAO
+
+        return dict(getattr(self, "_pesos_ranking", None) or PESOS_PADRAO)
+
+    def salvar_pesos_ranking(self, pesos: Dict[str, float], usuario_id: Optional[str]) -> Dict[str, Any]:
+        self._pesos_ranking = dict(pesos)
+        return dict(pesos)
 
     def _lista_dashboard(
         self, lista: List[Dict[str, Any]], campo: str, filtros: FiltrosPeriodo, q: Optional[str]

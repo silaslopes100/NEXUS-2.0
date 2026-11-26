@@ -14,7 +14,6 @@ import {
   PartyPopper,
   RotateCcw,
   Trophy,
-  X,
 } from 'lucide-react';
 import { mensagemErro } from '@/features/comunicacao/api';
 import { formatarNota, Resultado } from '@/features/avaliacoes/api';
@@ -27,6 +26,9 @@ import { ConteudoItem } from '../../components/player/ConteudoItem';
 import { SidebarCapitulos } from '../../components/player/SidebarCapitulos';
 import { AbasAula } from '../../components/player/AbasAula';
 import { soltarConfete } from '../../utils/confete';
+import { BottomSheet } from '@/components/ui/BottomSheet';
+import { tocar } from '../../utils/sons';
+import { SomToggle } from '../../components/gamificacao/SomToggle';
 
 interface Props {
   /** Pré-visualização do admin: sem travas e sem gravar progresso. */
@@ -77,6 +79,8 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
   const [concluindo, setConcluindo] = useState(false);
   const [modoProva, setModoProva] = useState(false);
   const [trilhaMobile, setTrilhaMobile] = useState(false);
+  const fecharTrilha = useCallback(() => setTrilhaMobile(false), []);
+  const toque = useRef<{ x: number; y: number } | null>(null);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [celebracao, setCelebracao] = useState<'disciplina' | null>(null);
   const [recompensa, setRecompensa] = useState<Recompensa | null>(null);
@@ -154,13 +158,17 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
       }
       if (c.disciplina_concluida) {
         soltarConfete(3200);
+        tocar('disciplina');
         setCelebracao('disciplina');
         if (xp) avisar(`${cam.item} concluída${xp}`);
       } else if (c.capitulo_concluido) {
         soltarConfete();
+        tocar('capitulo');
         avisar(`Capítulo concluído! Continue assim 🚀${xp}`);
       } else {
         if (especial) soltarConfete();
+        tocar('aula');
+        if (xp && !especial) window.setTimeout(() => tocar('xp'), 260);
         avisar(`Aula concluída ✓${xp}${fogo}`);
       }
     },
@@ -203,6 +211,7 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
   const aoResultadoProva = useCallback(
     async (r: Resultado) => {
       if (!aula || !r.aprovado) return;
+      tocar('aprovado');
       try {
         await aplicarConclusao(await api.concluir(aula.id));
       } catch {
@@ -231,6 +240,19 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
   const videos = aula?.itens.filter((i) => i.tipo === 'video_embed') ?? [];
   const outros = aula?.itens.filter((i) => i.tipo !== 'video_embed') ?? [];
   const av = aula?.avaliacao;
+
+  // Deslizar no conteúdo da aula: direita = anterior; esquerda = próxima (só depois de concluir).
+  const inicioToque = (e: React.TouchEvent) => { toque.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; };
+  const fimToque = (e: React.TouchEvent) => {
+    const t = toque.current;
+    toque.current = null;
+    if (!t || !aula || modoProva) return;
+    const dx = e.changedTouches[0].clientX - t.x;
+    const dy = e.changedTouches[0].clientY - t.y;
+    if (Math.abs(dx) < 90 || Math.abs(dy) > 60) return;
+    if (dx > 0 && aula.anterior_id) navigate(`${base}/aulas/${aula.anterior_id}`);
+    if (dx < 0 && aula.proxima_id && (aula.status === 'concluida' || previa)) navigate(`${base}/aulas/${aula.proxima_id}`);
+  };
 
   const trilha = (
     <SidebarCapitulos capitulos={disciplina.capitulos} aulaAtualId={aulaId}
@@ -266,6 +288,7 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
             </div>
           </div>
           {d.progresso_pct === 100 && <Trophy className="text-nexus-yellow" size={22} />}
+          <SomToggle />
           {disciplina.certificado_disponivel && onBaixarCertificado && (
             <button type="button" onClick={() => void baixarCertificado()} disabled={baixando}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-400 disabled:opacity-50">
@@ -281,8 +304,8 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
         </div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-          {/* Conteúdo */}
-          <main className="min-w-0 space-y-5">
+          {/* Conteúdo (no celular: deslizar para os lados troca de aula) */}
+          <main className="min-w-0 space-y-5" onTouchStart={inicioToque} onTouchEnd={fimToque}>
             {carregandoAula && !aula ? (
               <div className="flex aspect-video items-center justify-center rounded-2xl bg-slate-900 text-blue-400"><Loader2 className="animate-spin" /></div>
             ) : erroAula ? (
@@ -394,8 +417,8 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
 
       {/* Barra de navegação fixa */}
       {aula && !modoProva && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur lg:left-72">
-          <div className="mx-auto flex max-w-[1400px] items-center gap-2 px-3 py-3 sm:px-6">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 pb-safe backdrop-blur lg:left-[var(--sidebar-w)]">
+          <div className="mx-auto flex max-w-[1400px] items-center gap-2 px-3 py-2.5 sm:px-6 sm:py-3">
             <button type="button" disabled={!aula.anterior_id} onClick={() => aula.anterior_id && navigate(`${base}/aulas/${aula.anterior_id}`)}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40">
               <ArrowLeft size={16} /> <span className="hidden sm:inline">Anterior</span>
@@ -428,21 +451,15 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
 
       {/* Trilha (mobile, bottom sheet) */}
       {trilhaMobile && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/60 lg:hidden" onClick={() => setTrilhaMobile(false)}>
-          <div className="max-h-[80vh] w-full overflow-y-auto rounded-t-3xl border-t border-slate-700 bg-slate-950 p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between">
-              <p className="font-bold text-white">Conteúdo da disciplina</p>
-              <button type="button" onClick={() => setTrilhaMobile(false)} aria-label="Fechar" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800"><X size={18} /></button>
-            </div>
-            {trilha}
-          </div>
-        </div>
+        <BottomSheet titulo="Conteúdo da disciplina" onFechar={fecharTrilha} focarSeletor='[aria-current="true"]'>
+          {trilha}
+        </BottomSheet>
       )}
 
       {/* Avisos */}
-      <div className="pointer-events-none fixed bottom-20 right-4 z-[60] flex flex-col items-end gap-2" aria-live="polite">
+      <div className="pointer-events-none fixed bottom-24 left-4 right-4 z-[60] flex flex-col items-center gap-2 sm:left-auto sm:items-end" aria-live="polite">
         {avisos.map((a) => (
-          <div key={a.id} className={`rounded-xl border px-4 py-3 text-sm font-semibold shadow-2xl ${
+          <div key={a.id} className={`max-w-[calc(100vw-2rem)] rounded-xl border px-4 py-3 text-sm font-semibold shadow-2xl ${
             a.tipo === 'sucesso' ? 'border-emerald-500/30 bg-emerald-950/95 text-emerald-100' : 'border-amber-500/30 bg-amber-950/95 text-amber-100'}`}>
             {a.texto}
           </div>
@@ -454,9 +471,9 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
 
       {/* Celebração de disciplina concluída */}
       {celebracao && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={() => setCelebracao(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 overflow-y-auto" onClick={() => setCelebracao(null)}>
           <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-3xl border border-nexus-yellow/40 bg-gradient-to-b from-slate-900 to-slate-950 p-8 text-center shadow-nexus-glow">
+            className="my-auto w-full max-w-md rounded-3xl border border-nexus-yellow/40 bg-gradient-to-b from-slate-900 to-slate-950 p-8 text-center shadow-nexus-glow">
             <span className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-nexus-yellow/15 text-nexus-yellow">
               <PartyPopper size={40} />
             </span>

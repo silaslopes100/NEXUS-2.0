@@ -306,17 +306,24 @@ async def test_ranking_polos_ordena_pelo_criterio_e_exporta_pdf(client: AsyncCli
     _, admin_repo = repos_setup
     admin_repo.ranking_polos_rows.extend([
         {"polo_id": "p1", "polo_nome": "Polo Alfa", "alunos_ativos": 10, "escolas_ativas": 1,
-         "novas_licencas": 5, "receita_paga": 500, "presencas_total": 10, "presencas_positivas": 9},
+         "novas_licencas": 5, "receita_paga": 500, "presencas_total": 10, "presencas_positivas": 9, "compras_polo": 5},
         {"polo_id": "p2", "polo_nome": "Polo Beta", "alunos_ativos": 30, "escolas_ativas": 2,
-         "novas_licencas": 12, "receita_paga": 300, "presencas_total": 0, "presencas_positivas": 0},
+         "novas_licencas": 12, "receita_paga": 300, "presencas_total": 0, "presencas_positivas": 0, "compras_polo": 12},
     ])
     headers = {"Authorization": f"Bearer {_get_admin_token()}"}
 
-    res = await client.get("/admin/dashboard/ranking-polos", headers=headers)
+    res = await client.get("/admin/dashboard/ranking-polos", params={"ordenar_por": "novas_licencas"}, headers=headers)
     assert res.status_code == 200
     itens = res.json()["items"]
     assert [(i["posicao"], i["polo_nome"]) for i in itens] == [(1, "Polo Beta"), (2, "Polo Alfa")]
     assert itens[1]["presenca_pct"] == 90.0 and itens[0]["presenca_pct"] is None
+
+    # Padrão: índice de desempenho (pesos 40/30/30). Alfa: 90% de presença + 5/12 das compras; Beta: só compras.
+    res = await client.get("/admin/dashboard/ranking-polos", headers=headers)
+    corpo = res.json()
+    assert corpo["ordenar_por"] == "indice"
+    assert [i["polo_nome"] for i in corpo["items"]] == ["Polo Alfa", "Polo Beta"]
+    assert corpo["items"][1]["compras_pct"] == 100.0 and corpo["items"][1]["indice"] == 30.0
 
     res = await client.get("/admin/dashboard/ranking-polos", params={"ordenar_por": "receita_paga"}, headers=headers)
     assert [i["polo_nome"] for i in res.json()["items"]] == ["Polo Alfa", "Polo Beta"]
