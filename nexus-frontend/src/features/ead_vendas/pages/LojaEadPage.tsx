@@ -300,7 +300,7 @@ export const LojaEadPage: React.FC = () => {
             )}
           </div>
           {turma && (
-            <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="grid grid-cols-3 gap-2 text-center sm:gap-3 [&>div]:px-2 sm:[&>div]:px-4">
               {[['Liberadas', resumo.liberadas], ['Para comprar', resumo.disponiveis], ['Disciplinas', resumo.total]].map(([r, v]) => (
                 <div key={r} className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
                   <p className="text-2xl font-extrabold text-white">{v}</p>

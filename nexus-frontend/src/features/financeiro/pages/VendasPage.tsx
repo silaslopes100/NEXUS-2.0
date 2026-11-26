@@ -109,6 +109,7 @@ export const VendasPage: React.FC = () => {
           <div className="grid gap-6 lg:grid-cols-2">
             <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <h2 className="border-b border-slate-800 p-4 font-bold text-white">Top Polos (receita paga)</h2>
+              <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-800 text-slate-300">
                   {kpis.top_polos.map((p, i) => (
@@ -123,9 +124,11 @@ export const VendasPage: React.FC = () => {
                   {!kpis.top_polos.length && <tr><td className="p-8 text-center text-slate-500">Nenhuma venda paga no período.</td></tr>}
                 </tbody>
               </table>
+              </div>
             </section>
             <section className="glass overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <h2 className="border-b border-slate-800 p-4 font-bold text-white">Pedidos por status</h2>
+              <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-800 text-slate-300">
                   {kpis.por_status.map((s) => (
@@ -139,6 +142,7 @@ export const VendasPage: React.FC = () => {
                   {!kpis.por_status.length && <tr><td className="p-8 text-center text-slate-500">Sem pedidos.</td></tr>}
                 </tbody>
               </table>
+              </div>
             </section>
           </div>
 

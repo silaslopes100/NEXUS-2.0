@@ -130,7 +130,7 @@ export const FrequenciaPorDisciplina: React.FC<{ dados: MinhaFrequencia }> = ({ 
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
               <div>
                 <p className="text-[11px] uppercase text-slate-500">Frequência</p>
                 <p className={`text-2xl font-black ${textoFrequencia(atual.percentual, minimo)}`}>{atual.percentual.toLocaleString('pt-BR')}%</p>

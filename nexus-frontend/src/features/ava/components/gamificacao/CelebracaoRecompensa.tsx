@@ -18,9 +18,9 @@ export const CelebracaoRecompensa: React.FC<Props> = ({ recompensa: r, onFechar 
   }, [r]);
 
   return (
-  <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 p-4" onClick={onFechar}>
+  <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 p-4 overflow-y-auto" onClick={onFechar}>
     <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-      className="w-full max-w-md rounded-3xl border border-nexus-yellow/40 bg-gradient-to-b from-slate-900 to-slate-950 p-7 text-center shadow-nexus-glow">
+      className="my-auto w-full max-w-md rounded-3xl border border-nexus-yellow/40 bg-gradient-to-b from-slate-900 to-slate-950 p-7 text-center shadow-nexus-glow">
       <p className="mb-4 flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-wide text-nexus-yellow">
         <Sparkles size={16} /> {r.subiu_nivel ? 'Você subiu de nível!' : r.conquistas.length > 1 ? 'Novas conquistas!' : 'Nova conquista!'}
       </p>

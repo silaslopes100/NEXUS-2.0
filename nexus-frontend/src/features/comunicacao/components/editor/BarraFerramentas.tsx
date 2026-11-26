@@ -77,7 +77,7 @@ const Paleta: React.FC<{
       </Botao>
       {aberta && (
         <div
-          className="absolute left-0 top-9 z-20 w-48 rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-xl"
+          className="absolute left-0 top-9 z-20 w-48 max-w-[calc(100vw-2rem)] -translate-x-1/3 rounded-xl sm:translate-x-0 border border-slate-700 bg-slate-900 p-2 shadow-xl"
           onMouseLeave={() => setAberta(false)}
         >
           <div className="grid grid-cols-6 gap-1.5">

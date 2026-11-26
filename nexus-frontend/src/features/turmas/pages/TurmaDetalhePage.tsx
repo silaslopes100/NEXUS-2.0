@@ -132,9 +132,9 @@ const CancelarModal: React.FC<{ turma: Turma; aoFechar: () => void; aoConcluir: 
     }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
       <form onSubmit={enviar} role="dialog" aria-modal="true" aria-labelledby="cancelar-turma-titulo"
-        className="glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        className="my-auto glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 id="cancelar-turma-titulo" className="flex items-center gap-2 text-lg font-bold text-white">
             <Ban className="h-5 w-5 text-red-400" /> Cancelar turma
@@ -409,9 +409,9 @@ export const TurmaDetalhePage: React.FC = () => {
         />
       )}
       {modal === 'excluir' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
           <div role="dialog" aria-modal="true" aria-labelledby="excluir-turma-titulo"
-            className="glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            className="my-auto glass w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
             <h2 id="excluir-turma-titulo" className="flex items-center gap-2 text-lg font-bold text-white">
               <Trash2 className="h-5 w-5 text-red-400" /> Excluir turma
             </h2>

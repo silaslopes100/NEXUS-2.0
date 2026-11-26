@@ -68,7 +68,7 @@ export const AvisosPopupHost: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true"
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3 pb-safe-4 sm:p-4" role="dialog" aria-modal="true"
       aria-label={atual.titulo}>
       <div className={`w-full ${LARGURAS[atual.largura]?.classe ?? 'max-w-2xl'}`}>
         <AvisoConteudo

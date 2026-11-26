@@ -302,8 +302,8 @@ export const DiarioAulasPage: React.FC = () => {
       )}
 
       {excluindo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <section role="alertdialog" aria-modal="true" className="glass w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+          <section role="alertdialog" aria-modal="true" className="my-auto glass w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6">
             <h2 className="text-lg font-bold text-white">Excluir esta aula?</h2>
             <p className="mt-2 text-sm text-slate-400">
               A aula de {formatarData(excluindo.data_aula)} (nº {excluindo.numero_aula}) será removida com a ata, a

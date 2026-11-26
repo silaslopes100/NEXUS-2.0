@@ -40,7 +40,8 @@ export const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="-m-6 h-[calc(100dvh-4rem)] lg:-m-8">
+    // O AppLayout não aplica espaçamento no /chat: ocupa a altura útil entre o cabeçalho e a barra inferior.
+    <div className="h-[calc(100dvh-var(--altura-cabecalho)-var(--altura-barra-inferior))]">
       <div className="flex h-full min-h-0 overflow-hidden border-slate-800 bg-slate-900/60">
         <section className={`h-full min-h-0 w-full border-r border-slate-800 lg:block lg:w-[340px] lg:shrink-0 ${selecionadaId ? 'hidden' : 'block'}`}>
           <ConversaLista conversas={conversas} selecionadaId={selecionadaId} meuId={meuId}

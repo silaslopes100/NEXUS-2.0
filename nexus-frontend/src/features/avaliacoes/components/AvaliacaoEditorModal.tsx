@@ -220,7 +220,7 @@ export const AvaliacaoEditorModal: React.FC<Props> = ({ disciplinaId, disciplina
                 <span className="mb-1 block text-xs text-slate-400">Instruções para o aluno (opcional)</span>
                 <textarea rows={2} className={inputClass} value={instrucoes} onChange={(e) => setInstrucoes(e.target.value)} />
               </label>
-              <div className="grid grid-cols-3 gap-3 md:col-span-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 md:col-span-2">
                 <label>
                   <span className="mb-1 block text-xs text-slate-400">Tempo limite (min)</span>
                   <input className={inputClass} inputMode="numeric" placeholder="Livre" value={tempo}

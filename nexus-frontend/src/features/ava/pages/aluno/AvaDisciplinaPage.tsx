@@ -471,9 +471,9 @@ export const AvaDisciplinaPage: React.FC<Props> = ({ previa = false, modo = 'dis
 
       {/* Celebração de disciplina concluída */}
       {celebracao && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={() => setCelebracao(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 overflow-y-auto" onClick={() => setCelebracao(null)}>
           <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-3xl border border-nexus-yellow/40 bg-gradient-to-b from-slate-900 to-slate-950 p-8 text-center shadow-nexus-glow">
+            className="my-auto w-full max-w-md rounded-3xl border border-nexus-yellow/40 bg-gradient-to-b from-slate-900 to-slate-950 p-8 text-center shadow-nexus-glow">
             <span className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-nexus-yellow/15 text-nexus-yellow">
               <PartyPopper size={40} />
             </span>

@@ -116,7 +116,7 @@ export const CheckoutDrawer: React.FC<Props> = ({ turma, disciplina: d, endereco
               {comLivro && (
                 <section className="space-y-3 rounded-2xl border border-slate-800 p-4">
                   <p className="text-sm font-bold text-white">Endereço de entrega</p>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
                     <label className="col-span-1">
                       <span className={rotulo}>CEP</span>
                       <span className="relative block">

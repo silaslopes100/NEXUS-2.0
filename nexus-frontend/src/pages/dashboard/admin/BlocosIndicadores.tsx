@@ -106,7 +106,7 @@ export const BlocoLicencas: React.FC<{ dados: DashboardExecutivo['licencas'] | n
       <Cabecalho icone={KeyRound} titulo="Licenças" to="/admin/licencas" acao="Gestão de licenças" />
       {!dados ? <Estado erro={erro} /> : (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
             <Mini rotulo="Em estoque" valor={fmtInt(dados.estoque_disponivel)} detalhe="disponível hoje" />
             <Mini rotulo="Consumidas" valor={fmtInt(dados.consumo_periodo)} detalhe={`anterior: ${fmtInt(dados.consumo_anterior)}`} />
             <Mini

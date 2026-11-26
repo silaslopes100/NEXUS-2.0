@@ -167,7 +167,7 @@ export const CompositorMensagem: React.FC<Props> = ({ desabilitado, motivoDesabi
                 void enviar();
               }
             }}
-            className="max-h-40 min-h-[42px] flex-1 resize-none rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-nexus-yellow/50 focus:outline-none" />
+            className="max-h-40 min-h-[42px] min-w-0 flex-1 resize-none rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-nexus-yellow/50 focus:outline-none" />
           {texto.trim() || arquivo ? (
             <button type="button" onClick={() => void enviar()} disabled={enviando} aria-label="Enviar"
               className="rounded-xl bg-nexus-yellow p-2.5 text-ink hover:bg-nexus-yellow/90 disabled:opacity-60">

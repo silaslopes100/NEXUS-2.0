@@ -34,6 +34,8 @@ export const AppLayout: React.FC = () => {
   const noPlayer = /^\/aluno\/ava\/disciplinas\//.test(location.pathname);
   const barraAluno = ehAluno && !viaLicenca && !noPlayer;
   const alunoEad = !!user?.aluno_ead && !user?.tambem_aluno;
+  // Telas que ocupam toda a área útil, sem espaçamento nem rolagem do <main> (o Chat rola por dentro).
+  const telaCheia = location.pathname.startsWith('/chat');
 
   const fecharMenu = useCallback(() => setMobileMenuOpen(false), []);
   const alternarRecolhido = () => {
@@ -49,7 +51,9 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div
-      className="relative isolate min-h-screen min-h-dvh bg-nexus-page text-slate-100 flex"
+      className={`relative isolate min-h-screen min-h-dvh bg-nexus-page text-slate-100 flex
+        [--altura-cabecalho:calc(3.5rem+env(safe-area-inset-top,0px))] sm:[--altura-cabecalho:4rem]
+        ${barraAluno ? '[--altura-barra-inferior:calc(3.875rem+env(safe-area-inset-bottom,0px))] lg:[--altura-barra-inferior:0px]' : '[--altura-barra-inferior:0px]'}`}
       style={{ '--sidebar-w': recolhido ? '5rem' : '18rem' } as React.CSSProperties}
     >
       <AppBackdrop />
@@ -62,19 +66,22 @@ export const AppLayout: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col lg:pl-[var(--sidebar-w)] transition-all duration-300 min-w-0">
+      <div className="flex-1 flex flex-col lg:pl-[var(--sidebar-w)] transition-all duration-300 min-w-0 overflow-x-hidden">
 
         {/* Top Navbar */}
         <header className="glass-panel pt-safe border-b border-slate-800/80 sticky top-0 z-30">
           <div className="h-14 sm:h-16 px-3 sm:px-6 flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 min-w-0">
-              <button
-                onClick={() => setMobileMenuOpen(true)}
-                aria-label="Abrir menu"
-                className="lg:hidden p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
+              {/* Aluno com barra inferior abre o menu por lá (um único botão de menu no celular). */}
+              {!barraAluno && (
+                <button
+                  onClick={() => setMobileMenuOpen(true)}
+                  aria-label="Abrir menu"
+                  className="lg:hidden p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+              )}
 
               <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
                 <span className="font-semibold text-slate-300">NEXUS 2.0</span>
@@ -121,7 +128,8 @@ export const AppLayout: React.FC = () => {
         </header>
 
         {/* Page Content */}
-        <main className={`flex-1 px-3 py-4 sm:p-6 lg:p-8 overflow-y-auto ${barraAluno ? 'pb-28 lg:pb-8' : ''}`}>
+        <main className={`flex-1 min-w-0 overflow-x-hidden ${
+          telaCheia ? 'overflow-y-hidden p-0' : `px-3 py-4 sm:p-6 lg:p-8 overflow-y-auto ${barraAluno ? 'pb-28 lg:pb-8' : ''}`}`}>
           <Outlet />
         </main>
       </div>

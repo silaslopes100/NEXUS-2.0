@@ -41,9 +41,9 @@ export const LogisticaDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl space-y-8">
-      <header className="glass flex items-center justify-between rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-indigo-950/40 p-8 shadow-2xl">
+      <header className="glass flex flex-col gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 to-indigo-950/40 p-5 shadow-2xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <h1 className="text-3xl font-extrabold text-white">Painel de logística{user?.nome ? `, ${user.nome}` : ''}</h1>
+          <h1 className="break-words text-2xl font-extrabold text-white sm:text-3xl">Painel de logística{user?.nome ? `, ${user.nome}` : ''}</h1>
           <p className="mt-1 max-w-xl text-sm text-slate-400">Envio e entrega dos livros didáticos pagos pelos Polos.</p>
         </div>
         <button onClick={load} title="Recarregar" className="rounded-xl border border-slate-700 p-3 text-slate-300 hover:text-white"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>

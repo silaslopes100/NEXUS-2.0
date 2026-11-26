@@ -384,9 +384,9 @@ export const UsuarioFichaPage: React.FC = () => {
       )}
 
       {modal === 'senha' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
           <div role="dialog" aria-modal="true" aria-labelledby="titulo-senha"
-            className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
+            className="my-auto glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h2 id="titulo-senha" className="flex items-center gap-2 text-white font-bold text-sm">
                 <KeyRound className="w-4 h-4 text-nexus-yellow" /> Redefinir senha
@@ -427,9 +427,9 @@ export const UsuarioFichaPage: React.FC = () => {
       )}
 
       {modal === 'excluir' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
           <div role="dialog" aria-modal="true" aria-labelledby="titulo-excluir"
-            className="glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
+            className="my-auto glass bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-fadeIn">
             <h2 id="titulo-excluir" className="flex items-center gap-2 text-white font-bold text-sm pb-3 border-b border-slate-800">
               <Trash2 className="w-4 h-4 text-red-400" /> Excluir definitivamente
             </h2>

@@ -613,7 +613,7 @@ export const DisciplinasPage: React.FC = () => {
                   >
                     <div className="sm:col-span-2">
                       <h3 className="font-semibold text-white">{professor.nome}</h3>
-                      <p className="text-sm text-slate-400">{professor.email || 'E-mail não informado'}</p>
+                      <p className="break-all text-sm text-slate-400">{professor.email || 'E-mail não informado'}</p>
                     </div>
                     <p className="text-sm text-slate-300">
                       <span className="text-slate-500">Polo: </span>

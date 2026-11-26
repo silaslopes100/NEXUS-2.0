@@ -148,6 +148,7 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
 
             {!ehTroca && <div>
               <h3 className="mb-2 text-xs font-bold uppercase text-slate-500">Itens</h3>
+              <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-800">
                   {pedido.itens.map((i) => (
@@ -159,6 +160,7 @@ export const PedidoDetalheDrawer: React.FC<Props> = ({ pedidoId, podeAlterarStat
                   ))}
                 </tbody>
               </table>
+              </div>
               <div className="mt-2 space-y-1 border-t border-slate-800 pt-2 text-right text-xs text-slate-400">
                 {Number(pedido.desconto) > 0 && <p>Desconto: −{formatBRL(pedido.desconto)}</p>}
                 <p className="text-base font-bold text-white">Total {formatBRL(pedido.valor_total)}</p>

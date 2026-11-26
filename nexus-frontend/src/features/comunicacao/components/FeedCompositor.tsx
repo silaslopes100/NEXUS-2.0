@@ -274,10 +274,10 @@ export const FeedCompositor: React.FC<Props> = ({ post, onSalvo, onCancelar }) =
       )}
 
       {campoLink !== null && (
-        <form className="flex gap-2" onSubmit={(ev) => { ev.preventDefault(); void adicionarLink(campoLink); setCampoLink(null); }}>
+        <form className="flex flex-wrap gap-2" onSubmit={(ev) => { ev.preventDefault(); void adicionarLink(campoLink); setCampoLink(null); }}>
           <input autoFocus value={campoLink} onChange={(ev) => setCampoLink(ev.target.value)} placeholder="https://..."
-            className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-nexus-yellow focus:outline-none" />
-          <button type="submit" className="rounded-xl bg-slate-800 px-3 text-sm text-white hover:bg-slate-700">Adicionar</button>
+            className="min-w-0 flex-1 basis-full rounded-xl sm:basis-auto border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-nexus-yellow focus:outline-none" />
+          <button type="submit" className="rounded-xl bg-slate-800 px-3 py-2 text-sm text-white hover:bg-slate-700">Adicionar</button>
           <button type="button" onClick={() => setCampoLink(null)} className="px-2 text-sm text-slate-400">Cancelar</button>
         </form>
       )}

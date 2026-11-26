@@ -22,7 +22,7 @@ const PRESENCIAL: Item[] = [
 export const BarraInferiorAluno: React.FC<{ ead: boolean; onAbrirMenu: () => void }> = ({ ead, onAbrirMenu }) => {
   const itens = ead ? EAD : PRESENCIAL;
   const classe = (ativo: boolean) =>
-    `flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition ${
+    `flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold transition ${
       ativo ? 'text-nexus-yellow' : 'text-slate-400 active:text-white'}`;
   return (
     <nav aria-label="Navegação rápida"
@@ -35,14 +35,14 @@ export const BarraInferiorAluno: React.FC<{ ead: boolean; onAbrirMenu: () => voi
                 <span className={`flex h-7 w-12 items-center justify-center rounded-full transition ${isActive ? 'bg-nexus-yellow/15' : ''}`}>
                   <i.icone size={19} strokeWidth={isActive ? 2.4 : 2} />
                 </span>
-                {i.rotulo}
+                <span className="max-w-full truncate max-[359px]:text-[9px]">{i.rotulo}</span>
               </>
             )}
           </NavLink>
         ))}
         <button type="button" onClick={onAbrirMenu} className={classe(false)} aria-label="Abrir menu">
           <span className="flex h-7 w-12 items-center justify-center"><Menu size={19} /></span>
-          Menu
+          <span className="max-[359px]:text-[9px]">Menu</span>
         </button>
       </div>
     </nav>

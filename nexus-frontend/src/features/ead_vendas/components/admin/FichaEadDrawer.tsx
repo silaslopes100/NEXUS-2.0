@@ -19,8 +19,8 @@ const LiberarModal: React.FC<{ disciplina: DisciplinaLoja; onConfirmar: (m: Moti
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onMouseDown={onFechar}>
-      <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 overflow-y-auto" onMouseDown={onFechar}>
+      <div className="my-auto w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <div>
           <h3 className="text-lg font-bold text-white">Liberar disciplina</h3>
           <p className="text-sm text-slate-400">{disciplina.nome} — abre no AVA sem cobrança. Uma cobrança pendente dela é cancelada.</p>

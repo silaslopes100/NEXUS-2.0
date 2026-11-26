@@ -346,7 +346,7 @@ export const ProfessoresPage: React.FC = () => {
                         />
                         <div>
                           <p className="font-semibold text-white">{p.nome || 'Sem vínculo'}</p>
-                          <p className="text-[11px] text-slate-400">{p.email || '—'}</p>
+                          <p className="break-all text-[11px] text-slate-400">{p.email || '—'}</p>
                         </div>
                       </div>
                     </td>

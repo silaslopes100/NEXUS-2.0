@@ -11,12 +11,24 @@
     @apply bg-nexus-page text-slate-100 font-sans antialiased;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
-  }
-  /* Celular: evita o zoom automático do iOS ao focar campos com fonte < 16px. */
-  @media (max-width: 639px) {
-    input, select, textarea { font-size: max(16px, 1em); }
+    /* E-mails, URLs e palavras longas quebram em vez de empurrar a tela para o lado. */
+    overflow-wrap: break-word;
   }
 }
+
+/* Celular: o iOS amplia a página ao focar campos com fonte < 16px (e o zoom fica preso).
+   Fora do @layer e com !important para vencer as classes text-sm/text-xs dos campos. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea,
+  [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+}
+
+/* Mídia nunca mais larga que o contêiner. */
+img, video, iframe { max-width: 100%; }
 
 /* Áreas seguras (notch, barra de gestos) — o viewport usa viewport-fit=cover. */
 @layer utilities {

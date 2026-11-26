@@ -100,7 +100,7 @@ export const ModeracaoFeedPage: React.FC = () => {
         </button>
       </header>
 
-      <nav className="flex gap-1 rounded-2xl border border-slate-800 bg-slate-900/60 p-1" aria-label="Situação">
+      <nav className="rolagem-sem-barra flex gap-1 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-1 [&>*]:shrink-0" aria-label="Situação">
         {ABAS.map((a) => (
           <button key={a.valor} type="button" onClick={() => { setAba(a.valor); setOffset(0); }}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${

@@ -74,7 +74,7 @@ export const ProfessorDetalheModal: React.FC<Props> = ({ professorId, onClose })
         <header className="flex items-start justify-between gap-4">
           <div>
             <h2 id="detalhe-professor-titulo" className="text-xl font-bold text-white">Detalhe do professor</h2>
-            {detalhe && <p className="mt-1 text-sm text-slate-400">{detalhe.professor.nome || 'Sem nome'} · {detalhe.professor.email || 'Sem e-mail'}</p>}
+            {detalhe && <p className="mt-1 break-words text-sm text-slate-400">{detalhe.professor.nome || 'Sem nome'} · {detalhe.professor.email || 'Sem e-mail'}</p>}
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar detalhe" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white">
             <X className="h-5 w-5" />

@@ -6,7 +6,7 @@ import { useInstalarApp } from '@/lib/useInstalarApp';
 const PassoAPassoIos: React.FC<{ onFechar: () => void }> = ({ onFechar }) => (
   <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" onClick={onFechar}>
     <div role="dialog" aria-modal="true" aria-labelledby="instalar-titulo" onClick={(e) => e.stopPropagation()}
-      className="w-full max-w-sm space-y-4 rounded-t-3xl border border-slate-700 bg-slate-900 p-6 pb-safe-4 text-left shadow-2xl sm:rounded-3xl">
+      className="max-h-[90dvh] w-full max-w-sm space-y-4 overflow-y-auto rounded-t-3xl border border-slate-700 bg-slate-900 p-6 pb-safe-4 text-left shadow-2xl sm:rounded-3xl">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <img src="/icons/icon-192.png" alt="" className="h-12 w-12 rounded-xl" />
@@ -41,7 +41,7 @@ const PassoAPassoIos: React.FC<{ onFechar: () => void }> = ({ onFechar }) => (
 const PassoAPassoAndroid: React.FC<{ onFechar: () => void }> = ({ onFechar }) => (
   <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 sm:items-center sm:p-4" onClick={onFechar}>
     <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-      className="w-full max-w-sm space-y-4 rounded-t-3xl border border-slate-700 bg-slate-900 p-6 pb-safe-4 text-left shadow-2xl sm:rounded-3xl">
+      className="max-h-[90dvh] w-full max-w-sm space-y-4 overflow-y-auto rounded-t-3xl border border-slate-700 bg-slate-900 p-6 pb-safe-4 text-left shadow-2xl sm:rounded-3xl">
       <h2 className="font-bold text-white">Instalar o NEXUS</h2>
       <p className="text-sm text-slate-300">
         No Chrome, toque em <MoreVertical size={15} className="mx-0.5 inline" /> <b>(menu)</b> e escolha <b>Instalar app</b> ou

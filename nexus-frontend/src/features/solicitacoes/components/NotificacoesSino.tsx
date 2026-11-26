@@ -71,7 +71,7 @@ export const NotificacoesSino: React.FC = () => {
         )}
       </button>
       {aberto && (
-        <div className="glass absolute right-0 z-40 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+        <div className="glass fixed right-3 top-[calc(var(--altura-cabecalho,4rem)+0.25rem)] z-40 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl sm:absolute sm:right-0 sm:top-auto sm:mt-2 border border-slate-700 bg-slate-900 shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
             <span className="text-sm font-semibold text-white">Notificações</span>
             {naoLidas > 0 && (

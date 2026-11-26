@@ -51,8 +51,8 @@ const PesosModal: React.FC<{ atual?: PesosRanking | null; onFechar: () => void; 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onMouseDown={onFechar}>
-      <div className="w-full max-w-lg space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto" onMouseDown={onFechar}>
+      <div className="my-auto w-full max-w-lg space-y-5 rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-white">Pesos do índice de desempenho</h3>
