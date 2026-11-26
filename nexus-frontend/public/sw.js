@@ -4,7 +4,7 @@
  * - Chamadas de API e outras origens NUNCA passam pelo cache (dados sempre atuais e privados).
  * Troque VERSAO para descartar os caches antigos.
  */
-const VERSAO = 'nexus-v1';
+const VERSAO = 'nexus-v2'; // v2: ícones oficiais ETADEMP
 const CACHE_ESTATICO = `${VERSAO}-estatico`;
 const CACHE_PAGINAS = `${VERSAO}-paginas`;
 const PRE_CACHE = ['/offline.html', '/icons/icon-192.png', '/manifest.webmanifest'];
