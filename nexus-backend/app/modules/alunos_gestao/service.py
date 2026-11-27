@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException, status
+
+from app.modules.admin.schemas import UsuarioFichaResponse
 
 from app.modules.alunos_gestao.repository import (
     LICENCAS_REINGRESSO,
@@ -141,6 +143,25 @@ class AlunosGestaoService:
                 )
             )
         return AlunoGestaoListResponse(total=total, items=itens, limit=limit, offset=offset)
+
+    def ficha(
+        self,
+        ator: Ator,
+        aluno_id: str,
+        carregar_ficha: Callable[[str], UsuarioFichaResponse],
+    ) -> UsuarioFichaResponse:
+        """Ficha cadastral do aluno para a equipe da unidade (somente leitura).
+
+        Polo e Escola só abrem alunos da própria unidade. A resposta não traz as
+        permissões de sistema nem o vínculo de professor (valor da hora-aula e
+        chave PIX), que continuam restritos ao admin em /admin/usuarios.
+        """
+        aluno = self._aluno_no_escopo(ator, aluno_id)
+        usuario_id = _texto(aluno.get("usuario_id"))
+        if not usuario_id:
+            raise _erro(status.HTTP_404_NOT_FOUND, "Aluno sem conta de usuário vinculada")
+        ficha = carregar_ficha(usuario_id)
+        return ficha.model_copy(update={"permissoes": [], "professor": None})
 
     def academico(self, ator: Ator, aluno_id: str) -> AcademicoResponse:
         aluno = self._aluno_no_escopo(ator, aluno_id)

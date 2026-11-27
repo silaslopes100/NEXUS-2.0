@@ -33,6 +33,7 @@ import { PolosEscolasPage } from '@/features/polos_escolas/pages/PolosEscolasPag
 import { EscolasPage } from '@/features/polos_escolas/pages/EscolasPage';
 import { LicencasEscolaPage } from '@/features/licencas/pages/LicencasEscolaPage';
 import { AlunosPage } from '@/features/alunos/pages/AlunosPage';
+import { AlunoFichaPage } from '@/features/alunos/pages/AlunoFichaPage';
 import { PerfilAlunoPage } from '@/features/alunos/pages/PerfilAlunoPage';
 import { TurmasPage } from '@/features/turmas/pages/TurmasPage';
 import { TurmaDetalhePage } from '@/features/turmas/pages/TurmaDetalhePage';
@@ -184,6 +185,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/polo/escolas/gestao" element={<EscolasPage />} />
           <Route path="/polo/escolas/:escolaId/licencas" element={<LicencasEscolaPage />} />
           <Route path="/polo/alunos" element={<AlunosPage />} />
+          <Route path="/polo/alunos/:alunoId/ficha" element={<AlunoFichaPage />} />
           <Route path="/polo/turmas" element={<TurmasPage />} />
           <Route path="/polo/turmas/nova" element={<NovaTurmaPage />} />
           <Route path="/polo/turmas/:turmaId" element={<TurmaDetalhePage />} />
@@ -201,6 +203,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/escola/dashboard" element={<EscolaDashboardPage />} />
           <Route path="/escola/cursos" element={<CursosPage />} />
           <Route path="/escola/alunos" element={<AlunosPage />} />
+          <Route path="/escola/alunos/:alunoId/ficha" element={<AlunoFichaPage />} />
           <Route path="/escola/turmas" element={<TurmasPage />} />
           <Route path="/escola/turmas/nova" element={<NovaTurmaPage />} />
           <Route path="/escola/turmas/:turmaId" element={<TurmaDetalhePage />} />

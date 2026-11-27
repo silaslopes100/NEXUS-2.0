@@ -1,4 +1,5 @@
 import { apiClient } from '@/api/client';
+import type { UsuarioFicha } from '@/types/admin';
 
 export type Modalidade = 'polo' | 'escola' | 'ead';
 
@@ -211,6 +212,12 @@ export const alunosGestaoApi = {
 
   academico: async (alunoId: string): Promise<Academico> => {
     const { data } = await apiClient.get<Academico>(`/alunos/gestao/${alunoId}/academico`);
+    return data;
+  },
+
+  /** Ficha cadastral (somente leitura) para Polo e Escola; o admin usa /admin/usuarios/:id. */
+  ficha: async (alunoId: string): Promise<UsuarioFicha> => {
+    const { data } = await apiClient.get<UsuarioFicha>(`/alunos/gestao/${alunoId}/ficha`);
     return data;
   },
 

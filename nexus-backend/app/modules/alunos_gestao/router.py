@@ -8,6 +8,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.core.file_storage import academic_file_response
+from app.modules.admin.dependencies import get_admin_service
+from app.modules.admin.schemas import UsuarioFichaResponse
+from app.modules.admin.service import AdminService
 from app.modules.alunos_gestao.pdf import gerar_boletim_pdf
 from app.modules.alunos_gestao.repository import (
     AlunosGestaoRepositoryInterface,
@@ -66,6 +69,21 @@ async def listar_alunos(
         limit,
         offset,
     )
+
+
+@router.get(
+    "/{aluno_id}/ficha",
+    response_model=UsuarioFichaResponse,
+    dependencies=[Depends(require_role(_GESTAO))],
+    summary="Ficha cadastral do aluno (somente leitura) para a equipe da unidade",
+)
+async def ficha_aluno(
+    aluno_id: uuid.UUID,
+    current_user: UserResponse = Depends(get_current_user),
+    service: AlunosGestaoService = Depends(get_alunos_gestao_service),
+    admin_service: AdminService = Depends(get_admin_service),
+):
+    return service.ficha(ator_de(current_user), str(aluno_id), admin_service.get_usuario_ficha)
 
 
 @router.get(

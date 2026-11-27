@@ -14,7 +14,8 @@ import {
 
 interface Props {
   ficha: UsuarioFicha;
-  aoSalvar: (mensagem: string) => void;
+  /** Sem ela as seções ficam somente leitura (ficha vista por Polo/Escola). */
+  aoSalvar?: (mensagem: string) => void;
 }
 
 const SelectUf: React.FC<{ value: string; onChange: (v: string) => void; id?: string }> = ({ value, onChange, id }) => (
@@ -37,13 +38,13 @@ const SecaoIdentificacao: React.FC<Props> = ({ ficha, aoSalvar }) => {
         cpf: mascaraCpf(ficha.cpf || ''), telefone: formatPhone(ficha.telefone || ''),
         celular: formatPhone(ficha.celular || ''),
       })}
-      aoSalvar={async () => {
+      aoSalvar={aoSalvar && (async () => {
         await adminApi.salvarSecaoFicha(ficha.id, 'identificacao', {
           nome: f.nome.trim(), sobrenome: f.sobrenome.trim(), email: f.email.trim(),
           cpf: ouNull(onlyDigits(f.cpf)), telefone: ouNull(onlyDigits(f.telefone)), celular: ouNull(onlyDigits(f.celular)),
         });
         aoSalvar('Identificação atualizada.');
-      }}
+      })}
       leitura={
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <DadoItem icon={<Mail className="w-3 h-3" />} label="E-mail" value={vazio(ficha.email)} />
@@ -102,7 +103,7 @@ const SecaoDadosPessoais: React.FC<Props> = ({ ficha, aoSalvar }) => {
       titulo="Dados pessoais"
       icone={<IdCard className="w-4 h-4" />}
       aoEditar={() => setF(novo())}
-      aoSalvar={async () => {
+      aoSalvar={aoSalvar && (async () => {
         await adminApi.salvarSecaoFicha(ficha.id, 'dados-pessoais', {
           data_nascimento: ouNull(f.data_nascimento), rg: ouNull(f.rg), rg_orgao_emissor: ouNull(f.rg_orgao_emissor),
           rg_uf: ouNull(f.rg_uf), sexo: ouNull(f.sexo), estado_civil: ouNull(f.estado_civil),
@@ -110,7 +111,7 @@ const SecaoDadosPessoais: React.FC<Props> = ({ ficha, aoSalvar }) => {
           nacionalidade: ouNull(f.nacionalidade),
         });
         aoSalvar('Dados pessoais atualizados.');
-      }}
+      })}
       leitura={
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <DadoItem icon={<CalendarDays className="w-3 h-3" />} label="Nascimento" value={formatarData(d.data_nascimento)} />
@@ -217,13 +218,13 @@ const SecaoEndereco: React.FC<Props> = ({ ficha, aoSalvar }) => {
         setF(novo());
         setCepStatus({ carregando: false, msg: '' });
       }}
-      aoSalvar={async () => {
+      aoSalvar={aoSalvar && (async () => {
         await adminApi.salvarSecaoFicha(ficha.id, 'endereco', {
           cep: ouNull(onlyDigits(f.cep)), logradouro: ouNull(f.logradouro), numero: ouNull(f.numero),
           complemento: ouNull(f.complemento), bairro: ouNull(f.bairro), cidade: ouNull(f.cidade), uf: ouNull(f.uf),
         });
         aoSalvar('Endereço atualizado.');
-      }}
+      })}
       leitura={
         linha1 || linha2 || d.cep ? (
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -283,13 +284,13 @@ const SecaoContatoEmergencia: React.FC<Props> = ({ ficha, aoSalvar }) => {
       titulo="Contato de emergência"
       icone={<HeartPulse className="w-4 h-4" />}
       aoEditar={() => setF(novo())}
-      aoSalvar={async () => {
+      aoSalvar={aoSalvar && (async () => {
         await adminApi.salvarSecaoFicha(ficha.id, 'contato-emergencia', {
           contato_emergencia_nome: ouNull(f.nome), contato_emergencia_parentesco: ouNull(f.parentesco),
           contato_emergencia_telefone: ouNull(onlyDigits(f.telefone)),
         });
         aoSalvar('Contato de emergência atualizado.');
-      }}
+      })}
       leitura={
         d.contato_emergencia_nome || d.contato_emergencia_telefone ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -19,6 +19,9 @@ from app.modules.alunos_gestao.repository import (
     InMemoryAlunosGestaoRepository,
     set_alunos_gestao_repository,
 )
+from app.modules.admin.dependencies import get_admin_service
+from app.modules.admin.ficha_schemas import DadosCadastraisFicha
+from app.modules.admin.schemas import AlunoVinculoFicha, ProfessorVinculoFicha, UsuarioFichaResponse
 from app.modules.alunos_gestao.schemas import ReingressoRequest
 from app.modules.alunos_gestao.service import AlunosGestaoService
 from app.modules.auth.repository import InMemoryAuthRepository, set_auth_repository
@@ -178,6 +181,53 @@ def test_boletim_respeita_o_escopo(service):
     assert _codigo(service.academico, OUTRO_COORDENADOR, ATIVO) == 403
     assert service.academico(COORDENADOR, ATIVO).aluno_id == ATIVO
     assert _codigo(service.academico, ADMIN, str(uuid.uuid4())) == 404
+
+
+# ---------- Ficha cadastral (Polo/Escola, somente leitura) ----------
+
+
+def _ficha_completa(usuario_id: str) -> UsuarioFichaResponse:
+    return UsuarioFichaResponse(
+        id=usuario_id,
+        nome="Aluno",
+        cpf="12345678901",
+        permissoes=["usuarios.editar"],
+        dados=DadosCadastraisFicha(cidade="Campinas", contato_emergencia_nome="Mãe"),
+        aluno=AlunoVinculoFicha(id=ATIVO, usuario_id=usuario_id, polo_id=POLO, escola_id=ESCOLA),
+        professor=ProfessorVinculoFicha(id="pr-1", usuario_id=usuario_id, chave_pix="pix@x", valor_hora_aula=50),
+    )
+
+
+def test_ficha_abre_o_usuario_do_aluno_e_omite_dados_restritos(service):
+    carregados = []
+
+    def carregar(usuario_id):
+        carregados.append(usuario_id)
+        return _ficha_completa(usuario_id)
+
+    ficha = service.ficha(COORDENADOR, ATIVO, carregar)
+
+    assert carregados == ["ativo"]
+    assert ficha.dados.cidade == "Campinas"
+    assert ficha.dados.contato_emergencia_nome == "Mãe"
+    assert ficha.aluno.id == ATIVO
+    # Permissões de sistema e dados de pagamento do professor ficam só com o admin.
+    assert ficha.permissoes == []
+    assert ficha.professor is None
+
+
+def test_ficha_respeita_o_escopo_da_unidade(service, repo):
+    assert service.ficha(SECRETARIO, ATIVO, _ficha_completa).id == "ativo"
+    assert _codigo(service.ficha, OUTRO_COORDENADOR, ATIVO, _ficha_completa) == 403
+    # Aluno em Churn fica sem Polo: só o admin abre a ficha.
+    assert _codigo(service.ficha, COORDENADOR, CHURN, _ficha_completa) == 403
+    assert service.ficha(ADMIN, CHURN, _ficha_completa).id == "churn"
+    assert _codigo(service.ficha, ADMIN, str(uuid.uuid4()), _ficha_completa) == 404
+
+
+def test_ficha_de_aluno_sem_conta_de_usuario(service, repo):
+    repo.alunos[ATIVO]["usuario_id"] = None
+    assert _codigo(service.ficha, COORDENADOR, ATIVO, _ficha_completa) == 404
 
 
 # ---------- Churn ----------
@@ -515,6 +565,30 @@ def test_boletim_pdf_gera_arquivo_com_acentos(service, repo):
     assert gerar_boletim_pdf(academico).startswith(b"%PDF")
     assert gerar_boletim_pdf(academico, "c-1").startswith(b"%PDF")
     assert gerar_boletim_pdf(academico, "inexistente").startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_rota_ficha_do_aluno_para_polo(client):
+    class AdminServiceFalso:
+        def get_usuario_ficha(self, usuario_id):
+            return _ficha_completa(usuario_id)
+
+    app.dependency_overrides[get_admin_service] = AdminServiceFalso
+    try:
+        polo = await client.get(f"/alunos/gestao/{ATIVO}/ficha", headers=_headers("polo-1", "polo"))
+        fora = await client.get(f"/alunos/gestao/{CHURN}/ficha", headers=_headers("polo-1", "polo"))
+        aluno = await client.get(f"/alunos/gestao/{ATIVO}/ficha", headers=_headers("aluno-1", "aluno"))
+    finally:
+        app.dependency_overrides.pop(get_admin_service, None)
+
+    assert polo.status_code == 200
+    corpo = polo.json()
+    assert corpo["id"] == "ativo"
+    assert corpo["dados"]["cidade"] == "Campinas"
+    assert corpo["permissoes"] == []
+    assert corpo["professor"] is None
+    assert fora.status_code == 403
+    assert aluno.status_code == 403
 
 
 @pytest.mark.asyncio

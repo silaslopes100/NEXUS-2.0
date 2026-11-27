@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, ChevronDown, FileText, Loader2, Plus, Search } from 'lucide-react';
 import {
   alunosApi,
@@ -14,7 +14,7 @@ import { BoletimModal } from '@/features/alunos/components/BoletimModal';
 import { DisciplinasExpandidas } from '@/features/alunos/components/DisciplinasExpandidas';
 import { GerarMatriculaModal } from '@/features/alunos/components/GerarMatriculaModal';
 import { observacaoInfo, TagsAluno } from '@/features/alunos/components/TagsAluno';
-import { useAuthStore } from '@/stores/authStore';
+import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
 
 const PAGE_SIZE = 20;
 const FILTRO_EAD = '__ead';
@@ -30,8 +30,14 @@ const dataHora = (valor?: string | null) =>
 const observacaoDaUrl = (valor: string | null): Observacao | '' =>
   valor && valor in observacaoInfo ? (valor as Observacao) : '';
 
+/** Cliques em botões/links da linha não devem abrir a ficha. */
+const cliqueEmControle = (event: React.MouseEvent) =>
+  Boolean((event.target as HTMLElement).closest('button, a, input, select, label'));
+
 export const AlunosPage: React.FC = () => {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const isAdmin = user?.perfil?.nome === 'admin';
   const escolaFixaId = !isAdmin && user?.escola_id ? user.escola_id : null;
@@ -145,6 +151,25 @@ export const AlunosPage: React.FC = () => {
       setEnviandoChurnId(null);
     }
   };
+
+  // Admin abre a ficha completa (editável); Polo e Escola, a ficha somente leitura da própria área.
+  const perfil = normalizeUserRole(user?.perfil?.nome);
+  const areaFicha = perfil === 'polo' || perfil === 'escola' ? perfil : null;
+  const rotaFicha = (aluno: AlunoGestao): string | null => {
+    if (isAdmin) return aluno.usuario_id ? `/admin/usuarios/${aluno.usuario_id}` : null;
+    return areaFicha ? `/${areaFicha}/alunos/${aluno.id}/ficha` : null;
+  };
+
+  // Volta da ficha para esta lista com os mesmos filtros (a página os lê da URL).
+  const estadoFicha = useMemo(() => {
+    const filtros = new URLSearchParams();
+    if (isAdmin && poloId) filtros.set('polo_id', poloId);
+    if (escolaFiltro && !escolaFixaId) filtros.set('escola_id', escolaFiltro);
+    if (observacao) filtros.set('observacao', observacao);
+    if (buscaAplicada) filtros.set('q', buscaAplicada);
+    const query = filtros.toString();
+    return { voltar: { to: `${location.pathname}${query ? `?${query}` : ''}`, rotulo: 'Voltar para alunos' } };
+  }, [isAdmin, poloId, escolaFiltro, escolaFixaId, observacao, buscaAplicada, location.pathname]);
 
   const colunas = isAdmin ? 11 : 10;
 
@@ -282,12 +307,36 @@ export const AlunosPage: React.FC = () => {
             {!loading &&
               alunos.map((a) => {
                 const expandido = expandidos.has(a.id);
+                const ficha = rotaFicha(a);
                 return (
                   <React.Fragment key={a.id}>
-                    <tr className="border-b border-slate-800/60 last:border-0">
+                    <tr
+                      className={`border-b border-slate-800/60 last:border-0 ${
+                        ficha ? 'cursor-pointer transition-colors hover:bg-slate-800/40' : ''
+                      }`}
+                      title={ficha ? 'Ver ficha cadastral' : undefined}
+                      onClick={
+                        ficha
+                          ? (event) => {
+                              if (cliqueEmControle(event)) return;
+                              navigate(ficha, { state: estadoFicha });
+                            }
+                          : undefined
+                      }
+                    >
                       <td className="p-4 font-mono text-xs text-slate-400">{a.numero_matricula || '—'}</td>
                       <td className="p-4">
-                        <p className="font-semibold text-white">{a.nome}</p>
+                        {ficha ? (
+                          <Link
+                            to={ficha}
+                            state={estadoFicha}
+                            className="font-semibold text-white hover:text-blue-300 hover:underline"
+                          >
+                            {a.nome}
+                          </Link>
+                        ) : (
+                          <p className="font-semibold text-white">{a.nome}</p>
+                        )}
                         <p className="break-all text-xs text-slate-500">{a.email || '—'}</p>
                       </td>
                       <td className="p-4">
