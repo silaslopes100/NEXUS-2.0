@@ -7,6 +7,7 @@ import {
 import { UserAvatar } from '@/components/avatar/UserAvatar';
 import { alunosGestaoApi } from '@/features/alunos/api';
 import { BoletimModal } from '@/features/alunos/components/BoletimModal';
+import { voltarDoEstado } from '@/features/alunos/fichaAluno';
 import { DadoItem, SecaoEditavel } from '@/features/admin/components/ficha/SecaoEditavel';
 import { SecoesPessoais } from '@/features/admin/components/ficha/SecoesPessoais';
 import {
@@ -14,16 +15,6 @@ import {
 } from '@/features/admin/components/ficha/fichaUtils';
 import { tipoLabel, TipoTransferencia } from '@/features/transferencias/api';
 import { UsuarioFicha } from '@/types/admin';
-
-type VoltarPara = { to: string; rotulo: string };
-
-/** Destino do "Voltar": a lista de Alunos informa via state; sem ela, volta para a lista da área. */
-const voltarDoEstado = (state: unknown, padrao: VoltarPara): VoltarPara => {
-  const voltar = (state as { voltar?: Partial<VoltarPara> } | null)?.voltar;
-  return voltar && typeof voltar.to === 'string' && voltar.to.startsWith('/') && typeof voltar.rotulo === 'string'
-    ? { to: voltar.to, rotulo: voltar.rotulo }
-    : padrao;
-};
 
 const SecaoVinculoAluno: React.FC<{ ficha: UsuarioFicha }> = ({ ficha }) => {
   const aluno = ficha.aluno!;

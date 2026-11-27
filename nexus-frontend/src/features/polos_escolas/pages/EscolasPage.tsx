@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   BookOpen,
@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { alunosApi } from '@/features/alunos/api';
+import { cliqueEmControle, estadoVoltar, rotaFichaAluno } from '@/features/alunos/fichaAluno';
 import { EscolaEditModal } from '@/features/polos_escolas/components/EscolaEditModal';
 import { SecretarioEscolaFields } from '@/features/polos_escolas/components/SecretarioEscolaFields';
 import { polosEscolasApi } from '@/features/polos_escolas/api';
@@ -85,7 +86,8 @@ export const EscolasPage: React.FC = () => {
   const { user } = useAuthStore();
   const role = user?.perfil?.nome?.toLowerCase() || '';
   const isAdmin = role === 'admin';
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [schools, setSchools] = useState<EscolaItem[]>([]);
   const [poles, setPoles] = useState<PoloItem[]>([]);
   const [query, setQuery] = useState('');
@@ -154,7 +156,7 @@ export const EscolasPage: React.FC = () => {
     });
   }, [isAdmin, user?.polo_id]);
 
-  const openSchool = async (school: EscolaItem) => {
+  const openSchool = async (school: EscolaItem): Promise<EscolaItem | null> => {
     setSelectedSchool(school);
     setSummary(null);
     setIndicator(null);
@@ -166,15 +168,62 @@ export const EscolasPage: React.FC = () => {
       ]);
       setSelectedSchool(details);
       setSummary(operationalSummary);
+      return details;
     } catch (error) {
       const err = error as { response?: { data?: { detail?: string } } };
       setFeedback(err.response?.data?.detail || 'Não foi possível carregar os dados da escola.');
+      return null;
     } finally {
       setDetailLoading(false);
     }
   };
 
-  const loadIndicator = async (kind: Indicador) => {
+  // Ao voltar da ficha de um aluno, a URL traz ?escola=<id>&lista=alunos: reabre a escola e a lista.
+  useEffect(() => {
+    const escolaId = searchParams.get('escola');
+    if (!escolaId) return;
+    const lista = searchParams.get('lista');
+    let ativo = true;
+    polosEscolasApi.obterEscola(escolaId)
+      .then(async (escola: EscolaItem) => {
+        if (!ativo) return;
+        const aberta = await openSchool(escola);
+        if (ativo && aberta && lista === 'alunos') await loadIndicator('alunos', aberta);
+      })
+      .catch(() => {
+        if (ativo) setFeedback('Não foi possível reabrir a escola.');
+      });
+    return () => {
+      ativo = false;
+    };
+    // Só na montagem: depois disso a URL é limpa ao fechar o painel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const closeSchool = () => {
+    setSelectedSchool(null);
+    setIndicator(null);
+    if (searchParams.has('escola') || searchParams.has('lista')) {
+      const proximo = new URLSearchParams(searchParams);
+      proximo.delete('escola');
+      proximo.delete('lista');
+      setSearchParams(proximo, { replace: true });
+    }
+  };
+
+  // "Voltar" da ficha do aluno: reabre esta escola com a lista de alunos.
+  const estadoFichaEscola = useMemo(() => {
+    const params = new URLSearchParams();
+    if (isAdmin && poloFilter) params.set('polo_id', poloFilter);
+    if (selectedSchool) {
+      params.set('escola', selectedSchool.id);
+      params.set('lista', 'alunos');
+    }
+    return estadoVoltar(`${location.pathname}?${params.toString()}`, 'Voltar para a escola');
+  }, [isAdmin, poloFilter, selectedSchool, location.pathname]);
+
+  const loadIndicator = async (kind: Indicador, escola: EscolaItem | null = selectedSchool) => {
+    const selectedSchool = escola;
     if (!selectedSchool) return;
     setIndicator(kind);
     setIndicatorLoading(true);
@@ -402,16 +451,16 @@ export const EscolasPage: React.FC = () => {
 
       {selectedSchool && (
         <div className="fixed inset-0 z-40 flex justify-end bg-black/70" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) { setSelectedSchool(null); setIndicator(null); }
+          if (event.target === event.currentTarget) closeSchool();
         }}>
           <aside className="h-full w-full max-w-4xl overflow-y-auto border-l border-slate-800 bg-slate-900 p-5 shadow-2xl sm:p-7">
             <div className="mb-6 flex items-start justify-between gap-3">
               <div>
-                <button type="button" onClick={() => { setSelectedSchool(null); setIndicator(null); }} className="mb-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white"><ArrowLeft size={14} /> Voltar à consulta</button>
+                <button type="button" onClick={closeSchool} className="mb-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white"><ArrowLeft size={14} /> Voltar à consulta</button>
                 <h2 className="text-2xl font-bold text-white">{selectedSchool.nome}</h2>
                 <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-xs ${statusClass(selectedSchool.status)}`}>{selectedSchool.status}</span>
               </div>
-              <button type="button" onClick={() => { setSelectedSchool(null); setIndicator(null); }} aria-label="Fechar detalhes" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"><X /></button>
+              <button type="button" onClick={closeSchool} aria-label="Fechar detalhes" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"><X /></button>
             </div>
 
             {detailLoading ? <div className="flex justify-center py-16 text-indigo-300"><Loader2 className="animate-spin" /></div> : (
@@ -456,7 +505,10 @@ export const EscolasPage: React.FC = () => {
                 {indicator && (
                   <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/60">
                     <div className="flex items-center justify-between border-b border-slate-800 p-4">
-                      <h3 className="font-semibold capitalize text-white">Lista de {indicator}</h3>
+                      <div>
+                        <h3 className="font-semibold capitalize text-white">Lista de {indicator}</h3>
+                        {indicator === 'alunos' && <p className="text-xs text-slate-500">Clique em um aluno para ver a ficha cadastral.</p>}
+                      </div>
                       <button type="button" onClick={() => setIndicator(null)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800" aria-label="Fechar lista"><X size={18} /></button>
                     </div>
                     {indicatorLoading ? <div className="flex justify-center py-10 text-indigo-300"><Loader2 className="animate-spin" /></div> : (
@@ -464,7 +516,33 @@ export const EscolasPage: React.FC = () => {
                         <table className="w-full text-left text-sm">
                           <thead className="border-b border-slate-800 text-xs uppercase text-slate-500"><tr>{indicatorColumns.map(([label]) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
                           <tbody className="divide-y divide-slate-800">
-                            {indicatorItems.map((item, index) => <tr key={String(item.id || item.aluno_id || index)} className="text-slate-300">{indicatorColumns.map(([label, key]) => <td key={label} className="max-w-xs truncate p-3">{mostrarValor(item[key])}</td>)}</tr>)}
+                            {indicatorItems.map((item, index) => {
+                              // Alunos abrem a mesma ficha cadastral da tela de Alunos.
+                              const ficha = indicator === 'alunos'
+                                ? rotaFichaAluno(role, { id: String(item.id ?? ''), usuario_id: (item.usuario_id as string | null | undefined) ?? null })
+                                : null;
+                              return (
+                                <tr
+                                  key={String(item.id || item.aluno_id || index)}
+                                  className={`text-slate-300 ${ficha ? 'cursor-pointer transition-colors hover:bg-slate-800/40' : ''}`}
+                                  title={ficha ? 'Ver ficha cadastral' : undefined}
+                                  onClick={ficha ? (event) => {
+                                    if (cliqueEmControle(event)) return;
+                                    navigate(ficha, { state: estadoFichaEscola });
+                                  } : undefined}
+                                >
+                                  {indicatorColumns.map(([label, key], coluna) => (
+                                    <td key={label} className="max-w-xs truncate p-3">
+                                      {ficha && coluna === 0 ? (
+                                        <Link to={ficha} state={estadoFichaEscola} className="font-semibold text-white hover:text-blue-300 hover:underline">
+                                          {mostrarValor(item[key])}
+                                        </Link>
+                                      ) : mostrarValor(item[key])}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
                             {!indicatorItems.length && <tr><td colSpan={indicatorColumns.length} className="p-8 text-center text-slate-500">Nenhum registro encontrado.</td></tr>}
                           </tbody>
                         </table>

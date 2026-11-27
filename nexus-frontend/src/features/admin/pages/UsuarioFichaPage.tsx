@@ -10,6 +10,7 @@ import { InativarModal, TransferenciaModal } from '@/features/admin/components/f
 import { SecoesPessoais } from '@/features/admin/components/ficha/SecoesPessoais';
 import { SecoesVinculo } from '@/features/admin/components/ficha/SecoesVinculo';
 import { formatarData, mensagemErro, rotuloStatus, statusBadge } from '@/features/admin/components/ficha/fichaUtils';
+import { VoltarPara, voltarDoEstado } from '@/features/alunos/fichaAluno';
 import { useAuthStore } from '@/stores/authStore';
 import { AbaHistorico, PodeExcluir, ResumoMetricasUsuario, UsuarioFicha } from '@/types/admin';
 
@@ -26,21 +27,13 @@ const ABAS: { id: Aba; rotulo: string }[] = [
 type Feedback = { type: 'success' | 'error'; message: string } | null;
 
 /** Destino do "Voltar": quem abriu a ficha (ex.: lista de Alunos) pode informá-lo via state. */
-type VoltarPara = { to: string; rotulo: string };
 const VOLTAR_PADRAO: VoltarPara = { to: '/admin/usuarios', rotulo: 'Voltar para a consulta' };
-
-const voltarDoEstado = (state: unknown): VoltarPara => {
-  const voltar = (state as { voltar?: Partial<VoltarPara> } | null)?.voltar;
-  return voltar && typeof voltar.to === 'string' && voltar.to.startsWith('/') && typeof voltar.rotulo === 'string'
-    ? { to: voltar.to, rotulo: voltar.rotulo }
-    : VOLTAR_PADRAO;
-};
 
 export const UsuarioFichaPage: React.FC = () => {
   const { usuarioId } = useParams<{ usuarioId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const voltar = voltarDoEstado(location.state);
+  const voltar = voltarDoEstado(location.state, VOLTAR_PADRAO);
   const [params, setParams] = useSearchParams();
   const { user: loggedAdmin, setUser } = useAuthStore();
   const abaParam = params.get('aba') as Aba | null;

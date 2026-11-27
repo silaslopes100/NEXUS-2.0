@@ -14,7 +14,8 @@ import { BoletimModal } from '@/features/alunos/components/BoletimModal';
 import { DisciplinasExpandidas } from '@/features/alunos/components/DisciplinasExpandidas';
 import { GerarMatriculaModal } from '@/features/alunos/components/GerarMatriculaModal';
 import { observacaoInfo, TagsAluno } from '@/features/alunos/components/TagsAluno';
-import { normalizeUserRole, useAuthStore } from '@/stores/authStore';
+import { cliqueEmControle, estadoVoltar, rotaFichaAluno } from '@/features/alunos/fichaAluno';
+import { useAuthStore } from '@/stores/authStore';
 
 const PAGE_SIZE = 20;
 const FILTRO_EAD = '__ead';
@@ -29,10 +30,6 @@ const dataHora = (valor?: string | null) =>
 
 const observacaoDaUrl = (valor: string | null): Observacao | '' =>
   valor && valor in observacaoInfo ? (valor as Observacao) : '';
-
-/** Cliques em botões/links da linha não devem abrir a ficha. */
-const cliqueEmControle = (event: React.MouseEvent) =>
-  Boolean((event.target as HTMLElement).closest('button, a, input, select, label'));
 
 export const AlunosPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -153,12 +150,7 @@ export const AlunosPage: React.FC = () => {
   };
 
   // Admin abre a ficha completa (editável); Polo e Escola, a ficha somente leitura da própria área.
-  const perfil = normalizeUserRole(user?.perfil?.nome);
-  const areaFicha = perfil === 'polo' || perfil === 'escola' ? perfil : null;
-  const rotaFicha = (aluno: AlunoGestao): string | null => {
-    if (isAdmin) return aluno.usuario_id ? `/admin/usuarios/${aluno.usuario_id}` : null;
-    return areaFicha ? `/${areaFicha}/alunos/${aluno.id}/ficha` : null;
-  };
+  const rotaFicha = (aluno: AlunoGestao) => rotaFichaAluno(user?.perfil?.nome, aluno);
 
   // Volta da ficha para esta lista com os mesmos filtros (a página os lê da URL).
   const estadoFicha = useMemo(() => {
@@ -168,7 +160,7 @@ export const AlunosPage: React.FC = () => {
     if (observacao) filtros.set('observacao', observacao);
     if (buscaAplicada) filtros.set('q', buscaAplicada);
     const query = filtros.toString();
-    return { voltar: { to: `${location.pathname}${query ? `?${query}` : ''}`, rotulo: 'Voltar para alunos' } };
+    return estadoVoltar(`${location.pathname}${query ? `?${query}` : ''}`, 'Voltar para alunos');
   }, [isAdmin, poloId, escolaFiltro, escolaFixaId, observacao, buscaAplicada, location.pathname]);
 
   const colunas = isAdmin ? 11 : 10;
