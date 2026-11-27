@@ -143,10 +143,12 @@ class OperacaoService:
         pendente = self.repo.get_pagamento_pendente_do_pedido(pedido.id)
         if pendente and pedido.status == "aguardando_pagamento":
             self.cobranca.cancelar_pagamento(pendente["id"], user)
-        atualizado = self.pedidos.alterar_status(pedido.id, para, user.id, observacao=observacao or "Baixa manual")
         pagou = pedido.status == "aguardando_pagamento" and para in ("concluido", "pago_aguardando_envio")
+        # O crédito vem antes da troca de status: é idempotente, então se algo falhar a baixa pode ser
+        # repetida (com o pedido já concluído e sem crédito, não haveria como refazer).
         if pagou and regras_pedido.credita_licenca(pedido.tipo):  # licença avulsa ou kit
             self.cobranca.creditar_licencas(self.repo.get_pedido(pedido.id), user.id)
+        atualizado = self.pedidos.alterar_status(pedido.id, para, user.id, observacao=observacao or "Baixa manual")
         if pagou and regras_pedido.eh_ead(pedido.tipo):  # aluno EAD: libera a disciplina no AVA
             from app.modules.ead_vendas.repository import get_vendas_ead_repository
 

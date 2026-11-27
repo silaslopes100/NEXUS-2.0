@@ -72,8 +72,9 @@ criptografadas na tabela `gateways_config`.
 
 O arquivo `nexus-backend/vercel.json` agenda `GET /financeiro/cron/reconciliar`
 uma vez por dia (limite do plano Hobby). No plano Pro, reduza o intervalo (por
-exemplo `*/30 * * * *`). O cron reprocessa webhooks com erro e consulta nos
-gateways as cobranças pendentes.
+exemplo `*/30 * * * *`). O cron reprocessa webhooks com erro, consulta nos
+gateways as cobranças pendentes e conclui os pedidos pagos que ficaram incompletos
+(pedido não avançou ou licenças não creditadas, nos últimos 30 dias).
 
 ## Banco e dados existentes
 
@@ -121,6 +122,14 @@ aplique-a antes de publicar a API, ou Turmas, Disciplinas e o AVA falharão.
 - Gera o código das turmas existentes e marca como EAD as turmas do polo "EAD".
 - **Muda o início e o fim** das turmas abertas para a vigência do calendário do curso. Depois de
   aplicar, regere o cronograma das turmas na tela da turma.
+
+O crédito de licenças de pedidos pagos depende de [`039_pedidos_licencas_creditadas.sql`](./nexus-backend/scripts/migrations/039_pedidos_licencas_creditadas.sql):
+aplique-a **antes** de publicar a API, ou todo pagamento de licença/kit falhará ao creditar o estoque.
+- Ela acrescenta `pedidos.licencas_creditadas_em`, que garante um único crédito por pedido. Assim o
+  webhook repetido e o cron podem refazer um crédito que falhou sem duplicá-lo.
+- Marca como já creditados os pedidos de licença/kit pagos até aquele momento.
+- **Reaplique-a logo depois do deploy** (é idempotente): ela marca também os pedidos pagos no
+  intervalo, que a versão antiga creditou sem marcar.
 
 O gateway **Simulador** (`fake`) existe só no sandbox, para testes sem chaves reais.
 Ele é recusado em `producao`, e só o admin pode simular pagamentos.

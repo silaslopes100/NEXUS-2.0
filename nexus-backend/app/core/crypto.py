@@ -12,14 +12,18 @@ from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 
 
+class SecretCryptoError(RuntimeError):
+    """Chave ausente/inválida ou segredo cifrado com outra chave."""
+
+
 def _fernet(key: Optional[str] = None) -> Fernet:
     chave = key if key is not None else settings.PAYMENT_SECRETS_KEY
     if not chave:
-        raise RuntimeError("PAYMENT_SECRETS_KEY não configurada")
+        raise SecretCryptoError("PAYMENT_SECRETS_KEY não configurada")
     try:
         return Fernet(chave.encode() if isinstance(chave, str) else chave)
     except (ValueError, TypeError) as exc:
-        raise RuntimeError("PAYMENT_SECRETS_KEY inválida (esperada chave Fernet base64)") from exc
+        raise SecretCryptoError("PAYMENT_SECRETS_KEY inválida (esperada chave Fernet base64)") from exc
 
 
 def encrypt_secret(texto: str, key: Optional[str] = None) -> str:
@@ -32,7 +36,7 @@ def decrypt_secret(token: str, key: Optional[str] = None) -> str:
     try:
         return _fernet(key).decrypt(token.encode("ascii")).decode("utf-8")
     except InvalidToken as exc:
-        raise RuntimeError("Não foi possível descriptografar o segredo (chave diferente?)") from exc
+        raise SecretCryptoError("Não foi possível descriptografar o segredo (chave diferente?)") from exc
 
 
 def mask_secret(texto: Optional[str], visiveis: int = 4) -> str:

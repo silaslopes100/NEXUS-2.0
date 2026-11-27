@@ -226,6 +226,65 @@ def test_webhook_com_erro_responde_e_cron_reprocessa(repo, cobranca, monkeypatch
     assert list(repo.webhooks.values())[0]["status"] == "processado"
 
 
+def _credito_que_falha_uma_vez():
+    """Crédito idempotente (como o real) que falha na primeira chamada."""
+    estado = {"falhas": 1, "creditados": []}
+
+    def creditar(pedido, _uid):
+        if estado["falhas"]:
+            estado["falhas"] -= 1
+            raise RuntimeError("estoque fora do ar")
+        if pedido["numero"] in estado["creditados"]:
+            return False
+        estado["creditados"].append(pedido["numero"])
+        return True
+
+    return creditar, estado["creditados"]
+
+
+def test_credito_de_licenca_que_falhou_e_refeito_pelo_cron_sem_duplicar(repo):
+    creditar, creditados = _credito_que_falha_uma_vez()
+    cobranca = CobrancaService(repo, creditar_licencas=creditar)
+    pedido = _pedido(repo, tipo="licenca", qtd=10)
+    pg = cobranca.gerar_cobranca(pedido.id, "PIX", _user())
+
+    assert _webhook(cobranca, pg.gateway_payment_id, "pago")["status"] == "erro"
+    assert repo.get_pagamento(pg.id)["status"] == "pago" and creditados == []
+
+    resumo = cobranca.reconciliar()
+    assert resumo["pendencias_concluidas"] == 1 and resumo["falhas"] == 0
+    assert creditados == [pedido.numero] and repo.get_pedido(pedido.id)["status"] == "concluido"
+    assert list(repo.webhooks.values())[0]["status"] == "processado"
+
+    cobranca.reconciliar()
+    assert creditados == [pedido.numero]
+
+
+def test_novo_aviso_de_pago_completa_o_credito_que_falhou(repo):
+    creditar, creditados = _credito_que_falha_uma_vez()
+    cobranca = CobrancaService(repo, creditar_licencas=creditar)
+    pedido = _pedido(repo, tipo="licenca", qtd=10)
+    pg = cobranca.gerar_cobranca(pedido.id, "PIX", _user())
+
+    assert _webhook(cobranca, pg.gateway_payment_id, "pago")["status"] == "erro"
+    # ex.: Asaas manda PAYMENT_RECEIVED depois de PAYMENT_CONFIRMED
+    assert _webhook(cobranca, pg.gateway_payment_id, "pago", evento_id="evt-2") == {
+        "status": "processado", "alterado": True}
+    assert _webhook(cobranca, pg.gateway_payment_id, "pago", evento_id="evt-3") == {
+        "status": "processado", "alterado": False}
+    assert creditados == [pedido.numero]
+
+
+def test_pedido_cancelado_antes_do_pagamento_nao_credita(repo, cobranca, creditos):
+    pedido = _pedido(repo, tipo="licenca", qtd=10)
+    pg = cobranca.gerar_cobranca(pedido.id, "PIX", _user())
+    repo.alterar_status_pedido(pedido.id, "aguardando_pagamento", "cancelado", None, "usuario")
+    _webhook(cobranca, pg.gateway_payment_id, "pago")
+    _webhook(cobranca, pg.gateway_payment_id, "pago", evento_id="evt-2")
+    cobranca.reconciliar()
+    assert creditos == [] and repo.get_pedido(pedido.id)["status"] == "cancelado"
+
+
 # ---------------------------------------------------------------------------
 # Reconciliação e cancelamento
 # ---------------------------------------------------------------------------
@@ -303,6 +362,28 @@ async def test_api_config_gateway_mascara_e_permissoes(client):
     asaas = next(i for i in (await client.get("/financeiro/gateways", headers=_hdr("admin-1"))).json()["items"]
                  if i["gateway"] == "asaas" and i["ambiente"] == "sandbox")
     assert asaas["credenciais"] == {"api_key": "••••1234"} and asaas["webhook_token"] == "••••9999"
+
+
+@pytest.mark.asyncio
+async def test_api_salvar_gateway_com_problema_na_chave_responde_503_com_motivo(client, monkeypatch):
+    """Erro de criptografia não pode virar 500 não tratado (sai sem CORS e o front vê só 'blocked by CORS')."""
+    url = "/financeiro/gateways/asaas/producao"
+    body = {"credenciais": {"api_key": "$aact_prod_SEGREDO_1234"}, "webhook_token": "tok-1234"}
+
+    monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", "")
+    sem_chave = await client.put(url, json=body, headers=_hdr("admin-1"))
+    assert sem_chave.status_code == 503 and "PAYMENT_SECRETS_KEY não configurada" in sem_chave.json()["detail"]
+
+    monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", "nao-e-fernet")
+    invalida = await client.put(url, json=body, headers=_hdr("admin-1"))
+    assert invalida.status_code == 503 and "inválida" in invalida.json()["detail"]
+
+    # credenciais salvas com outra chave (chave trocada no deploy)
+    monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", Fernet.generate_key().decode())
+    assert (await client.put(url, json=body, headers=_hdr("admin-1"))).status_code == 200
+    monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", Fernet.generate_key().decode())
+    trocada = await client.put(url, json=body, headers=_hdr("admin-1"))
+    assert trocada.status_code == 503 and "chave diferente" in trocada.json()["detail"]
 
 
 @pytest.mark.asyncio

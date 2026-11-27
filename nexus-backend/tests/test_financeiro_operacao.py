@@ -148,6 +148,28 @@ def test_baixa_manual_licenca_credita_e_cancela_cobranca(op, repo, creditos):
         op.baixa_manual(_checkout(op, repo).pedido.id, "concluido", None, ADMIN)
 
 
+def test_baixa_manual_com_falha_no_credito_pode_ser_repetida(repo):
+    estado = {"falhas": 1, "creditados": []}
+
+    def creditar(pedido, _uid):  # idempotente como o real; falha na primeira vez
+        if estado["falhas"]:
+            estado["falhas"] -= 1
+            raise RuntimeError("estoque fora do ar")
+        if pedido["numero"] in estado["creditados"]:
+            return False
+        estado["creditados"].append(pedido["numero"])
+        return True
+
+    op = OperacaoService(repo, CobrancaService(repo, creditar_licencas=creditar))
+    res = _checkout(op, repo, tipo="licenca", qtd=5, meio="PIX")
+    with pytest.raises(RuntimeError):
+        op.baixa_manual(res.pedido.id, "concluido", None, ADMIN)
+    assert repo.get_pedido(res.pedido.id)["status"] == "aguardando_pagamento"  # nada concluído sem crédito
+
+    assert op.baixa_manual(res.pedido.id, "concluido", None, ADMIN).status == "concluido"
+    assert estado["creditados"] == [res.pedido.numero]
+
+
 def test_kit_pago_credita_licencas_e_vai_para_envio(op, repo, creditos):
     kit = FinanceiroService(repo).create_produto(ProdutoCreate(
         tipo="kit", sku="KIT-1", nome="Matemática (livro + licença)", preco=60, disciplina_id="disc-1"))

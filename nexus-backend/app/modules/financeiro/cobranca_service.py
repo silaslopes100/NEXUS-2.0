@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.core.crypto import encrypt_secret, decrypt_secret, mask_secret
+from app.core.crypto import SecretCryptoError, encrypt_secret, decrypt_secret, mask_secret
 from app.modules.auth.schemas import UserResponse
 from app.modules.financeiro import pedidos as regras
 from app.modules.financeiro.gateways import factory
@@ -62,12 +62,16 @@ def proximo_status(atual: Optional[str], novo: Optional[str]) -> Optional[str]:
     return novo
 
 
-def creditar_licencas_padrao(pedido: Dict[str, Any], usuario_id: Optional[str]) -> None:
-    """Credita o estoque do Polo e o extrato (RN-02.1) quando um pedido de licença é pago."""
+def creditar_licencas_padrao(pedido: Dict[str, Any], usuario_id: Optional[str]) -> bool:
+    """Credita o estoque do Polo e o extrato (RN-02.1) quando um pedido de licença é pago.
+
+    Idempotente: cada pedido é creditado uma única vez (ver `creditar_pedido_pago`), então pode ser
+    chamado de novo no reprocessamento. Retorna True se creditou agora.
+    """
     from app.modules.polos_escolas.repository import get_polos_escolas_repository
 
     if not pedido.get("polo_id"):
-        return
+        return False
     # Estoque por disciplina (Fase 3A): um crédito por disciplina dos itens.
     por_disciplina: Dict[Optional[str], Dict[str, float]] = {}
     for item in pedido.get("itens") or []:
@@ -78,30 +82,27 @@ def creditar_licencas_padrao(pedido: Dict[str, Any], usuario_id: Optional[str]) 
         acum = por_disciplina.setdefault(chave, {"quantidade": 0, "valor": 0.0})
         acum["quantidade"] += qtd
         acum["valor"] += float(item.get("valor_total") or 0)
-    if not por_disciplina:
-        return
-    repo = get_polos_escolas_repository()
-    for disciplina_id, acum in por_disciplina.items():
-        quantidade = int(acum["quantidade"])
-        repo.ajustar_estoque(polo_id=pedido["polo_id"], escola_id=None, delta_disponivel=quantidade,
-                             materia_id=disciplina_id)
-        repo.registrar_movimentacao({
+    movimentacoes = [
+        {
             "tipo": "compra_fornecedor",
-            "polo_id": pedido["polo_id"],
             "materia_id": disciplina_id,
-            "quantidade": quantidade,
-            "valor_unitario": round(acum["valor"] / quantidade, 2),
+            "quantidade": int(acum["quantidade"]),
+            "valor_unitario": round(acum["valor"] / acum["quantidade"], 2),
             "status": "disponivel_polo",
             "actor_id": usuario_id,
             "observacao": f"Pedido {pedido.get('numero')} pago via gateway",
-        })
+        }
+        for disciplina_id, acum in por_disciplina.items()
+    ]
+    # Sem itens a creditar, o pedido é marcado mesmo assim (não volta para a fila de pendências).
+    return get_polos_escolas_repository().creditar_pedido_pago(str(pedido["id"]), pedido["polo_id"], movimentacoes)
 
 
 class CobrancaService:
     def __init__(
         self,
         repo: FinanceiroRepositoryInterface,
-        creditar_licencas: Callable[[Dict[str, Any], Optional[str]], None] = creditar_licencas_padrao,
+        creditar_licencas: Callable[[Dict[str, Any], Optional[str]], Optional[bool]] = creditar_licencas_padrao,
     ) -> None:
         self.repo = repo
         self.pedidos = FinanceiroService(repo)
@@ -189,6 +190,17 @@ class CobrancaService:
         }
 
     def salvar_gateway(self, gateway: str, ambiente: str, dados: Dict[str, Any], usuario_id: str) -> Dict[str, Any]:
+        # Falha de criptografia (chave ausente/inválida/trocada) vira HTTPException: um erro não tratado
+        # sai como 500 sem cabeçalhos CORS e o navegador só mostra "blocked by CORS policy".
+        try:
+            return self._salvar_gateway(gateway, ambiente, dados, usuario_id)
+        except SecretCryptoError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"{exc}. Verifique PAYMENT_SECRETS_KEY nas variáveis de ambiente do backend.",
+            ) from exc
+
+    def _salvar_gateway(self, gateway: str, ambiente: str, dados: Dict[str, Any], usuario_id: str) -> Dict[str, Any]:
         if gateway not in factory.GATEWAYS_DISPONIVEIS or ambiente not in factory.AMBIENTES_POR_GATEWAY[gateway]:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway/ambiente inválido")
         atual = self.repo.get_gateway_config(gateway, ambiente) or {}
@@ -400,9 +412,15 @@ class CobrancaService:
 
     def aplicar_status(self, pagamento: Dict[str, Any], novo: Optional[str], origem: str,
                        valor_pago: Optional[float] = None, pago_em: Optional[datetime] = None) -> bool:
-        """Aplica o status normalizado ao pagamento e, se pago, avança o pedido. True se mudou algo."""
+        """Aplica o status normalizado ao pagamento e, se pago, conclui o pedido. True se mudou algo.
+
+        Um novo aviso de "pago" para um pagamento que já está pago refaz só o que faltou no pedido:
+        se o crédito de licenças falhou na primeira vez, o reprocessamento completa sem duplicar.
+        """
         alvo = proximo_status(pagamento.get("status"), novo)
         if not alvo:
+            if novo == "pago" and pagamento.get("status") == "pago":
+                return self.concluir_pagamento(pagamento, origem)
             return False
         campos: Dict[str, Any] = {"status": alvo}
         if alvo == "pago":
@@ -413,29 +431,42 @@ class CobrancaService:
             campos["cancelado_em"] = datetime.now(timezone.utc)
         self.repo.update_pagamento(pagamento["id"], campos)
 
-        pedido_id = pagamento.get("pedido_id")
-        if not pedido_id:
-            return True
-        pedido = self.repo.get_pedido(pedido_id)
-        if not pedido:
-            return True
-        if alvo == "pago" and pedido["status"] == "aguardando_pagamento":
-            destino = regras.status_pos_pagamento(pedido["tipo"])
-            self.pedidos.alterar_status(
-                pedido_id, destino, None, origem=origem,
-                observacao=f"Pagamento confirmado ({pagamento.get('gateway')} {pagamento.get('billing_type') or ''})".strip(),
-                campos={"pago_em": campos["pago_em"]},
-            )
-            if regras.credita_licenca(pedido["tipo"]):  # licença avulsa ou kit (livro + licença)
-                self.creditar_licencas(pedido, None)
-            if regras.eh_ead(pedido["tipo"]):  # aluno EAD: libera a disciplina no AVA
-                from app.modules.ead_vendas.repository import get_vendas_ead_repository
-
-                get_vendas_ead_repository().liberar_compra_do_pedido(str(pedido_id), pagamento["id"],
-                                                                     pagamento.get("valor"))
-        elif alvo == "estornado" and pedido["status"] not in ("cancelado",):
-            logger.warning("Pagamento estornado no pedido %s (status %s)", pedido.get("numero"), pedido["status"])
+        if alvo == "pago":
+            self.concluir_pagamento({**pagamento, **campos}, origem)
+        elif alvo == "estornado" and pagamento.get("pedido_id"):
+            pedido = self.repo.get_pedido(pagamento["pedido_id"])
+            if pedido and pedido["status"] != "cancelado":
+                logger.warning("Pagamento estornado no pedido %s (status %s)", pedido.get("numero"), pedido["status"])
         return True
+
+    def concluir_pagamento(self, pagamento: Dict[str, Any], origem: str) -> bool:
+        """Efeitos de um pagamento confirmado no pedido. Idempotente: True se fez algo agora.
+
+        Avança o pedido (se ainda aguarda pagamento), credita as licenças (licença/kit) e libera a
+        disciplina do aluno EAD. Cada etapa só age se ainda não foi feita, então pode ser repetida
+        pelo reprocessamento do webhook e pelo cron até tudo concluir.
+        """
+        pedido_id = pagamento.get("pedido_id")
+        pedido = self.repo.get_pedido(pedido_id) if pedido_id else None
+        if not pedido or pedido["status"] == "cancelado":  # cancelado antes de o pagamento chegar
+            return False
+        fez = False
+        if pedido["status"] == "aguardando_pagamento":
+            self.pedidos.alterar_status(
+                pedido_id, regras.status_pos_pagamento(pedido["tipo"]), None, origem=origem,
+                observacao=f"Pagamento confirmado ({pagamento.get('gateway')} {pagamento.get('billing_type') or ''})".strip(),
+                campos={"pago_em": pagamento.get("pago_em") or datetime.now(timezone.utc)},
+            )
+            fez = True
+        if regras.credita_licenca(pedido["tipo"]):  # licença avulsa ou kit (livro + licença)
+            fez = bool(self.creditar_licencas(pedido, None)) or fez
+        if regras.eh_ead(pedido["tipo"]):  # aluno EAD: libera a disciplina no AVA
+            from app.modules.ead_vendas.repository import get_vendas_ead_repository
+
+            liberadas = get_vendas_ead_repository().liberar_compra_do_pedido(
+                str(pedido_id), pagamento["id"], pagamento.get("valor"))
+            fez = bool(liberadas) or fez
+        return fez
 
     def processar_webhook(self, gateway: str, ambiente: str, headers: Mapping[str, str], corpo: bytes,
                           query: Mapping[str, str]) -> Dict[str, Any]:
@@ -502,7 +533,16 @@ class CobrancaService:
         return {**resultado, "pagamento": PagamentoResponse(**self.repo.get_pagamento(pagamento_id))}
 
     def reconciliar(self, limite: int = 50) -> Dict[str, int]:
-        resumo = {"webhooks_reprocessados": 0, "pagamentos_consultados": 0, "pagamentos_alterados": 0, "falhas": 0}
+        resumo = {"webhooks_reprocessados": 0, "pagamentos_consultados": 0, "pagamentos_alterados": 0,
+                  "pendencias_concluidas": 0, "falhas": 0}
+        # Pagamentos já pagos cujo pedido ficou incompleto (ex.: o crédito de licenças falhou).
+        for pg in self.repo.list_pagamentos_pagos_pendentes(limite):
+            try:
+                if self.concluir_pagamento(pg, "cron"):
+                    resumo["pendencias_concluidas"] += 1
+            except Exception:  # noqa: BLE001
+                logger.exception("Conclusão do pagamento %s falhou", pg.get("id"))
+                resumo["falhas"] += 1
         for w in self.repo.list_webhooks_com_erro(MAX_TENTATIVAS_WEBHOOK, limite):
             try:
                 adapter = self._adapter(w["gateway"], w["ambiente"], exigir_ativo=False)

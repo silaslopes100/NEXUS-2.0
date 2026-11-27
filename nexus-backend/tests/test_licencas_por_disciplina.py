@@ -106,16 +106,19 @@ def test_reclassificar_saldo_sem_disciplina(repo):
     assert any(m["tipo"] == "reclassificacao" for m in repo.movimentacoes.values())
 
 
-def test_pagamento_de_pedido_credita_por_disciplina(repo):
+def test_pagamento_de_pedido_credita_por_disciplina_uma_unica_vez(repo):
+    pedido = {
+        "id": "ped-1", "numero": "PED-1", "polo_id": POLO, "valor_total": 130,
+        "itens": [
+            {"disciplina_id": MAT, "quantidade": 5, "valor_total": 50},
+            {"disciplina_id": PORT, "quantidade": 4, "valor_total": 80},
+        ],
+    }
     set_polos_escolas_repository(repo)
     try:
-        creditar_licencas_padrao({
-            "numero": "PED-1", "polo_id": POLO, "valor_total": 130,
-            "itens": [
-                {"disciplina_id": MAT, "quantidade": 5, "valor_total": 50},
-                {"disciplina_id": PORT, "quantidade": 4, "valor_total": 80},
-            ],
-        }, None)
+        assert creditar_licencas_padrao(pedido, None) is True
+        # reprocessamento (webhook repetido / cron) não credita de novo
+        assert creditar_licencas_padrao(pedido, None) is False
     finally:
         set_polos_escolas_repository(None)
     assert _saldo(repo, polo=POLO, disciplina=MAT) == 5 and _saldo(repo, polo=POLO, disciplina=PORT) == 4

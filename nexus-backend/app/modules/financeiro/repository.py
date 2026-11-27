@@ -16,6 +16,7 @@ from psycopg2.errors import UniqueViolation
 from psycopg2.extras import Json
 
 from app.core.database import get_db_cursor
+from app.modules.financeiro.pedidos import TIPOS_COM_LICENCA
 from app.modules.financeiro.schemas import FiltrosPeriodo
 
 
@@ -264,6 +265,7 @@ class FinanceiroRepositoryInterface(Protocol):
                                      documento: str) -> None: ...
     def get_pagamento_pendente_do_pedido(self, pedido_id: str) -> Optional[Dict[str, Any]]: ...
     def list_pagamentos_para_reconciliar(self, limite: int = 50) -> List[Dict[str, Any]]: ...
+    def list_pagamentos_pagos_pendentes(self, limite: int = 50) -> List[Dict[str, Any]]: ...
     # webhooks
     def registrar_webhook(self, gateway: str, ambiente: str, evento_id: str, tipo_evento: Optional[str],
                           payment_id: Optional[str], payload: Any) -> Optional[str]: ...
@@ -1108,6 +1110,25 @@ class PostgresFinanceiroRepository:
             )
             return [_limpar(r) for r in cur.fetchall()]
 
+    def list_pagamentos_pagos_pendentes(self, limite: int = 50) -> List[Dict[str, Any]]:
+        """Pagos (pelo gateway, nos últimos 30 dias) cujo pedido não avançou ou não creditou as licenças."""
+        with get_db_cursor() as cur:
+            cur.execute(
+                _SELECT_PAGAMENTO
+                + """
+                 WHERE pg.status = 'pago'
+                   AND pg.gateway = ANY(%s) AND pg.ambiente IS NOT NULL
+                   AND pg.pago_em > now() - interval '30 days'
+                   AND p.status <> 'cancelado'
+                   AND (p.status = 'aguardando_pagamento'
+                        OR (p.tipo = ANY(%s) AND p.polo_id IS NOT NULL AND p.licencas_creditadas_em IS NULL))
+                 ORDER BY pg.pago_em
+                 LIMIT %s
+                """,
+                ([*GATEWAYS_REAIS, "fake"], list(TIPOS_COM_LICENCA), limite),
+            )
+            return [_limpar(r) for r in cur.fetchall()]
+
     # ---------------- webhooks ----------------
 
     def registrar_webhook(self, gateway: str, ambiente: str, evento_id: str, tipo_evento: Optional[str],
@@ -1776,6 +1797,25 @@ class InMemoryFinanceiroRepository:
             and pg.get("ambiente") and pg.get("gateway") in (*GATEWAYS_REAIS, "fake")
             and pg["criado_em"] < limite_data
         ]
+        return out[:limite]
+
+    def list_pagamentos_pagos_pendentes(self, limite: int = 50) -> List[Dict[str, Any]]:
+        corte = _agora() - timedelta(days=30)
+        out = []
+        for pg in self.pagamentos.values():
+            pedido = self.pedidos.get(pg.get("pedido_id") or "")
+            pago_em = pg.get("pago_em")
+            if isinstance(pago_em, datetime) and pago_em.tzinfo is None:  # data sem fuso do gateway
+                pago_em = pago_em.replace(tzinfo=timezone.utc)
+            if (pg.get("status") != "pago" or not pedido or pedido["status"] == "cancelado"
+                    or pg.get("gateway") not in (*GATEWAYS_REAIS, "fake") or not pg.get("ambiente")
+                    or not isinstance(pago_em, datetime) or pago_em <= corte):
+                continue
+            if pedido["status"] == "aguardando_pagamento" or (
+                pedido["tipo"] in TIPOS_COM_LICENCA and pedido.get("polo_id")
+                and not pedido.get("licencas_creditadas_em")
+            ):
+                out.append(self._montar_pagamento(pg))
         return out[:limite]
 
     # webhooks

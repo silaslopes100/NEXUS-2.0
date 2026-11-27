@@ -114,6 +114,7 @@ class PolosEscolasRepositoryInterface(Protocol):
         delta_vendida: int = 0,
         materia_id: Optional[str] = None,
     ) -> None: ...
+    def creditar_pedido_pago(self, pedido_id: str, polo_id: str, movimentacoes: List[Dict[str, Any]]) -> bool: ...
     def list_estoque_por_disciplina(
         self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
     ) -> List[Dict[str, Any]]: ...
@@ -620,6 +621,18 @@ class PostgresPolosEscolasRepository:
         materia_id: Optional[str] = None,
     ) -> None:
         """Ajusta o saldo de um local/disciplina (None = "Sem disciplina"). Nunca deixa negativo."""
+        with get_db_cursor() as cur:
+            self._ajustar_estoque_cur(cur, polo_id, escola_id, delta_disponivel, delta_vendida, materia_id)
+
+    @staticmethod
+    def _ajustar_estoque_cur(
+        cur,
+        polo_id: Optional[str],
+        escola_id: Optional[str],
+        delta_disponivel: int,
+        delta_vendida: int = 0,
+        materia_id: Optional[str] = None,
+    ) -> None:
         filtro, valor = _filtro_local(polo_id, escola_id)
         materia = str(materia_id) if materia_id else None
         selecionar = f"""
@@ -627,32 +640,51 @@ class PostgresPolosEscolasRepository:
              WHERE {filtro} AND materia_id IS NOT DISTINCT FROM %s::uuid
              LIMIT 1 FOR UPDATE
         """
-        with get_db_cursor() as cur:
+        cur.execute(selecionar, (valor, materia))
+        row = cur.fetchone()
+        if row is None:
+            # Os índices únicos da 020 fazem a inserção concorrente virar no-op.
+            cur.execute(
+                """
+                INSERT INTO licencas_estoque (polo_id, escola_id, materia_id, quantidade_disponivel,
+                                              quantidade_vendida, atualizado_em)
+                VALUES (%s, %s, %s, 0, 0, now())
+                ON CONFLICT DO NOTHING
+                """,
+                (None if escola_id else str(polo_id), str(escola_id) if escola_id else None, materia),
+            )
             cur.execute(selecionar, (valor, materia))
             row = cur.fetchone()
-            if row is None:
-                # Os índices únicos da 020 fazem a inserção concorrente virar no-op.
-                cur.execute(
-                    """
-                    INSERT INTO licencas_estoque (polo_id, escola_id, materia_id, quantidade_disponivel,
-                                                  quantidade_vendida, atualizado_em)
-                    VALUES (%s, %s, %s, 0, 0, now())
-                    ON CONFLICT DO NOTHING
-                    """,
-                    (None if escola_id else str(polo_id), str(escola_id) if escola_id else None, materia),
-                )
-                cur.execute(selecionar, (valor, materia))
-                row = cur.fetchone()
-            if row is None:
-                raise ValueError("Linha de estoque não encontrada")
-            nova_disponivel = row["quantidade_disponivel"] + delta_disponivel
-            nova_vendida = max(0, row["quantidade_vendida"] + delta_vendida)
-            if nova_disponivel < 0:
-                raise ValueError("Estoque insuficiente para esta operação")
+        if row is None:
+            raise ValueError("Linha de estoque não encontrada")
+        nova_disponivel = row["quantidade_disponivel"] + delta_disponivel
+        nova_vendida = max(0, row["quantidade_vendida"] + delta_vendida)
+        if nova_disponivel < 0:
+            raise ValueError("Estoque insuficiente para esta operação")
+        cur.execute(
+            "UPDATE licencas_estoque SET quantidade_disponivel = %s, quantidade_vendida = %s, atualizado_em = now() WHERE id = %s",
+            (nova_disponivel, nova_vendida, row["id"]),
+        )
+
+    def creditar_pedido_pago(self, pedido_id: str, polo_id: str, movimentacoes: List[Dict[str, Any]]) -> bool:
+        """Credita no estoque do Polo as licenças de um pedido pago, uma única vez.
+
+        Marca `pedidos.licencas_creditadas_em`, soma o estoque e grava o extrato na mesma transação:
+        se algo falhar, nada fica gravado e o próximo reprocessamento tenta de novo sem creditar em dobro.
+        Retorna False se o pedido já tinha sido creditado.
+        """
+        with get_db_cursor() as cur:
             cur.execute(
-                "UPDATE licencas_estoque SET quantidade_disponivel = %s, quantidade_vendida = %s, atualizado_em = now() WHERE id = %s",
-                (nova_disponivel, nova_vendida, row["id"]),
+                "UPDATE pedidos SET licencas_creditadas_em = now() "
+                "WHERE id = %s AND licencas_creditadas_em IS NULL RETURNING id",
+                (str(pedido_id),),
             )
+            if cur.fetchone() is None:
+                return False
+            for mov in movimentacoes:
+                self._ajustar_estoque_cur(cur, polo_id, None, int(mov["quantidade"]), materia_id=mov.get("materia_id"))
+                self._inserir_movimentacao(cur, {**mov, "polo_id": polo_id})
+        return True
 
     def list_estoque_por_disciplina(
         self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
@@ -791,29 +823,33 @@ class PostgresPolosEscolasRepository:
         return new_id
 
     def registrar_movimentacao(self, data: Dict[str, Any]) -> str:
-        new_id = str(uuid.uuid4())
         with get_db_cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO licencas_movimentacoes (
-                    id, tipo, polo_id, escola_id, aluno_id, materia_id, quantidade, valor_unitario,
-                    status, actor_id, observacao, criado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
-                """,
-                (
-                    new_id,
-                    data["tipo"],
-                    data.get("polo_id"),
-                    data.get("escola_id"),
-                    data.get("aluno_id"),
-                    data.get("materia_id"),
-                    data["quantidade"],
-                    data.get("valor_unitario"),
-                    data.get("status", "ativa"),
-                    data.get("actor_id"),
-                    data.get("observacao"),
-                ),
-            )
+            return self._inserir_movimentacao(cur, data)
+
+    @staticmethod
+    def _inserir_movimentacao(cur, data: Dict[str, Any]) -> str:
+        new_id = str(uuid.uuid4())
+        cur.execute(
+            """
+            INSERT INTO licencas_movimentacoes (
+                id, tipo, polo_id, escola_id, aluno_id, materia_id, quantidade, valor_unitario,
+                status, actor_id, observacao, criado_em
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+            """,
+            (
+                new_id,
+                data["tipo"],
+                data.get("polo_id"),
+                data.get("escola_id"),
+                data.get("aluno_id"),
+                data.get("materia_id"),
+                data["quantidade"],
+                data.get("valor_unitario"),
+                data.get("status", "ativa"),
+                data.get("actor_id"),
+                data.get("observacao"),
+            ),
+        )
         return new_id
 
     def list_movimentacoes(
@@ -1824,6 +1860,7 @@ class InMemoryPolosEscolasRepository:
         self.estoques: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self.compras: Dict[str, Dict[str, Any]] = {}
         self.movimentacoes: Dict[str, Dict[str, Any]] = {}
+        self.pedidos_creditados: set = set()
         self.boletos: Dict[str, Dict[str, Any]] = {}
         self.licencas_alunos: Dict[str, Dict[str, Any]] = {}
         self.notas: Dict[str, Dict[str, Any]] = {}
@@ -2079,6 +2116,15 @@ class InMemoryPolosEscolasRepository:
             raise ValueError("Estoque insuficiente para esta operação")
         estoque["quantidade_disponivel"] = nova_disponivel
         estoque["quantidade_vendida"] = max(0, estoque["quantidade_vendida"] + delta_vendida)
+
+    def creditar_pedido_pago(self, pedido_id: str, polo_id: str, movimentacoes: List[Dict[str, Any]]) -> bool:
+        if str(pedido_id) in self.pedidos_creditados:
+            return False
+        for mov in movimentacoes:
+            self.ajustar_estoque(polo_id, None, int(mov["quantidade"]), materia_id=mov.get("materia_id"))
+            self.registrar_movimentacao({**mov, "polo_id": polo_id})
+        self.pedidos_creditados.add(str(pedido_id))
+        return True
 
     def list_estoque_por_disciplina(
         self, polo_id: Optional[str] = None, escola_id: Optional[str] = None
