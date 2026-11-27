@@ -26,6 +26,11 @@ def _fernet(key: Optional[str] = None) -> Fernet:
         raise SecretCryptoError("PAYMENT_SECRETS_KEY inválida (esperada chave Fernet base64)") from exc
 
 
+def validar_chave(key: Optional[str] = None) -> None:
+    """Levanta SecretCryptoError se a chave estiver ausente ou não for uma chave Fernet válida."""
+    _fernet(key)
+
+
 def encrypt_secret(texto: str, key: Optional[str] = None) -> str:
     """Criptografa `texto` e devolve o token Fernet (str)."""
     return _fernet(key).encrypt(texto.encode("utf-8")).decode("ascii")

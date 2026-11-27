@@ -131,6 +131,16 @@ const GatewayCard: React.FC<{
         </div>
       </div>
 
+      {config.credenciais_ilegiveis && (
+        <p className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            As credenciais deste ambiente foram salvas com outra PAYMENT_SECRETS_KEY e não podem ser lidas.
+            Restaure a chave anterior no backend ou preencha as credenciais{config.rotulo_webhook_token ? ' e o token' : ''} de novo e salve.
+          </span>
+        </p>
+      )}
+
       <div className="grid gap-3 md:grid-cols-2">
         {config.campos.map((c) => (
           <div key={c.campo}>
@@ -140,7 +150,7 @@ const GatewayCard: React.FC<{
               autoComplete="new-password"
               disabled={!podeEditar}
               className={inputClass}
-              placeholder={config.credenciais[c.campo] || 'não configurado'}
+              placeholder={config.credenciais_ilegiveis ? 'ilegível — preencha de novo' : config.credenciais[c.campo] || 'não configurado'}
               value={credenciais[c.campo] || ''}
               onChange={(e) => setCredenciais({ ...credenciais, [c.campo]: e.target.value })}
             />
@@ -154,7 +164,7 @@ const GatewayCard: React.FC<{
               autoComplete="new-password"
               disabled={!podeEditar}
               className={inputClass}
-              placeholder={config.webhook_token || 'não configurado'}
+              placeholder={config.credenciais_ilegiveis ? 'ilegível — preencha de novo' : config.webhook_token || 'não configurado'}
               value={token}
               onChange={(e) => setToken(e.target.value)}
             />
@@ -340,6 +350,11 @@ export const GatewaysPage: React.FC = () => {
       {dados && !dados.chave_configurada && (
         <p className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           <AlertTriangle size={16} /> PAYMENT_SECRETS_KEY não configurada no backend: não é possível salvar credenciais.
+        </p>
+      )}
+      {dados && dados.chave_configurada && dados.chave_valida === false && (
+        <p className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          <AlertTriangle size={16} /> PAYMENT_SECRETS_KEY inválida no backend (esperada chave Fernet): não é possível salvar credenciais.
         </p>
       )}
       {dados && !dados.public_api_url_configurada && (

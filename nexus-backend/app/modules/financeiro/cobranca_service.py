@@ -9,12 +9,12 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.core.crypto import SecretCryptoError, encrypt_secret, decrypt_secret, mask_secret
+from app.core.crypto import SecretCryptoError, decrypt_secret, encrypt_secret, mask_secret, validar_chave
 from app.modules.auth.schemas import UserResponse
 from app.modules.financeiro import pedidos as regras
 from app.modules.financeiro.gateways import factory
@@ -148,34 +148,47 @@ class CobrancaService:
         }
 
     @staticmethod
-    def _credenciais_mascaradas(config: Dict[str, Any]) -> Dict[str, str]:
-        if not config.get("credenciais_cripto"):
-            return {}
-        try:
-            dados = json.loads(decrypt_secret(config["credenciais_cripto"]))
-        except RuntimeError:
-            return {"_erro": "não foi possível ler (PAYMENT_SECRETS_KEY mudou?)"}
-        return {k: mask_secret(v) for k, v in dados.items() if v}
+    def _segredos_legiveis(config: Dict[str, Any]) -> Tuple[Dict[str, str], Optional[str], bool]:
+        """(credenciais, token do webhook, algum ilegível?) com a chave atual.
+
+        O que não puder ser lido (gravado com outra PAYMENT_SECRETS_KEY) vem vazio.
+        """
+        ilegivel = False
+        credenciais: Dict[str, str] = {}
+        if config.get("credenciais_cripto"):
+            try:
+                credenciais = json.loads(decrypt_secret(config["credenciais_cripto"]))
+            except SecretCryptoError:
+                ilegivel = True
+        token: Optional[str] = None
+        if config.get("webhook_token_cripto"):
+            try:
+                token = decrypt_secret(config["webhook_token_cripto"])
+            except SecretCryptoError:
+                ilegivel = True
+        return credenciais, token, ilegivel
 
     def listar_gateways(self) -> Dict[str, Any]:
+        try:
+            validar_chave()
+            chave_valida = True
+        except SecretCryptoError:
+            chave_valida = False
         configs = {(c["gateway"], c["ambiente"]): c for c in self.repo.list_gateway_configs()}
         itens = []
         for gateway in factory.GATEWAYS_DISPONIVEIS:
             for ambiente in factory.AMBIENTES_POR_GATEWAY[gateway]:
                 c = configs.get((gateway, ambiente)) or {}
-                token_mascarado = ""
-                if c.get("webhook_token_cripto"):
-                    try:
-                        token_mascarado = mask_secret(decrypt_secret(c["webhook_token_cripto"]))
-                    except RuntimeError:
-                        token_mascarado = "(ilegível)"
+                credenciais, token, ilegivel = self._segredos_legiveis(c)
                 itens.append({
                     "gateway": gateway,
                     "ambiente": ambiente,
                     "ativo": bool(c.get("ativo")),
                     "padrao": bool(c.get("padrao")),
-                    "credenciais": self._credenciais_mascaradas(c),
-                    "webhook_token": token_mascarado,
+                    "credenciais": {k: mask_secret(v) for k, v in credenciais.items() if v},
+                    "webhook_token": mask_secret(token) if token else "",
+                    # Com a chave válida, ilegível = gravado com outra chave: é preciso recadastrar.
+                    "credenciais_ilegiveis": chave_valida and ilegivel,
                     "campos": factory.CAMPOS_CREDENCIAIS[gateway],
                     "rotulo_webhook_token": factory.ROTULO_WEBHOOK_TOKEN[gateway],
                     "webhook_url": webhook_url(gateway, ambiente),
@@ -186,12 +199,14 @@ class CobrancaService:
             "ambiente_ativo": settings.PAYMENT_ENV,
             "public_api_url_configurada": bool(settings.PUBLIC_API_URL),
             "chave_configurada": bool(settings.PAYMENT_SECRETS_KEY),
+            "chave_valida": chave_valida,
             "items": itens,
         }
 
     def salvar_gateway(self, gateway: str, ambiente: str, dados: Dict[str, Any], usuario_id: str) -> Dict[str, Any]:
-        # Falha de criptografia (chave ausente/inválida/trocada) vira HTTPException: um erro não tratado
-        # sai como 500 sem cabeçalhos CORS e o navegador só mostra "blocked by CORS policy".
+        # Chave ausente/inválida vira 503 com o motivo: um erro não tratado sai como 500 sem cabeçalhos
+        # CORS e o navegador só mostra "blocked by CORS policy". (Chave trocada não chega aqui: os segredos
+        # ilegíveis são substituídos em `_salvar_gateway`.)
         try:
             return self._salvar_gateway(gateway, ambiente, dados, usuario_id)
         except SecretCryptoError as exc:
@@ -203,10 +218,10 @@ class CobrancaService:
     def _salvar_gateway(self, gateway: str, ambiente: str, dados: Dict[str, Any], usuario_id: str) -> Dict[str, Any]:
         if gateway not in factory.GATEWAYS_DISPONIVEIS or ambiente not in factory.AMBIENTES_POR_GATEWAY[gateway]:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gateway/ambiente inválido")
+        validar_chave()  # ausente/inválida: 503 (nem os segredos novos poderiam ser cifrados)
         atual = self.repo.get_gateway_config(gateway, ambiente) or {}
-        credenciais: Dict[str, str] = {}
-        if atual.get("credenciais_cripto"):
-            credenciais = json.loads(decrypt_secret(atual["credenciais_cripto"]))
+        # Segredos gravados com outra chave são irrecuperáveis: descartados e substituídos pelo que vier agora.
+        credenciais, token_atual, ilegivel = self._segredos_legiveis(atual)
         permitidos = {c["campo"] for c in factory.CAMPOS_CREDENCIAIS[gateway]}
         for campo, valor in (dados.get("credenciais") or {}).items():
             if campo in permitidos and valor is not None:
@@ -216,22 +231,25 @@ class CobrancaService:
                 else:
                     credenciais.pop(campo, None)
         campos: Dict[str, Any] = {"atualizado_por": usuario_id}
-        if dados.get("credenciais") is not None:
+        if dados.get("credenciais") is not None or ilegivel:
             campos["credenciais_cripto"] = encrypt_secret(json.dumps(credenciais)) if credenciais else None
-        token = dados.get("webhook_token")
-        if token is not None:
-            campos["webhook_token_cripto"] = encrypt_secret(token.strip()) if token.strip() else None
+        novo_token = dados.get("webhook_token")
+        if novo_token is not None:
+            token_atual = novo_token.strip() or None
+        if novo_token is not None or ilegivel:
+            campos["webhook_token_cripto"] = encrypt_secret(token_atual) if token_atual else None
         ativo = dados.get("ativo", atual.get("ativo", False))
         if ativo:
             faltando = [c["label"] for c in factory.CAMPOS_CREDENCIAIS[gateway]
                         if c["obrigatorio"] and not credenciais.get(c["campo"])]
-            tem_token = campos.get("webhook_token_cripto", atual.get("webhook_token_cripto"))
-            if factory.ROTULO_WEBHOOK_TOKEN[gateway] and not tem_token:
+            if factory.ROTULO_WEBHOOK_TOKEN[gateway] and not token_atual:
                 faltando.append(factory.ROTULO_WEBHOOK_TOKEN[gateway])
             if faltando:
+                aviso = ("As credenciais salvas foram cifradas com outra PAYMENT_SECRETS_KEY e precisam ser "
+                         "preenchidas de novo. ") if ilegivel else ""
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Para ativar, preencha: {', '.join(faltando)}",
+                    detail=f"{aviso}Para ativar, preencha: {', '.join(faltando)}",
                 )
         campos["ativo"] = bool(ativo)
         padrao = dados.get("padrao", atual.get("padrao", False))

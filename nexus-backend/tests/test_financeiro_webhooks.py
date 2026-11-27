@@ -377,13 +377,42 @@ async def test_api_salvar_gateway_com_problema_na_chave_responde_503_com_motivo(
     monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", "nao-e-fernet")
     invalida = await client.put(url, json=body, headers=_hdr("admin-1"))
     assert invalida.status_code == 503 and "inválida" in invalida.json()["detail"]
+    lista = (await client.get("/financeiro/gateways", headers=_hdr("admin-1"))).json()
+    assert lista["chave_configurada"] is True and lista["chave_valida"] is False
 
-    # credenciais salvas com outra chave (chave trocada no deploy)
-    monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", Fernet.generate_key().decode())
+
+@pytest.mark.asyncio
+async def test_api_chave_trocada_permite_recadastrar_credenciais(client, monkeypatch):
+    """Segredos gravados com outra PAYMENT_SECRETS_KEY são irrecuperáveis: a tela substitui em vez de travar."""
+    url = "/financeiro/gateways/asaas/sandbox"
+
+    def asaas(lista):
+        return next(i for i in lista.json()["items"] if i["gateway"] == "asaas" and i["ambiente"] == "sandbox")
+
+    body = {"credenciais": {"api_key": "$aact_hmlg_ANTIGA_1111"}, "webhook_token": "token-antigo-2222", "ativo": True}
     assert (await client.put(url, json=body, headers=_hdr("admin-1"))).status_code == 200
-    monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", Fernet.generate_key().decode())
-    trocada = await client.put(url, json=body, headers=_hdr("admin-1"))
-    assert trocada.status_code == 503 and "chave diferente" in trocada.json()["detail"]
+
+    monkeypatch.setattr(settings, "PAYMENT_SECRETS_KEY", Fernet.generate_key().decode())  # chave trocada no deploy
+    item = asaas(await client.get("/financeiro/gateways", headers=_hdr("admin-1")))
+    assert item["credenciais_ilegiveis"] is True and item["credenciais"] == {} and item["webhook_token"] == ""
+
+    # manter ativo sem reenviar os segredos: diz o que falta, nada é gravado
+    so_ativo = await client.put(url, json={"ativo": True}, headers=_hdr("admin-1"))
+    assert so_ativo.status_code == 422
+    assert "outra PAYMENT_SECRETS_KEY" in so_ativo.json()["detail"] and "API Key" in so_ativo.json()["detail"]
+
+    novo = {"credenciais": {"api_key": "$aact_hmlg_NOVA_3333"}, "webhook_token": "token-novo-4444", "ativo": True}
+    salvo = await client.put(url, json=novo, headers=_hdr("admin-1"))
+    assert salvo.status_code == 200, salvo.text
+    assert salvo.json()["credenciais"] == {"api_key": "••••3333"} and salvo.json()["webhook_token"] == "••••4444"
+    assert salvo.json()["credenciais_ilegiveis"] is False
+
+    corpo = json.dumps({"id": "evt-x", "event": "PAYMENT_UPDATED", "payment": {"id": "pay_x"}})
+    webhook = "/financeiro/webhooks/asaas/sandbox"
+    antigo = await client.post(webhook, content=corpo, headers={"asaas-access-token": "token-antigo-2222"})
+    assert antigo.status_code == 401
+    aceito = await client.post(webhook, content=corpo, headers={"asaas-access-token": "token-novo-4444"})
+    assert aceito.status_code == 200 and aceito.json()["status"] == "ignorado"  # pagamento desconhecido
 
 
 @pytest.mark.asyncio

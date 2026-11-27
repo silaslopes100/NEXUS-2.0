@@ -385,6 +385,8 @@ export interface GatewayConfig {
   padrao: boolean;
   credenciais: Record<string, string>; // sempre mascaradas
   webhook_token: string; // mascarado
+  /** Gravadas com outra PAYMENT_SECRETS_KEY: ilegíveis, precisam ser preenchidas de novo. */
+  credenciais_ilegiveis?: boolean;
   campos: CampoCredencial[];
   rotulo_webhook_token: string | null;
   webhook_url: string | null;
@@ -396,6 +398,7 @@ export interface GatewaysResposta {
   ambiente_ativo: Ambiente;
   public_api_url_configurada: boolean;
   chave_configurada: boolean;
+  chave_valida?: boolean;
   items: GatewayConfig[];
 }
 
