@@ -115,6 +115,17 @@ def test_asaas_webhook_token_e_interpretacao():
     assert vencido.status == "vencido"
 
 
+def test_asaas_motivo_do_webhook_recusado_nao_revela_o_token_cadastrado():
+    gw = AsaasGateway("sandbox", {"api_key": "k"}, "token-cadastrado-ABCD")
+    assert "sem o cabeçalho asaas-access-token" in gw.motivo_webhook_recusado({})
+    publico = gw.motivo_webhook_recusado({"asaas-access-token": "outro-token-WXYZ"})
+    assert "16 caracteres, final ••••WXYZ" in publico and "ABCD" not in publico
+    interno = gw.motivo_webhook_recusado({"asaas-access-token": "outro-token-WXYZ"}, interno=True)
+    assert "cadastrado: 21 caracteres, final ••••ABCD" in interno
+    sem_token = AsaasGateway("sandbox", {"api_key": "k"}, None)
+    assert "nenhum token" in sem_token.motivo_webhook_recusado({"asaas-access-token": "x"})
+
+
 # ---------------------------------------------------------------------------
 # PagBank
 # ---------------------------------------------------------------------------

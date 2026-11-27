@@ -410,7 +410,8 @@ async def test_api_chave_trocada_permite_recadastrar_credenciais(client, monkeyp
     corpo = json.dumps({"id": "evt-x", "event": "PAYMENT_UPDATED", "payment": {"id": "pay_x"}})
     webhook = "/financeiro/webhooks/asaas/sandbox"
     antigo = await client.post(webhook, content=corpo, headers={"asaas-access-token": "token-antigo-2222"})
-    assert antigo.status_code == 401
+    assert antigo.status_code == 401 and "final ••••2222" in antigo.json()["detail"]
+    assert "4444" not in antigo.json()["detail"]  # nunca revela o token cadastrado
     aceito = await client.post(webhook, content=corpo, headers={"asaas-access-token": "token-novo-4444"})
     assert aceito.status_code == 200 and aceito.json()["status"] == "ignorado"  # pagamento desconhecido
 

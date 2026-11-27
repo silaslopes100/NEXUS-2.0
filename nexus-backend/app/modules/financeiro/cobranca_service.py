@@ -495,7 +495,14 @@ class CobrancaService:
         except HTTPException as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook não configurado") from exc
         if not adapter.validar_webhook(headers, corpo, query):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura/token do webhook inválido")
+            detail = "Assinatura/token do webhook inválido"
+            motivo = getattr(adapter, "motivo_webhook_recusado", None)
+            if motivo:
+                logger.warning("Webhook %s/%s recusado: %s", gateway, ambiente, motivo(headers, interno=True))
+                detail = f"{detail}: {motivo(headers)}"
+            else:
+                logger.warning("Webhook %s/%s recusado: assinatura inválida", gateway, ambiente)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
         try:
             evento = adapter.interpretar_webhook(headers, corpo, query)
         except Exception as exc:  # noqa: BLE001 - payload inesperado vira 400 sem derrubar a fila

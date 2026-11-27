@@ -13,6 +13,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 import httpx
 
+from app.core.crypto import mask_secret
 from app.modules.financeiro.gateways.base import (
     CobrancaCriada,
     Encargos,
@@ -165,6 +166,20 @@ class AsaasGateway(HttpGatewayBase):
         if not self.webhook_token or not recebido:
             return False
         return hmac.compare_digest(recebido.encode(), self.webhook_token.encode())
+
+    def motivo_webhook_recusado(self, headers: Mapping[str, str], interno: bool = False) -> str:
+        """Por que `validar_webhook` recusou. A resposta ao Asaas (interno=False) nunca revela o token
+        cadastrado; o log do servidor (interno=True) mostra também o tamanho e o final dele."""
+        recebido = header(headers, "asaas-access-token") or ""
+        if not self.webhook_token:
+            return "nenhum token de webhook cadastrado no NEXUS para este ambiente"
+        if not recebido:
+            return "a requisição veio sem o cabeçalho asaas-access-token (token não configurado no webhook do Asaas)"
+        motivo = (f"o token recebido ({len(recebido)} caracteres, final {mask_secret(recebido)}) "
+                  "é diferente do cadastrado no NEXUS")
+        if interno:
+            motivo += f" (cadastrado: {len(self.webhook_token)} caracteres, final {mask_secret(self.webhook_token)})"
+        return motivo
 
     def interpretar_webhook(
         self, headers: Mapping[str, str], corpo: bytes, query: Mapping[str, str]
